@@ -1,6 +1,6 @@
 # ADR-0075: Fake GitHub structure, control plane and git server wiring
 
-- Status: agent-decided
+- Status: accepted (no spec change needed)
 - Date: 2026-10-08
 - Task: T-042
 - Affects: TST-011, TST-012, TST-013, DEV-020

@@ -5,10 +5,10 @@ The orchestrator maintains this table (see [workflow](workflow.md)). Integration
 | Task | Status | Branch | PR | Review rounds | Notes |
 |---|---|---|---|---|---|
 | T-001 | merged | task/T-001-bootstrap | [#1](https://github.com/ognetwork-jw/git-migrator/pull/1) | 5 | merged to ai-main 26d7246; ADR-0028..0030 folded into spec |
-| T-002 | in_review | task/T-002-dev-environment | [#9](https://github.com/ognetwork-jw/git-migrator/pull/9) | 5 | r4 fixed + rebased (df6d10a); final round-5 review |
+| T-002 | in_review | task/T-002-dev-environment | [#9](https://github.com/ognetwork-jw/git-migrator/pull/9) | 5 | review cap reached (r5 MAJOR turbo dev env → followups.md); rebase + merge pending |
 | T-003 | merged | task/T-003-agent-tooling-ci | [#4](https://github.com/ognetwork-jw/git-migrator/pull/4) | 5 | 5-round cap; merged to ai-main d46ecc4; open findings in docs/followups.md; ADR-0046..0049 accepted |
 | T-004 | merged | task/T-004-config-observability | [#7](https://github.com/ognetwork-jw/git-migrator/pull/7) | 5 | merged to ai-main e8054ea at the review cap (r5 findings in followups.md); ADR-0050..0054 folded into DEP-040/DEP-050 |
-| T-010 | todo |  | | | |
+| T-010 | in_progress | task/T-010-database | | 0 | implementing (ADR range 0120-0129) |
 | T-011 | merged | task/T-011-core-primitives | [#6](https://github.com/ognetwork-jw/git-migrator/pull/6) | 2 | merged to ai-main 1c654ab; ADR-0058 folded into LIF-002; 0055-0057, 0059 accepted |
 | T-012 | merged | task/T-012-facet-engine | [#10](https://github.com/ognetwork-jw/git-migrator/pull/10) | 2 | merged to ai-main 6182a5a; ADR-0080..0082 accepted |
 | T-013 | merged | task/T-013-naming | [#13](https://github.com/ognetwork-jw/git-migrator/pull/13) | 4 | merged 1df40cb; ADR-0095 folded into spec 06 |
@@ -28,10 +28,10 @@ The orchestrator maintains this table (see [workflow](workflow.md)). Integration
 | T-034 | todo |  | | | |
 | T-040 | merged | task/T-040-fake-git-server | [#8](https://github.com/ognetwork-jw/git-migrator/pull/8) | 2 | merged to ai-main 7875b6a; ADR-0070..0072 accepted |
 | T-041 | merged | task/T-041-fake-bitbucket | [#5](https://github.com/ognetwork-jw/git-migrator/pull/5) | 2 | merged to ai-main 69844e8; ADR-0060/0061 accepted |
-| T-042 | in_review | task/T-042-fake-github | [#12](https://github.com/ognetwork-jw/git-migrator/pull/12) | 5 | r4: 1 MAJOR (policy flag lost before seeding/during create+rename); final fix pass |
-| T-043 | todo |  | | | |
-| T-050 | in_progress | task/T-050-facets-git-settings | | 0 | implementing (ADR range 0100-0104) |
-| T-051 | in_progress | task/T-051-facets-access-codeowners | | 0 | implementing (ADR range 0105-0109) |
+| T-042 | merged | task/T-042-fake-github | [#12](https://github.com/ognetwork-jw/git-migrator/pull/12) | 5 | merged to ai-main ec3f28a; ADR-0075..0077 accepted (fake internals, no spec change) |
+| T-043 | in_progress | task/T-043-fixture-world | | 0 | implementing (ADR range 0130-0134) |
+| T-050 | in_progress | task/T-050-facets-git-settings | | 0 | guidance coverage test moved to testing/integration (ARC-012) before review |
+| T-051 | in_review | task/T-051-facets-access-codeowners | [#15](https://github.com/ognetwork-jw/git-migrator/pull/15) | 1 | round-1 review (spec ACCEPTABLE) |
 | T-052 | in_progress | task/T-052-facets-branch-rules | | 0 | implementing (ADR range 0110-0114) |
 | T-053 | todo |  | | | |
 | T-054 | todo |  | | | |

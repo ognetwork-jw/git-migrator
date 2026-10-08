@@ -1,6 +1,6 @@
 # ADR-0076: Fake GitHub behavior where the provider doc and OpenAPI description are silent
 
-- Status: agent-decided
+- Status: accepted (no spec change needed)
 - Date: 2026-10-08
 - Task: T-042
 - Affects: TST-011, FAC-DKY-002, LIF-047, LIF-077, FAC-ACL-002, FAC-VAR-003, FAC-BRR-002

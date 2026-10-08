@@ -1,6 +1,6 @@
 # ADR-0077: Fake GitHub rate limit model
 
-- Status: agent-decided
+- Status: accepted (no spec change needed)
 - Date: 2026-10-08
 - Task: T-042
 - Affects: TST-011, JOB-045
