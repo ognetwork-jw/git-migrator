@@ -685,7 +685,10 @@ describe('runtime configuration schema (DEP-040)', () => {
       {
         environment: 'production',
         publicUrl: 'https://x.example',
-        auth: { entra: { tenantId: 't' }, testSignIn: { enabled: true } },
+        auth: {
+          entra: { tenantId: '00000000-0000-4000-8000-000000000001' },
+          testSignIn: { enabled: true },
+        },
       },
       'auth.testSignIn.enabled',
       'production',
@@ -693,12 +696,22 @@ describe('runtime configuration schema (DEP-040)', () => {
     expect(issuesFor({ environment: 'test', auth: { testSignIn: { enabled: true } } })).toEqual([]);
   });
 
+  it('[AUTH-002] the Entra tenant must be a GUID, which is trimmed and lowercased', () => {
+    expectIssue({ auth: { entra: { tenantId: 'contoso.com' } } }, 'auth.entra.tenantId', 'GUID');
+    expect(
+      ConfigSchema.parse({
+        auth: { entra: { tenantId: ' ABCDEF01-2345-6789-ABCD-EF0123456789 ' } },
+      }).auth.entra.tenantId,
+    ).toBe('abcdef01-2345-6789-abcd-ef0123456789');
+    expect(ConfigSchema.parse({}).auth.entra.tenantId).toBe('');
+  });
+
   it('[ARC-030] production requires an https public URL and an Entra tenant', () => {
     expectIssue(
       {
         environment: 'production',
         publicUrl: 'http://git-migrator.example.com',
-        auth: { entra: { tenantId: 't' } },
+        auth: { entra: { tenantId: '00000000-0000-4000-8000-000000000001' } },
       },
       'publicUrl',
       'https',

@@ -28,6 +28,8 @@ const config = loadConfigOrExit(); // exits with status 78 and a report on stder
 
 URL settings must be http(s) and must not carry a username, password, query string or fragment.
 
+`auth.entra.tenantId` must be the directory's tenant GUID (a domain such as `contoso.com` is refused), because it is compared with the token's `tid` claim; it is trimmed and lowercased, and empty means unset (AUTH-002).
+
 `environment` defaults to `development`. If the file and `GM_ENVIRONMENT` do not set it, and the file enables test sign-in or sets an explicit http public URL, the loader writes a warning to standard error. The chart must set `GM_ENVIRONMENT` (ADR-0051).
 
 Cross-field rules are checked in the same pass: endpoint and route ids are unique, a route's source and target are defined endpoints and differ, naming templates only use variables their pipeline initializes, and in `production` the public URL is https, an Entra tenant is set and test sign-in is off (AUTH-012).

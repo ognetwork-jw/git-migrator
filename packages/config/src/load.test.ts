@@ -43,12 +43,12 @@ describe('configuration loading (ARC-030, DEP-040)', () => {
       env: {
         GM_ENVIRONMENT: 'production',
         GM_PUBLIC_URL: 'https://git.example',
-        GM_AUTH_ENTRA_TENANT_ID: 'tenant',
+        GM_AUTH_ENTRA_TENANT_ID: ' 00000000-0000-4000-8000-000000000001 ',
       },
     });
     expect(config.environment).toBe('production');
     expect(config.publicUrl).toBe('https://git.example');
-    expect(config.auth.entra.tenantId).toBe('tenant');
+    expect(config.auth.entra.tenantId).toBe('00000000-0000-4000-8000-000000000001');
   });
 
   it('[ARC-030] a file that is not valid YAML is reported with the parser message', () => {

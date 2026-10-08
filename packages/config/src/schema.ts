@@ -308,7 +308,21 @@ export const ConfigSchema = z
     auth: z
       .strictObject({
         entra: z
-          .strictObject({ tenantId: z.string(message('must be a string')).prefault('') })
+          .strictObject({
+            // The `tid` claim of an Entra token is a GUID, so the tenant must be one (AUTH-002).
+            // It is trimmed and lowercased first; empty means unset.
+            tenantId: z
+              .string(message('must be a string'))
+              .trim()
+              .toLowerCase()
+              .regex(
+                /^(?:[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})?$/,
+                message(
+                  'must be the tenant GUID, for example 00000000-0000-0000-0000-000000000000',
+                ),
+              )
+              .prefault(''),
+          })
           .prefault({}),
         roleMappings: z
           .array(roleMappingSchema, message('must be a list of role mappings'))
