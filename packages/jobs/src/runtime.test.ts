@@ -9,12 +9,18 @@ import {
   InMemorySpanExporter,
   SimpleSpanProcessor,
 } from '@opentelemetry/sdk-trace-base';
+import { type Job, WaitingError, Worker } from 'bullmq';
 import pg from 'pg';
 import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest';
-import { bullmqPoolSize, migrateBullmqSchema, QUERY_CONNECTIONS } from './connection.ts';
+import {
+  bullmqPoolSize,
+  createBullmqPool,
+  migrateBullmqSchema,
+  QUERY_CONNECTIONS,
+} from './connection.ts';
 import { InvalidPayloadError } from './payloads.ts';
 import { QUEUE_NAMES, queuesForRole } from './queues.ts';
-import { reapRuns } from './reaper.ts';
+import { MAX_REAPER_RESUMES, RUN_ABANDONED, reapRuns } from './reaper.ts';
 import { handOffRun, keepRunLease } from './run-leases.ts';
 import { type JobHandlers, JobRuntime } from './runtime.ts';
 import { seedBasics } from './world.fixture.ts';
@@ -344,6 +350,44 @@ describe('job runtime on the PostgreSQL backend', () => {
     expect(ran).toBe(0);
   }, 60_000);
 
+  it('[DEP-030] gives back a job a draining Worker activated: waiting again, attempts unchanged, never run', async () => {
+    const producer = makeRuntime(0);
+    await producer.waitUntilReady();
+    await drainAll(producer);
+    // A manual Worker stands in for the race: it activates the job under a lock token, exactly as
+    // a Worker woken by close() does, and the runtime's processor then receives it.
+    const pool = createBullmqPool({ connectionString: t.connectionString, max: 3 });
+    const worker = new Worker('maintenance', null, { connection: pool, autorun: false });
+    try {
+      await worker.waitUntilReady();
+      await producer.enqueue('maintenance', 'maintenance.prune', {});
+      const token = 'give-back-token';
+      const job = (await worker.getNextJob(token)) as Job;
+      expect(job).toBeDefined();
+      expect(await job.getState()).toBe('active');
+      const attemptsBefore = job.attemptsMade;
+      const draining = makeRuntime(0);
+      await draining.close(); // shutdown has begun
+      let ran = 0;
+      const handlers: JobHandlers = {
+        'maintenance.prune': async () => {
+          ran += 1;
+        },
+      };
+      await expect(draining.processJob('maintenance', job, handlers, token)).rejects.toBeInstanceOf(
+        WaitingError,
+      );
+      expect(ran).toBe(0);
+      const after = await producer.queue('maintenance').getJob(job.id as string);
+      expect(await after?.getState()).toBe('waiting');
+      expect(after?.attemptsMade).toBe(attemptsBefore);
+      expect(after?.failedReason).toBeFalsy();
+    } finally {
+      await worker.close();
+      await pool.end();
+    }
+  }, 60_000);
+
   it('[JOB-014] refuses to start more Workers than the pool was sized for', async () => {
     const runtime = makeRuntime(2);
     await runtime.waitUntilReady();
@@ -444,5 +488,59 @@ describe('job runtime on the PostgreSQL backend', () => {
     const row = (await t.db.pool.query('SELECT * FROM app.run WHERE id = $1', [run.id])).rows[0];
     expect(row.status).toBe('running');
     expect(row.reaper_resumes).toBe(0);
+  }, 60_000);
+
+  it('[LIF-046] tells a waiting Run job from a failed or missing one', async () => {
+    const runtime = makeRuntime(7);
+    await runtime.waitUntilReady();
+    await drainAll(runtime);
+    const routing = { kind: 'migrate', scope: 'repository', sizeClass: 'large' } as const;
+    await runtime.enqueueRun('run-live', routing, { dedupeId: 'run-live:resume-1' });
+    expect(await runtime.isRunJobPending('run-live:resume-1')).toBe(true);
+    expect(await runtime.isRunJobPending('run-never:resume-1')).toBe(false);
+    // No handler for run.execute: the job fails without retry (attempts 1).
+    await runtime.startWorkers('all', config, {});
+    await until(async () => !(await runtime.isRunJobPending('run-live:resume-1')));
+    expect((await runtime.queue('runs-large').getJobCounts('failed')).failed).toBeGreaterThan(0);
+  }, 60_000);
+
+  it('[LIF-046] a Run whose resume jobs keep dying reaches the bound and is abandoned', async () => {
+    const runtime = makeRuntime(7);
+    await runtime.waitUntilReady();
+    await drainAll(runtime);
+    // Until the Run executor exists (T-070), every run.execute job fails: the bound must still hold.
+    await runtime.startWorkers('all', config, {});
+    const world = await seedBasics(t.db.privileged);
+    const run = await t.db.privileged.run.create({
+      data: {
+        migrationId: world.migrationId,
+        kind: 'verify',
+        triggeredById: world.actorId,
+        options: {},
+        status: 'running',
+        startedAt: new Date(),
+        leaseOwner: 'dead',
+      },
+    });
+    const expire = () =>
+      t.db.pool.query(
+        "UPDATE app.run SET lease_expires_at = clock_timestamp() - interval '1 second' WHERE id = $1",
+        [run.id],
+      );
+    await expire();
+    let abandoned = false;
+    for (let pass = 0; pass <= MAX_REAPER_RESUMES + 1 && !abandoned; pass += 1) {
+      const result = await reapRuns({ pool: t.db.pool, runs: runtime, log });
+      abandoned = result.abandoned.includes(run.id);
+      if (abandoned) break;
+      const dedupeId = `run-${run.id}:resume-${pass + 1}`;
+      await until(async () => !(await runtime.isRunJobPending(dedupeId)));
+      await expire();
+    }
+    const row = (await t.db.pool.query('SELECT * FROM app.run WHERE id = $1', [run.id])).rows[0];
+    expect(abandoned).toBe(true);
+    expect(row.status).toBe('failed');
+    expect(row.error).toMatchObject({ code: RUN_ABANDONED });
+    expect(row.reaper_resumes).toBe(MAX_REAPER_RESUMES);
   }, 60_000);
 });

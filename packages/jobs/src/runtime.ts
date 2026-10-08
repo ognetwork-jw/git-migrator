@@ -31,6 +31,17 @@ import {
 } from './queues.ts';
 import { createBullmqTelemetry } from './telemetry.ts';
 
+const RUN_QUEUES = ['runs-standard', 'runs-large'] as const satisfies readonly QueueName[];
+
+/** Job states in which a job will still run or is running. */
+const PENDING_JOB_STATES: ReadonlySet<string> = new Set([
+  'waiting',
+  'delayed',
+  'prioritized',
+  'active',
+  'waiting-children',
+]);
+
 /** What a handler receives besides the validated payload. */
 export interface JobContext {
   readonly job: Job;
@@ -172,6 +183,21 @@ export class JobRuntime {
   }
 
   /**
+   * Whether the `run.execute` job enqueued under `dedupeId` still exists and can still run, on
+   * either Run queue (the size class may have changed since). The reaper asks this before it
+   * keeps waiting for a pending resume or hand-off (LIF-046, ADR-0212).
+   */
+  async isRunJobPending(dedupeId: string): Promise<boolean> {
+    for (const name of RUN_QUEUES) {
+      const queue = this.queue(name);
+      const jobId = await queue.getDeduplicationJobId(dedupeId);
+      if (!jobId) continue;
+      if (PENDING_JOB_STATES.has(await queue.getJobState(jobId))) return true;
+    }
+    return false;
+  }
+
+  /**
    * Starts one Worker per queue the `role` consumes, with the concurrency from config (JOB-012).
    * Resolves when every Worker is ready to take jobs (`/readyz`, DEP-031).
    */
@@ -187,7 +213,7 @@ export class JobRuntime {
       );
     }
     for (const name of wanted) {
-      const worker = new Worker(name, (job, token) => this.#process(name, job, handlers, token), {
+      const worker = new Worker(name, (job, token) => this.processJob(name, job, handlers, token), {
         connection: this.pool,
         concurrency: concurrencyFor(name, config),
         // A stalled Run job is never re-queued by BullMQ: the reaper is the only resume path, so
@@ -216,7 +242,14 @@ export class JobRuntime {
     return [...this.#workers.keys()];
   }
 
-  async #process(
+  /**
+   * The processor of every Worker this runtime starts: gives the job back during shutdown, checks
+   * the queue and payload, and calls the handler. Public only so tests can drive the shutdown race
+   * deterministically; production code never calls it.
+   *
+   * @internal
+   */
+  async processJob(
     queue: QueueName,
     job: Job,
     handlers: JobHandlers,
