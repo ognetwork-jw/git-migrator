@@ -7,3 +7,5 @@ minimumReleaseAgeExclude:
   - '@hono/node-server@2.1.4'
 allowBuilds:
   protobufjs: false
+  prisma: true
+  '@prisma/engines': true

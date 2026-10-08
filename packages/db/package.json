@@ -5,16 +5,31 @@
   "type": "module",
   "description": "ZModel schema, generated client, migrations, privileged client factory.",
   "exports": {
-    ".": "./src/index.ts"
+    ".": "./src/index.ts",
+    "./testing": "./src/test-support.ts"
   },
   "scripts": {
     "build": "tsc -b",
     "typecheck": "tsc -b",
     "lint": "biome check .",
-    "test": "vitest run --root ../.. --project unit packages/db"
+    "test": "vitest run --root ../.. --project unit packages/db",
+    "generate": "zen generate --schema schema.zmodel -o src/generated --no-version-check --no-tips",
+    "migrate:dev": "zen migrate dev --schema schema.zmodel --create-only --no-version-check"
   },
   "dependencies": {
+    "@git-migrator/canonical": "workspace:*",
     "@git-migrator/core": "workspace:*",
-    "@git-migrator/canonical": "workspace:*"
+    "@zenstackhq/orm": "3.9.7",
+    "@zenstackhq/plugin-policy": "3.9.7",
+    "@zenstackhq/schema": "3.9.7",
+    "decimal.js": "10.6.0",
+    "kysely": "0.29.6",
+    "pg": "8.23.1",
+    "zod": "4.6.5"
+  },
+  "devDependencies": {
+    "@types/pg": "8.23.1",
+    "@zenstackhq/cli": "3.9.7",
+    "@zenstackhq/server": "3.9.7"
   }
 }
