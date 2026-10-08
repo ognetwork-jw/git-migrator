@@ -3,7 +3,7 @@
   "version": "0.0.0",
   "private": true,
   "type": "module",
-  "description": "Seed data and builders.",
+  "description": "Seed data and builders: the TST-012 fixture world.",
   "exports": {
     ".": "./src/index.ts"
   },
@@ -11,6 +11,13 @@
     "build": "tsc -b",
     "typecheck": "tsc -b",
     "lint": "biome check .",
-    "test": "vitest run --root ../.. --project unit testing/fixtures"
+    "test": "vitest run --root ../.. --project unit testing/fixtures",
+    "start": "node src/main.ts"
+  },
+  "dependencies": {
+    "@git-migrator/provider-fakes": "workspace:*"
+  },
+  "devDependencies": {
+    "@git-migrator/guidance": "workspace:*"
   }
 }
