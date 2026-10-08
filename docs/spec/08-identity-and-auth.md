@@ -3,10 +3,10 @@
 ## Better Auth (AUTH-001 … AUTH-012)
 
 - **AUTH-001 Storage.** Better Auth uses Postgres schema `auth`, through its own `pg.Pool` with `options: '-c search_path=auth'`. Its tables are created by the Better Auth CLI migration in the `migrate` entrypoint (DATA-030). ZenStack never models these tables.
-- **AUTH-002 Microsoft Entra ID.** This is the first sign-in method: the Better Auth `microsoft` social provider with `tenantId` set to the configured tenant. The scopes are `openid profile email`. Accounts from other tenants are rejected.
+- **AUTH-002 Microsoft Entra ID.** This is the first sign-in method: the Better Auth `microsoft` social provider with `tenantId` set to the configured tenant. The scopes are `openid profile email`. Accounts from other tenants are rejected: besides `tenantId`, the token's `tid` claim must equal the configured tenant, which config validates as a lower-case GUID. Only the redirect code flow is used: id-token sign-in, client-supplied scopes or extra sign-in parameters, and Better Auth's token and account endpoints are disabled, and provider OAuth tokens are not stored (ADR-0170).
 - **AUTH-003 Mount point.** Better Auth is served from `/api/auth/*`, through the Hono app (API-001). Cookies are `HttpOnly`, `Secure` (except in dev), `SameSite=Lax`.
-- **AUTH-004 Sessions.** `expiresIn` 8 h, `updateAge` 1 h. Sign-out invalidates server-side.
-- **AUTH-005 Actor provisioning.** On first successful sign-in, create a `human` Actor linked by `authUserId`, with `displayName` and `email` from the profile. Every later sign-in updates these fields and re-evaluates the role (AUTH-010). A disabled Actor's sign-in is rejected, and its existing sessions are revoked.
+- **AUTH-004 Sessions.** `expiresIn` 8 h, `updateAge` 1 h. Sign-out invalidates server-side. Origin and CSRF checks are always on, whatever the environment variables (ADR-0170).
+- **AUTH-005 Actor provisioning.** On first successful sign-in, create a `human` Actor linked by `authUserId`, with `displayName` and `email` from the profile. Identity is the Entra `oid`, never the email: the Better Auth user record holds a synthetic address, the real address lives on the Actor (not unique), and UI and API code read name and email from the Actor. Creating an Actor and changing its role at sign-in write `AuditEvent`s with a null (system) actor (ADR-0171). Every later sign-in updates these fields and re-evaluates the role (AUTH-010). A disabled Actor's sign-in is rejected, and its existing sessions are revoked.
 - **AUTH-010 Role mapping.** Provider claims map to in-app roles through config, so future sign-in methods can map their own claims:
 
   ```yaml

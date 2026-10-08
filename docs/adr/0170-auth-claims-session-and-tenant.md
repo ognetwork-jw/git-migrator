@@ -1,6 +1,6 @@
 # ADR-0170: Entra claims, the sign-in gate and tenant enforcement
 
-- Status: agent-decided
+- Status: accepted (spec updated)
 - Date: 2026-10-08
 - Task: T-020
 - Affects: AUTH-002, AUTH-003, AUTH-004, AUTH-005, AUTH-010, AUTH-011

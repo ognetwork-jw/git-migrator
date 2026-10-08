@@ -107,7 +107,7 @@
 | [0162](0162-pipelines-translation-structure.md) | Shape of the generated workflows | accepted (spec updated) |
 | [0163](0163-pipelines-corpus-and-test-layout.md) | Where the pipelines corpus and its tests live | accepted (no spec change needed) |
 | [0180](0180-quota-service-design.md) | Quota service design: neutral feedback, near-limit clamp, secondary-hit counter, metrics sink | accepted (spec updated) |
-| [0170](0170-auth-claims-session-and-tenant.md) | Entra claims read in `validateUserInfo`, request-scoped hand-off to Actor sync, tenant check, denial surface | agent-decided |
-| [0171](0171-auth-provisioning-test-users-and-migration.md) | Actor linking, test sign-in users, production guard, programmatic Better Auth migration | agent-decided |
+| [0170](0170-auth-claims-session-and-tenant.md) | Entra claims read in `validateUserInfo`, request-scoped hand-off to Actor sync, tenant check, denial surface | accepted (spec updated) |
+| [0171](0171-auth-provisioning-test-users-and-migration.md) | Actor linking, test sign-in users, production guard, programmatic Better Auth migration | accepted (spec updated) |
 
 New ADRs continue from 0028. Implementor decisions use `status: agent-decided` (PROC-005). T-002 uses 0065–0069.

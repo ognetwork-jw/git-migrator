@@ -1,6 +1,6 @@
 # ADR-0171: Actor linking, test sign-in users and the Better Auth migration
 
-- Status: agent-decided
+- Status: accepted (spec updated)
 - Date: 2026-10-08
 - Task: T-020
 - Affects: AUTH-001, AUTH-005, AUTH-010, AUTH-012, DATA-030
