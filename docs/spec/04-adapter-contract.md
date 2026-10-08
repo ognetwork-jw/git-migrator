@@ -240,10 +240,11 @@ export class AdapterError extends Error {
 
 `adapter-sdk` provides `ProviderHttpClient`, which every adapter MUST use:
 
-- **Quota.** It acquires quota before each request (JOB-040), selecting a bucket from a per-adapter route → bucket classifier.
+- **Quota.** It acquires quota before each request attempt, including retries and redirects (JOB-040), selecting a bucket from a per-adapter route → bucket classifier. Credentials are obtained before quota is acquired, so a failing credential step spends no quota. Provider rate-limit headers are interpreted by the adapter through a neutral hook; the client passes the grant's database stamp as `observedSince` (JOB-045, ADR-0190).
 - **Retries.** Exponential backoff with full jitter (base 1 s, cap 60 s, 5 attempts) for `transient` errors (network, 5xx, 408). `rate_limited` errors (429 and secondary limits) are *not* retried in-process. The job is re-scheduled for when quota frees (JOB-044).
 - **Pagination.** Helpers for both link-based and cursor-based pagination.
-- **Raw capture.** It records `RawResponse` rows with authorization headers and query secrets stripped (ADP-061).
+- **Raw capture.** It records `RawResponse` rows with authorization headers and query secrets stripped (ADP-061). Stripping also covers sensitive body, form and header fields (the whole value of a key whose name contains a sensitive word), declared credential values in raw, URL-encoded and base64 forms, and generic token shapes; adapters add provider-specific token shapes, which must be linear. Response bodies are size-capped while streaming.
+- **Confinement.** Requests and redirects stay under the configured base origin and path, and URLs carrying userinfo are refused, so credentials cannot leave the Endpoint. In tests only loopback and explicitly allowed hosts are reachable (TST-006).
 - **Telemetry.** It emits OpenTelemetry spans and the metrics `gm_provider_requests_total{provider,endpoint,bucket,status}` and `gm_provider_request_duration_seconds`.
 
 ## Git access (ADP-070)

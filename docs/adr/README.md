@@ -109,6 +109,6 @@
 | [0180](0180-quota-service-design.md) | Quota service design: neutral feedback, near-limit clamp, secondary-hit counter, metrics sink | accepted (spec updated) |
 | [0170](0170-auth-claims-session-and-tenant.md) | Entra claims read in `validateUserInfo`, request-scoped hand-off to Actor sync, tenant check, denial surface | accepted (spec updated) |
 | [0171](0171-auth-provisioning-test-users-and-migration.md) | Actor linking, test sign-in users, production guard, programmatic Better Auth migration | accepted (spec updated) |
-| [0190](0190-adapter-sdk-design.md) | Adapter SDK design: interpret hook, quota gates, origin pinning, raw capture, test allowlist | agent-decided |
+| [0190](0190-adapter-sdk-design.md) | Adapter SDK design: interpret hook, quota gates, origin pinning, raw capture, test allowlist | accepted (spec updated) |
 
 New ADRs continue from 0028. Implementor decisions use `status: agent-decided` (PROC-005). T-002 uses 0065–0069.

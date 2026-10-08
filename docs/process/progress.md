@@ -18,13 +18,13 @@ The orchestrator maintains this table (see [workflow](workflow.md)). Integration
 | T-021 | in_progress | task/T-021-api | | 0 | implementing (ADR range 0200-0209) |
 | T-022 | todo |  | | | |
 | T-025 | merged | task/T-025-quota | [#26](https://github.com/ognetwork-jw/git-migrator/pull/26) | 3 | merged to ai-main (r3 ACCEPTABLE; MINORs → followups.md); ADR-0180 folded into JOB-041/043/045 |
-| T-026 | in_review | task/T-026-adapter-sdk | [#28](https://github.com/ognetwork-jw/git-migrator/pull/28) | 3 | r2 fixed (3748be1: ReDoS-safe shapes, header scrubbing, authorize before quota); round-3 review |
+| T-026 | merged | task/T-026-adapter-sdk | [#28](https://github.com/ognetwork-jw/git-migrator/pull/28) | 3 | merged to ai-main f73e0b9 (r3 ACCEPTABLE; MINORs → followups.md); ADR-0190 folded into ADP-060 |
 | T-027 | todo |  | | | |
 | T-028 | in_progress | task/T-028-jobs-runtime | | 0 | implementing (ADR range 0210-0219) |
 | T-030 | merged | task/T-030-bitbucket-api-verification | [#2](https://github.com/ognetwork-jw/git-migrator/pull/2) | 2 | ADR-0035, 0036 folded into spec; r2 adversarial MAJOR downgraded to MINOR (pre-existing text) |
 | T-031 | merged | task/T-031-github-api-verification | [#3](https://github.com/ognetwork-jw/git-migrator/pull/3) | 2 | merged to ai-main 033bd88; ADR-0040, 0041 folded into spec |
-| T-032 | todo |  | | | |
-| T-033 | todo |  | | | |
+| T-032 | in_progress | task/T-032-bitbucket-adapter | | 0 | implementing (ADR range 0220-0229) |
+| T-033 | in_progress | task/T-033-github-adapter | | 0 | implementing (ADR range 0230-0239) |
 | T-034 | todo |  | | | |
 | T-040 | merged | task/T-040-fake-git-server | [#8](https://github.com/ognetwork-jw/git-migrator/pull/8) | 2 | merged to ai-main 7875b6a; ADR-0070..0072 accepted |
 | T-041 | merged | task/T-041-fake-bitbucket | [#5](https://github.com/ognetwork-jw/git-migrator/pull/5) | 2 | merged to ai-main 69844e8; ADR-0060/0061 accepted |
@@ -60,7 +60,7 @@ The orchestrator maintains this table (see [workflow](workflow.md)). Integration
 | T-089 | todo |  | | | |
 | T-090 | todo |  | | | |
 | T-091 | todo |  | | | |
-| T-093 | in_review | task/T-093-devenv-ci | [#18](https://github.com/ognetwork-jw/git-migrator/pull/18) | 2 | hang fixed (ADR-0137); checks run sequentially like ci.yml (23f5534); awaiting CI, then round-2 review |
+| T-093 | in_review | task/T-093-devenv-ci | [#18](https://github.com/ognetwork-jw/git-migrator/pull/18) | 2 | r2 ACCEPTABLE (MINORs → followups.md); CI green incl. devenv test; merge pending |
 | T-095 | todo |  | | | |
 | T-096 | todo |  | | | |
 | T-097 | todo |  | | | |

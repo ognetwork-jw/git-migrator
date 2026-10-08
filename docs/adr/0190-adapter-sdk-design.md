@@ -1,6 +1,6 @@
 # ADR-0190: Adapter SDK design
 
-- Status: agent-decided
+- Status: accepted (spec updated)
 - Date: 2026-10-08
 - Task: T-026
 - Affects: ADP-010, ADP-011, ADP-012, ADP-013, ADP-014, ADP-050, ADP-060, ADP-061, ADP-070, JOB-041, JOB-043, JOB-044, JOB-045, TST-006, ARC-012, GLO-002
