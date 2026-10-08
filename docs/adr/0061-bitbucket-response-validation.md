@@ -1,6 +1,6 @@
 # ADR-0061: How fake Bitbucket responses are validated against the OpenAPI document
 
-- Status: agent-decided
+- Status: accepted (no spec change needed)
 - Date: 2026-10-08
 - Task: T-041
 - Affects: TST-010

@@ -1,6 +1,6 @@
 # ADR-0060: Fake Bitbucket behavior choices where the spec is silent
 
-- Status: agent-decided
+- Status: accepted (no spec change needed)
 - Date: 2026-10-08
 - Task: T-041
 - Affects: TST-010, TST-012, JOB-040, JOB-043, JOB-044, FAC-ACL-001, LIF-070
