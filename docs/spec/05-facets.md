@@ -275,7 +275,8 @@ type Environments = { environments: { name: string; category: 'test' | 'staging'
 - Bitbucket deployment environments (`name`, `environment_type`) map to GitHub environments (`PUT /repos/{o}/{r}/environments/{name}`).
 - `category` has no GitHub equivalent: lossy `environments.category-dropped`, accepted by default.
 - Bitbucket deployment branch restrictions are Premium and therefore `null` on Standard. If present, they map to GitHub custom deployment branch policies (translated).
-- **Findings:** `environments.accept-lossy` pre.
+- Environment names are case-insensitive on the target. Source environments whose names differ only by case are grouped; the first in code-unit order is kept and the others are dropped (`unsupported`) with pre task `environments.name-collision`. Variables and secrets in an `environment:<name>` scope follow the kept spelling (ADR-0145).
+- **Findings:** `environments.accept-lossy` pre · `environments.name-collision` pre.
 
 ## variables (FAC-VAR) and secrets (FAC-SEC)
 
@@ -286,9 +287,9 @@ type Secrets   = { secrets:   { key: string; scope: string; name: string }[] }; 
 
 - **FAC-VAR-001 Bitbucket.** Repository pipeline variables and deployment environment variables. `secured: false` goes to `variables`, `secured: true` goes to `secrets` (value unreadable).
 - **FAC-VAR-002 GitHub.** Actions repository variables and environment variables, and repository and environment secrets.
-- **FAC-VAR-003 Names.** GitHub names must match `^[A-Z_][A-Z0-9_]*$` and must not start with `GITHUB_`. Lowercase names are upper-cased: lossy `variables.uppercase-names`. Collisions after normalization, or a `GITHUB_` prefix, raise pre task `variables.name-invalid`.
-- **FAC-SEC-001** Secrets are never created with placeholder values. Each missing secret raises post task `secrets.set-value` (v), one per scope. Its params list the names and a ready-to-run `gh secret set NAME --repo <org>/<repo> [--env <env>]` line per name. Parity compares names.
-- **Findings:** `variables.accept-lossy` pre · `variables.name-invalid` pre · `secrets.set-value` post (v).
+- **FAC-VAR-003 Names.** GitHub names must match `^[A-Z_][A-Z0-9_]*$` and must not start with `GITHUB_`. Lowercase names are upper-cased: lossy `variables.uppercase-names`. Collisions after normalization, or a `GITHUB_` prefix, raise pre task `variables.name-invalid`; the same rules for secret names raise pre task `secrets.name-invalid`. Colliding items are all rejected rather than one being guessed. Secret names are upper-cased by the target itself, so upper-casing a secret name is `translated`, not lossy (ADR-0145).
+- **FAC-SEC-001** Secrets are never created with placeholder values. Each missing secret raises post task `secrets.set-value` (v), one per scope. Its params carry `scope`, `names` and `environment`; the guidance renderer supplies the planned target repository and builds a ready-to-run `gh secret set NAME --repo <org>/<repo> [--env <env>]` line per name (ADR-0145). Parity compares names.
+- **Findings:** `variables.accept-lossy` pre · `variables.name-invalid` pre · `secrets.name-invalid` pre · `secrets.set-value` post (v).
 
 ## pipelines (FAC-PIP)
 

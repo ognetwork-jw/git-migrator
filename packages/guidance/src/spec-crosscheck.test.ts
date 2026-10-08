@@ -130,10 +130,7 @@ const NON_CODE_NAMES: readonly string[] = [
  * Codes that implementors added where the spec is silent (PROC-005). They are in `codes.ts` and have
  * guidance, but the spec does not name them yet. Each one is recorded in an agent-decided ADR.
  */
-const AGENT_DECIDED_CODES: Readonly<Record<string, string>> = {
-  'environments.name-collision': 'ADR-0145',
-  'secrets.name-invalid': 'ADR-0145',
-};
+const AGENT_DECIDED_CODES: Readonly<Record<string, string>> = {};
 
 const SEVERITY_BY_MARK: Record<string, Severity> = {
   B: 'blocker',

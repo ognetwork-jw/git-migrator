@@ -1,6 +1,6 @@
 # ADR-0145: environments, variables and secrets facet semantics
 
-- Status: agent-decided
+- Status: accepted (spec updated)
 - Date: 2026-10-08
 - Task: T-054
 - Affects: FAC-ENV, FAC-VAR-001..003, FAC-SEC-001, FAC-005, FAC-002, ADP-021

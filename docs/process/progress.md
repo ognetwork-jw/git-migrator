@@ -32,10 +32,10 @@ The orchestrator maintains this table (see [workflow](workflow.md)). Integration
 | T-043 | in_review | task/T-043-fixture-world | [#19](https://github.com/ognetwork-jw/git-migrator/pull/19) | 2 | r2 ACCEPTABLE (MINORs → followups.md); merge pending |
 | T-050 | merged | task/T-050-facets-git-settings | [#16](https://github.com/ognetwork-jw/git-migrator/pull/16) | 1 | merged to ai-main 3a7d6a2; ADR-0100..0102 folded into 05-facets, 0103 accepted |
 | T-051 | merged | task/T-051-facets-access-codeowners | [#15](https://github.com/ognetwork-jw/git-migrator/pull/15) | 4 | merged to ai-main cd05ef3 (implementor escalated to opus at r4, PROC-008); ADR-0105/0106 folded into FAC-006/FAC-COD |
-| T-052 | in_review | task/T-052-facets-branch-rules | [#17](https://github.com/ognetwork-jw/git-migrator/pull/17) | 3 | r2: BLOCKER (merge widened allowance) + MAJOR (overlapping patterns) fixed (b5c42e0); round-3 review |
+| T-052 | in_review | task/T-052-facets-branch-rules | [#17](https://github.com/ognetwork-jw/git-migrator/pull/17) | 4 | r3 BLOCKER (wildcard rule priority: oldest wins); implementor escalated to opus (PROC-008) |
 | T-053 | in_review | task/T-053-facets-webhooks-deploykeys | [#22](https://github.com/ognetwork-jw/git-migrator/pull/22) | 2 | r1: BLOCKER (allowlist bypass) + MAJORs; fix pass |
-| T-054 | in_review | task/T-054-facets-env-vars-secrets | [#21](https://github.com/ognetwork-jw/git-migrator/pull/21) | 1 | r1 ACCEPTABLE (MINORs → followups.md); merge pending |
-| T-055 | in_review | task/T-055-facets-cr-extras | | 1 | implemented (ac0cf84); round-1 review |
+| T-054 | merged | task/T-054-facets-env-vars-secrets | [#21](https://github.com/ognetwork-jw/git-migrator/pull/21) | 1 | merged to ai-main d705ec3; ADR-0145 folded into FAC-ENV/FAC-VAR/FAC-SEC |
+| T-055 | in_review | task/T-055-facets-cr-extras | [#23](https://github.com/ognetwork-jw/git-migrator/pull/23) | 2 | r1 MAJOR (bidi in titles) fixed (6066c79); round-2 review |
 | T-056 | in_progress | task/T-056-facets-members-teams-org | | 0 | implementing (ADR range 0150-0154) |
 | T-057 | in_progress | task/T-057-facets-pipelines | | 0 | implementing (ADR range 0160-0164) |
 | T-058 | todo |  | | | |
