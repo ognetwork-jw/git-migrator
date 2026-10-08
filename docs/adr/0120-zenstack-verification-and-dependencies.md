@@ -1,6 +1,6 @@
 # ADR-0120: ZenStack 3.9.7 verification and the extra dependencies of `packages/db`
 
-- Status: agent-decided
+- Status: accepted (no spec change needed)
 - Date: 2026-10-08
 - Task: T-010
 - Affects: DOM-003, DOM-011, AUTH-021, ARC-001, ARC-002, DATA-030

@@ -50,7 +50,7 @@ Every request resolves to an Actor (session or API key) or is rejected with 401.
 | Actors, service Actors, API keys | | | ✓ |
 | Audit log | ✓ | ✓ | ✓ |
 
-- **AUTH-021** Policies are expressed in ZModel (`@@allow` / `@@deny`, plus field-level `@deny` for lifecycle fields: DOM-011). Custom `/api/v1` handlers check the same rules via a shared `can(actor, capability)` helper in `packages/auth`, and run privileged writes through the server-only client.
+- **AUTH-021** Policies are expressed in ZModel (`@@allow` / `@@deny`, plus field-level `@deny` for lifecycle fields: DOM-011). Custom `/api/v1` handlers check the same rules via a shared `can(actor, capability)` helper in `packages/auth`, and run privileged writes through the server-only client. The policy-enforcing client handed to the RPC mount is an allow-list facade: model delegates, `$transaction` (callback, or an array of operations that same facade issued) and a read-only `$schema`, and nothing else. It accepts only plain-data arguments and returns errors without SQL text or parameters (ADR-0122).
 - **AUTH-022 Audit.** Every mutation by an Actor produces an `AuditEvent`, whether through RPC or a custom endpoint, with action, subject and a redacted diff. RPC mutations are captured by a ZenStack client plugin (query hook) on audited models. Custom endpoints write audit events explicitly. Reads are not audited.
 
 ## Identity mapping (AUTH-050)

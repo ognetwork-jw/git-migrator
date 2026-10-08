@@ -1,6 +1,6 @@
 # ADR-0123: Migrations, database tests and the migrate entrypoint
 
-- Status: agent-decided
+- Status: accepted (no spec change needed)
 - Date: 2026-10-08
 - Task: T-010
 - Affects: DATA-011, DATA-030, DATA-031, DATA-040, TST-001, DEV-040, ARC-012

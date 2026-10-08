@@ -39,7 +39,7 @@ Use the ZenStack RPC API whenever policy-guarded CRUD over models is enough. A c
 - `NamingRule`, `WebhookAllowlistEntry`, `Overlay`: create, update, delete (admin). The server marks affected Analyses stale via a ZenStack after-mutation hook.
 - `ManualTask.note`: update (operator).
 
-Everything else is read-only through RPC, including Actor, ApiKey, mappings, invitations, Expected Differences and ManualTask status, and changes only through `/api/v1`. API keys' `hash` and RawResponse bodies are also denied for **read** to roles below their AUTH-020 row.
+Everything else is read-only through RPC, including Actor, ApiKey, mappings, invitations, Expected Differences and ManualTask status, and changes only through `/api/v1`. API keys' `hash` is denied for **read** to every role, admin included, because no AUTH-020 row grants it; key verification (AUTH-040) reads it with the server-only client. RawResponse bodies are denied for read to viewers (ADR-0122).
 
 ## Custom endpoints (API-020)
 

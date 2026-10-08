@@ -1,6 +1,6 @@
 # ADR-0122: Access policy decisions
 
-- Status: agent-decided
+- Status: accepted (spec updated)
 - Date: 2026-10-08
 - Task: T-010
 - Affects: DOM-005, DOM-011, API-012, AUTH-020, AUTH-021

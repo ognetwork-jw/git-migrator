@@ -8,16 +8,16 @@ The orchestrator maintains this table (see [workflow](workflow.md)). Integration
 | T-002 | merged | task/T-002-dev-environment | [#9](https://github.com/ognetwork-jw/git-migrator/pull/9) | 5 | merged to ai-main 822c914 at the review cap (open findings in followups.md); ADR-0066..0068 folded into DEV-020, 0065/0069 accepted |
 | T-003 | merged | task/T-003-agent-tooling-ci | [#4](https://github.com/ognetwork-jw/git-migrator/pull/4) | 5 | 5-round cap; merged to ai-main d46ecc4; open findings in docs/followups.md; ADR-0046..0049 accepted |
 | T-004 | merged | task/T-004-config-observability | [#7](https://github.com/ognetwork-jw/git-migrator/pull/7) | 5 | merged to ai-main e8054ea at the review cap (r5 findings in followups.md); ADR-0050..0054 folded into DEP-040/DEP-050 |
-| T-010 | in_review | task/T-010-database | [#20](https://github.com/ognetwork-jw/git-migrator/pull/20) | 4 | r3: MAJORs (array-form $transaction escape, no $schema for RPC mount, ADR-0122 corrupted); fix pass |
+| T-010 | merged | task/T-010-database | [#20](https://github.com/ognetwork-jw/git-migrator/pull/20) | 5 | merged to ai-main 2421d5d at the 5-round cap (r5 arg-walk security MAJORs → followups.md, fix with T-021 at the latest); ADR-0121/0122 folded into 03, 08, 09 |
 | T-011 | merged | task/T-011-core-primitives | [#6](https://github.com/ognetwork-jw/git-migrator/pull/6) | 2 | merged to ai-main 1c654ab; ADR-0058 folded into LIF-002; 0055-0057, 0059 accepted |
 | T-012 | merged | task/T-012-facet-engine | [#10](https://github.com/ognetwork-jw/git-migrator/pull/10) | 2 | merged to ai-main 6182a5a; ADR-0080..0082 accepted |
 | T-013 | merged | task/T-013-naming | [#13](https://github.com/ognetwork-jw/git-migrator/pull/13) | 4 | merged 1df40cb; ADR-0095 folded into spec 06 |
 | T-014 | merged | task/T-014-guidance | [#14](https://github.com/ognetwork-jw/git-migrator/pull/14) | 4 | merged to ai-main a8ec5fa; ADR-0090..0094 folded into UI-040 and 05-facets; AGENTS.md messages rule amended |
 | T-015 | merged | task/T-015-canonical-schemas | [#11](https://github.com/ognetwork-jw/git-migrator/pull/11) | 3 | merged to ai-main 9965a55; ADR-0085..0088 folded into spec |
-| T-020 | todo |  | | | |
+| T-020 | in_progress | task/T-020-auth | | 0 | implementing (ADR range 0170-0179) |
 | T-021 | todo |  | | | |
 | T-022 | todo |  | | | |
-| T-025 | todo |  | | | |
+| T-025 | in_progress | task/T-025-quota | | 0 | implementing (ADR range 0180-0189) |
 | T-026 | todo |  | | | |
 | T-027 | todo |  | | | |
 | T-028 | todo |  | | | |
@@ -37,7 +37,7 @@ The orchestrator maintains this table (see [workflow](workflow.md)). Integration
 | T-054 | merged | task/T-054-facets-env-vars-secrets | [#21](https://github.com/ognetwork-jw/git-migrator/pull/21) | 1 | merged to ai-main d705ec3; ADR-0145 folded into FAC-ENV/FAC-VAR/FAC-SEC |
 | T-055 | merged | task/T-055-facets-cr-extras | [#23](https://github.com/ognetwork-jw/git-migrator/pull/23) | 2 | merged to ai-main 8cc5d13; ADR-0155/0156 accepted (param formats, no spec change) |
 | T-056 | merged | task/T-056-facets-members-teams-org | [#24](https://github.com/ognetwork-jw/git-migrator/pull/24) | 2 | merged to ai-main c37018c; ADR-0150..0152 folded into 05-facets members/teams/org-* |
-| T-057 | in_review | task/T-057-facets-pipelines | [#25](https://github.com/ognetwork-jw/git-migrator/pull/25) | 2 | r1 fixed (6eb128a); round-2 review |
+| T-057 | in_review | task/T-057-facets-pipelines | [#25](https://github.com/ognetwork-jw/git-migrator/pull/25) | 4 | r3: MAJOR (quadratic sibling patterns) + gate hidden by truncation; fix pass |
 | T-058 | todo |  | | | |
 | T-060 | todo |  | | | |
 | T-061 | todo |  | | | |
@@ -60,7 +60,7 @@ The orchestrator maintains this table (see [workflow](workflow.md)). Integration
 | T-089 | todo |  | | | |
 | T-090 | todo |  | | | |
 | T-091 | todo |  | | | |
-| T-093 | in_review | task/T-093-devenv-ci | [#18](https://github.com/ognetwork-jw/git-migrator/pull/18) | 2 | rebased onto ai-main (c8bd8b9, ADR index conflict); awaiting CI, then round-2 review |
+| T-093 | in_review | task/T-093-devenv-ci | [#18](https://github.com/ognetwork-jw/git-migrator/pull/18) | 2 | CI devenv test failed (secretspec ref rename under env provider); fixed to the file provider (2329633); awaiting CI |
 | T-095 | todo |  | | | |
 | T-096 | todo |  | | | |
 | T-097 | todo |  | | | |

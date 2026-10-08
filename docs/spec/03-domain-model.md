@@ -18,6 +18,8 @@ Any Facet value needed for filtering or sorting MUST be **promoted** to a real c
 ## Conventions (DOM-003)
 
 - IDs are UUIDv7 (`@default(uuid(7))`). If the pinned ZenStack version lacks `uuid(7)`, generate in application code; T-001 verifies (ADR-0002).
+- Every `DateTime` column is `timestamptz(3)` (ADR-0121).
+- JSON columns whose shape depends on `facetKey` (Facet Snapshot data, translation output, Overlays) are plain `Json`: no single ZenStack `type` can describe them. Their writers validate them with the Facet's Zod schema on write and on read, as DOM-001 requires (ADR-0121).
 - Tables use snake_case via `@@map`, fields via `@map`.
 - Every model has `createdAt` and `updatedAt`, omitted from the listing below for brevity, except the append-only `QuotaEvent`, `RunLog` and `AuditEvent`, which have only their own timestamps.
 - All app models are `@@schema('app')`. Better Auth tables live in schema `auth` and are **not** modeled in ZModel. `Actor.authUserId` is a plain unique string referencing `auth.user.id`, with no FK across schemas, so each schema owns its migrations (ADR-0008).
@@ -75,6 +77,7 @@ model Route {                               // upserted from config at startup
   defaults          Json                    // route defaults (DEP-040)
   configHash        String                  // change marks analyses stale (LIF-021)
   sourcePostAction  String                  // "read-only" | "none" (LIF-070)
+  retiredAt         DateTime?               // set when config sync no longer sees the Route; cleared when it returns (DATA-030, ADR-0121)
 }
 
 model Namespace {

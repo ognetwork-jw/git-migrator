@@ -1,6 +1,6 @@
 # ADR-0121: Domain model details the spec left open
 
-- Status: agent-decided
+- Status: accepted (spec updated)
 - Date: 2026-10-08
 - Task: T-010
 - Affects: DOM-001, DOM-003, DOM-004, DOM-013, DOM-014, DATA-030
