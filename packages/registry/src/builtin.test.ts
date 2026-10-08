@@ -58,71 +58,203 @@ describe('built-in registry', () => {
 });
 
 /**
- * Rows of the mapping tables in docs/spec/05-facets.md that capabilities can express. Where the
- * declared capabilities and the table disagree, the test asserts what the code declares and the
- * comment names the table's value; the disagreements are listed in docs/adr/0260.
+ * Every row of the mapping tables in docs/spec/05-facets.md that is lossy, unreadable or
+ * unsupported for the pair, as the fidelity the matrix must show for Bitbucket Cloud to GitHub
+ * (ADR-0261: the static matrix is a worst-case ceiling, so a row that is lossy whether or not the
+ * data triggers it is declared `constrained`). Read-time rows (`/forking` on an organization that
+ * forbids private forks) stay dynamic, and `translated` is never produced statically.
  */
+const TABLE: readonly { facet: string; path: string; fidelity: string; row: string }[] = [
+  {
+    facet: 'repository-settings',
+    path: '/description',
+    fidelity: 'lossy',
+    row: 'FAC-SET description truncated at 350',
+  },
+  {
+    facet: 'repository-settings',
+    path: '/forking',
+    fidelity: 'exact',
+    row: 'FAC-SET forking (public-repo lossy case and org policy are read-time, ADR-0231)',
+  },
+  {
+    facet: 'merge-settings',
+    path: '/allowed',
+    fidelity: 'lossy',
+    row: 'FAC-MRG-001 ff-only as rebase',
+  },
+  {
+    facet: 'branch-rules',
+    path: '/rules/enforcement',
+    fidelity: 'lossy',
+    row: 'FAC-BRR-002 advisory-enforced',
+  },
+  {
+    facet: 'branch-rules',
+    path: '/rules/restrictMerges',
+    fidelity: 'lossy',
+    row: 'FAC-BRR-002 merge-restriction-as-push',
+  },
+  {
+    facet: 'branch-rules',
+    path: '/rules/forcePushExempt',
+    fidelity: 'exact',
+    row: 'FAC-BRR-002 translated',
+  },
+  {
+    facet: 'branch-rules',
+    path: '/rules/deletionExempt',
+    fidelity: 'lossy',
+    row: 'FAC-BRR-002 exemptions-dropped',
+  },
+  {
+    facet: 'branch-rules',
+    path: '/rules/changeRequest/minApprovals',
+    fidelity: 'lossy',
+    row: 'FAC-BRR-002 approvals-capped above 6',
+  },
+  {
+    facet: 'branch-rules',
+    path: '/rules/changeRequest/requireTasksResolved',
+    fidelity: 'lossy',
+    row: 'FAC-BRR-002 tasks-as-conversations',
+  },
+  {
+    facet: 'branch-rules',
+    path: '/rules/changeRequest/minPassingBuilds',
+    fidelity: 'unsupported',
+    row: 'FAC-BRR-002 configure-status-checks',
+  },
+  {
+    facet: 'webhooks',
+    path: '/hooks/secret',
+    fidelity: 'unreadable',
+    row: 'FAC-WEB-003 secret unreadable',
+  },
+  {
+    facet: 'org-webhooks',
+    path: '/hooks/secret',
+    fidelity: 'unreadable',
+    row: 'FAC-END secret rules as FAC-WEB',
+  },
+  {
+    facet: 'secrets',
+    path: '/secrets/value',
+    fidelity: 'unreadable',
+    row: 'FAC-VAR-001, FAC-SEC-001 values unreadable',
+  },
+  {
+    facet: 'org-secrets',
+    path: '/secrets/value',
+    fidelity: 'unreadable',
+    row: 'FAC-END org-secrets values never read',
+  },
+  {
+    facet: 'branch-rules',
+    path: '/rules/pattern',
+    fidelity: 'lossy',
+    row: 'FAC-BRR-003 pattern-approximated, patterns-merged, overlap-unresolved',
+  },
+  {
+    facet: 'variables',
+    path: '/variables/name',
+    fidelity: 'lossy',
+    row: 'FAC-VAR-003 uppercase-names',
+  },
+  {
+    facet: 'org-variables',
+    path: '/variables/name',
+    fidelity: 'lossy',
+    row: 'FAC-END org-variables.uppercase-names',
+  },
+  { facet: 'webhooks', path: '/hooks/events', fidelity: 'lossy', row: 'FAC-WEB-001 event-dropped' },
+  {
+    facet: 'org-webhooks',
+    path: '/hooks/events',
+    fidelity: 'lossy',
+    row: 'FAC-END org-webhooks.event-dropped',
+  },
+  {
+    facet: 'code-ownership',
+    path: '/owners',
+    fidelity: 'lossy',
+    row: 'FAC-COD default-reviewers-as-codeowners',
+  },
+  {
+    facet: 'environments',
+    path: '/environments/category',
+    fidelity: 'lossy',
+    row: 'FAC-ENV category-dropped',
+  },
+];
+
+/** Facets with a driver write on the target. The others are delivered otherwise (FAC-SEC-001, FAC-PIP-003, FAC-CRQ, FAC-END, FAC-GIT). */
+const WRITTEN = new Set([
+  'repository-settings',
+  'merge-settings',
+  'access-control',
+  'branch-rules',
+  'webhooks',
+  'deploy-keys',
+  'variables',
+  'environments',
+  'code-ownership',
+  'teams',
+  'org-variables',
+  'org-webhooks',
+]);
+
 describe('capability matrix against the mapping tables in 05-facets', () => {
-  it('[API-020] FAC-GIT-003: git-refs is read on the source and exact', () => {
-    expect(cell('git-refs')).toMatchObject({ fidelity: 'exact', read: true });
+  it.each(TABLE)('[API-020] $facet $path is $fidelity ($row)', ({ facet, path, fidelity }) => {
+    expect(field(facet, path)?.fidelity).toBe(fidelity);
   });
 
-  it('[API-020] FAC-SET: repository-settings is exact (forking is decided at read time, FAC-SET-002)', () => {
-    expect(cell('repository-settings')).toMatchObject({ fidelity: 'exact', write: true });
+  it('[API-020] the matrix is a static ceiling', () => {
+    expect(matrix.ceiling).toBe('static');
   });
 
-  it('[API-020] FAC-MRG-001: allowed is constrained on the target (ff-only is lossy)', () => {
-    expect(field('merge-settings', '/allowed')?.fidelity).toBe('lossy');
-  });
-
-  it('[API-020] FAC-BRR-002: enforcement and approvals above 6 are lossy', () => {
-    expect(field('branch-rules', '/rules/enforcement')?.fidelity).toBe('lossy');
-    expect(field('branch-rules', '/rules/changeRequest/minApprovals')?.fidelity).toBe('lossy');
-  });
-
-  it('[API-020] FAC-BRR-002: minPassingBuilds is unsupported', () => {
-    expect(field('branch-rules', '/rules/changeRequest/minPassingBuilds')?.fidelity).toBe(
-      'unsupported',
+  it('[API-020] marker paths on the source side are pinned: they exist only so the matrix can show unreadable values', () => {
+    const markers = matrix.rows.flatMap((r) =>
+      cell(r.facet)
+        .fields.filter((f) => f.source.kind !== 'supported')
+        .map((f) => `${r.facet} ${f.path}`),
     );
+    expect(markers.sort()).toEqual([
+      'org-secrets /secrets/value',
+      'org-webhooks /hooks/secret',
+      'secrets /secrets/value',
+      'webhooks /hooks/secret',
+    ]);
   });
 
-  it('[API-020] FAC-BRR-002: forcePushExempt is representable (translated, so exact as a ceiling)', () => {
-    expect(field('branch-rules', '/rules/forcePushExempt')?.fidelity).toBe('exact');
+  it('[FAC-WEB-001] no declared constraint on /hooks/events starts with only:, the translator reads that at run time', () => {
+    for (const facet of ['webhooks', 'org-webhooks']) {
+      const t = field(facet, '/hooks/events')?.target;
+      expect(t?.kind === 'constrained' && t.constraint.startsWith('only:')).toBe(false);
+    }
   });
 
-  it('[API-020] FAC-BRR-002: deletionExempt is not representable', () => {
-    // The table says lossy (`branch-rules.exemptions-dropped`); the adapter declares unsupported.
-    expect(field('branch-rules', '/rules/deletionExempt')?.fidelity).toBe('unsupported');
+  it('[API-020] a facet cell is the worst of its table rows, and exact where the tables list none', () => {
+    const order = ['exact', 'lossy', 'unreadable', 'unsupported'];
+    for (const row of matrix.rows) {
+      const rows = TABLE.filter((t) => t.facet === row.facet).map((t) => t.fidelity);
+      const worst = rows.reduce((a, b) => (order.indexOf(b) > order.indexOf(a) ? b : a), 'exact');
+      expect(cell(row.facet).fidelity, row.facet).toBe(worst);
+    }
   });
 
-  it('[API-020] FAC-BRR-002: restrictMerges is not representable', () => {
-    // The table says lossy (`branch-rules.merge-restriction-as-push`); the adapter declares unsupported.
-    expect(field('branch-rules', '/rules/restrictMerges')?.fidelity).toBe('unsupported');
+  it('[API-020] no field is declared that the tables do not list', () => {
+    const listed = new Set(TABLE.map((t) => `${t.facet} ${t.path}`));
+    const declared = matrix.rows.flatMap((r) =>
+      cell(r.facet).fields.map((f) => `${r.facet} ${f.path}`),
+    );
+    expect(declared.filter((d) => !listed.has(d))).toEqual([]);
   });
 
-  it('[API-020] FAC-BRR-002: requireTasksResolved is lossy in the table but not declared', () => {
-    expect(field('branch-rules', '/rules/changeRequest/requireTasksResolved')).toBeUndefined();
-  });
-
-  it('[API-020] FAC-WEB-003: the webhook secret is unreadable', () => {
-    // The target declares it unreadable (write-only); the source declares nothing, so the cell is exact.
-    expect(field('webhooks', '/hooks/secret')?.target).toEqual({ kind: 'unreadable' });
-    expect(cell('webhooks').fidelity).toBe('exact');
-  });
-
-  it('[API-020] FAC-ENV: category has no target equivalent', () => {
-    // The table says lossy (`environments.category-dropped`, accepted by default); the adapter declares unsupported.
-    expect(field('environments', '/environments/category')?.fidelity).toBe('unsupported');
-  });
-
-  it('[API-020] FAC-SEC-001: secrets are never written, so the target has no driver write', () => {
-    expect(cell('secrets')).toMatchObject({ read: true, write: false });
-    expect(cell('org-secrets').write).toBe(false);
-  });
-
-  it('[API-020] FAC-PIP-003, FAC-CRQ, FAC-END: delivered by Change Request, invitation or detection, so no driver write', () => {
-    for (const facet of ['pipelines', 'change-requests', 'members']) {
-      expect(cell(facet).write, facet).toBe(false);
+  it('[API-020] driver writes agree with the delivery described in the tables', () => {
+    for (const row of matrix.rows) {
+      if (row.facet === 'extras') continue;
+      expect(cell(row.facet).write, row.facet).toBe(WRITTEN.has(row.facet));
     }
   });
 

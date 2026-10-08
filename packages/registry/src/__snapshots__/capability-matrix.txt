@@ -52,22 +52,22 @@
     "cells": [
       {
         "pair": "bitbucket-cloud -> github",
-        "fidelity": "unsupported",
+        "fidelity": "lossy",
         "read": true,
         "write": true,
         "override": false,
         "fields": [
-          "/environments/category: unsupported"
+          "/environments/category: lossy"
         ]
       },
       {
         "pair": "github -> bitbucket-cloud",
-        "fidelity": "unsupported",
+        "fidelity": "lossy",
         "read": true,
         "write": false,
         "override": false,
         "fields": [
-          "/environments/category: unsupported"
+          "/environments/category: lossy"
         ]
       }
     ]
@@ -175,11 +175,13 @@
     "cells": [
       {
         "pair": "bitbucket-cloud -> github",
-        "fidelity": "exact",
+        "fidelity": "unreadable",
         "read": true,
         "write": false,
         "override": false,
-        "fields": []
+        "fields": [
+          "/secrets/value: unreadable"
+        ]
       },
       {
         "pair": "github -> bitbucket-cloud",
@@ -187,7 +189,9 @@
         "read": true,
         "write": false,
         "override": false,
-        "fields": []
+        "fields": [
+          "/secrets/value: exact"
+        ]
       }
     ]
   },
@@ -198,19 +202,23 @@
     "cells": [
       {
         "pair": "bitbucket-cloud -> github",
-        "fidelity": "exact",
+        "fidelity": "lossy",
         "read": true,
         "write": true,
         "override": false,
-        "fields": []
+        "fields": [
+          "/variables/name: lossy"
+        ]
       },
       {
         "pair": "github -> bitbucket-cloud",
-        "fidelity": "exact",
+        "fidelity": "lossy",
         "read": true,
         "write": false,
         "override": false,
-        "fields": []
+        "fields": [
+          "/variables/name: lossy"
+        ]
       }
     ]
   },
@@ -221,12 +229,13 @@
     "cells": [
       {
         "pair": "bitbucket-cloud -> github",
-        "fidelity": "exact",
+        "fidelity": "unreadable",
         "read": true,
         "write": true,
         "override": false,
         "fields": [
-          "/hooks/secret: exact"
+          "/hooks/events: lossy",
+          "/hooks/secret: unreadable"
         ]
       },
       {
@@ -236,6 +245,7 @@
         "write": false,
         "override": false,
         "fields": [
+          "/hooks/events: lossy",
           "/hooks/secret: unreadable"
         ]
       }
@@ -248,21 +258,23 @@
     "cells": [
       {
         "pair": "bitbucket-cloud -> github",
-        "fidelity": "exact",
+        "fidelity": "lossy",
         "read": true,
         "write": true,
         "override": false,
         "fields": [
+          "/description: lossy",
           "/forking: exact"
         ]
       },
       {
         "pair": "github -> bitbucket-cloud",
-        "fidelity": "exact",
+        "fidelity": "lossy",
         "read": true,
         "write": false,
         "override": false,
         "fields": [
+          "/description: lossy",
           "/forking: exact"
         ]
       }
@@ -275,11 +287,13 @@
     "cells": [
       {
         "pair": "bitbucket-cloud -> github",
-        "fidelity": "exact",
+        "fidelity": "unreadable",
         "read": true,
         "write": false,
         "override": false,
-        "fields": []
+        "fields": [
+          "/secrets/value: unreadable"
+        ]
       },
       {
         "pair": "github -> bitbucket-cloud",
@@ -287,7 +301,9 @@
         "read": true,
         "write": false,
         "override": false,
-        "fields": []
+        "fields": [
+          "/secrets/value: exact"
+        ]
       }
     ]
   },
@@ -351,10 +367,12 @@
         "fields": [
           "/rules/changeRequest/minApprovals: lossy",
           "/rules/changeRequest/minPassingBuilds: unsupported",
-          "/rules/deletionExempt: unsupported",
+          "/rules/changeRequest/requireTasksResolved: lossy",
+          "/rules/deletionExempt: lossy",
           "/rules/enforcement: lossy",
           "/rules/forcePushExempt: exact",
-          "/rules/restrictMerges: unsupported"
+          "/rules/pattern: lossy",
+          "/rules/restrictMerges: lossy"
         ]
       },
       {
@@ -366,10 +384,12 @@
         "fields": [
           "/rules/changeRequest/minApprovals: lossy",
           "/rules/changeRequest/minPassingBuilds: unsupported",
-          "/rules/deletionExempt: unsupported",
+          "/rules/changeRequest/requireTasksResolved: lossy",
+          "/rules/deletionExempt: lossy",
           "/rules/enforcement: lossy",
           "/rules/forcePushExempt: exact",
-          "/rules/restrictMerges: unsupported"
+          "/rules/pattern: lossy",
+          "/rules/restrictMerges: lossy"
         ]
       }
     ]
@@ -381,19 +401,23 @@
     "cells": [
       {
         "pair": "bitbucket-cloud -> github",
-        "fidelity": "exact",
+        "fidelity": "lossy",
         "read": true,
         "write": true,
         "override": false,
-        "fields": []
+        "fields": [
+          "/owners: lossy"
+        ]
       },
       {
         "pair": "github -> bitbucket-cloud",
-        "fidelity": "exact",
+        "fidelity": "lossy",
         "read": true,
         "write": false,
         "override": false,
-        "fields": []
+        "fields": [
+          "/owners: lossy"
+        ]
       }
     ]
   },
@@ -404,19 +428,23 @@
     "cells": [
       {
         "pair": "bitbucket-cloud -> github",
-        "fidelity": "exact",
+        "fidelity": "lossy",
         "read": true,
         "write": true,
         "override": false,
-        "fields": []
+        "fields": [
+          "/variables/name: lossy"
+        ]
       },
       {
         "pair": "github -> bitbucket-cloud",
-        "fidelity": "exact",
+        "fidelity": "lossy",
         "read": true,
         "write": false,
         "override": false,
-        "fields": []
+        "fields": [
+          "/variables/name: lossy"
+        ]
       }
     ]
   },
@@ -450,12 +478,13 @@
     "cells": [
       {
         "pair": "bitbucket-cloud -> github",
-        "fidelity": "exact",
+        "fidelity": "unreadable",
         "read": true,
         "write": true,
         "override": false,
         "fields": [
-          "/hooks/secret: exact"
+          "/hooks/events: lossy",
+          "/hooks/secret: unreadable"
         ]
       },
       {
@@ -465,6 +494,7 @@
         "write": false,
         "override": false,
         "fields": [
+          "/hooks/events: lossy",
           "/hooks/secret: unreadable"
         ]
       }

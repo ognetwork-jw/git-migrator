@@ -55,6 +55,18 @@ describe('adapter surface', () => {
     }
   });
 
+  it('[FAC-WEB-003] secrets and webhook secret values are declared unreadable, nothing else is', () => {
+    const declared = Object.entries(capabilities.facets).flatMap(([facet, cap]) =>
+      Object.entries(cap?.fields ?? {}).map(([path, f]) => `${facet} ${path} ${f.kind}`),
+    );
+    expect(declared.sort()).toEqual([
+      'org-secrets /secrets/value unreadable',
+      'org-webhooks /hooks/secret unreadable',
+      'secrets /secrets/value unreadable',
+      'webhooks /hooks/secret unreadable',
+    ]);
+  });
+
   it('[ADP-011] no driver has apply and every driver is read only', async () => {
     const { conn } = await makeConnection(makeWorld());
     for (const driver of Object.values(conn.facets)) expect(driver?.apply).toBeUndefined();

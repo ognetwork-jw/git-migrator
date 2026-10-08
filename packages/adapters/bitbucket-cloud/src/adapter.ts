@@ -8,7 +8,8 @@ import {
   type ProviderCapabilities,
   type ProviderLimits,
 } from '@git-migrator/adapter-sdk';
-import { FACET_KEYS } from '@git-migrator/canonical';
+import { FACET_KEYS, type FacetKey } from '@git-migrator/canonical';
+import type { FacetCapability } from '@git-migrator/core';
 import type { z } from 'zod';
 import { envelope, getOne } from './api.ts';
 import { createClient } from './client.ts';
@@ -27,12 +28,25 @@ import { createSourceLock } from './source-lock.ts';
 
 /**
  * Every Facet is readable and none is writable: Bitbucket is the source (ADP-014). Fields default
- * to `supported`; what cannot be read for a given repository is reported per read through
- * `FacetRead.unreadable` (for example `/allowed`, FAC-MRG-002).
+ * to `supported`. Statically unreadable values are declared (FAC-WEB-003 webhook secrets,
+ * FAC-VAR-001 and FAC-END secured values). What cannot be read for one repository is reported
+ * per read through `FacetRead.capabilities` / `unreadable`, not here (for example merge-settings
+ * `/allowed` and `/deleteBranchOnMerge`, FAC-MRG-002).
  */
+const UNREADABLE: FacetCapability['fields'][string] = { kind: 'unreadable' };
+const STATIC_UNREADABLE: Partial<Record<FacetKey, FacetCapability['fields']>> = {
+  webhooks: { '/hooks/secret': UNREADABLE },
+  'org-webhooks': { '/hooks/secret': UNREADABLE },
+  secrets: { '/secrets/value': UNREADABLE },
+  'org-secrets': { '/secrets/value': UNREADABLE },
+};
+
 export const capabilities: ProviderCapabilities = {
   facets: Object.fromEntries(
-    FACET_KEYS.map((key) => [key, { read: true, write: false, fields: {} }]),
+    FACET_KEYS.map((key) => [
+      key,
+      { read: true, write: false, fields: STATIC_UNREADABLE[key] ?? {} },
+    ]),
   ),
 };
 

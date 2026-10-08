@@ -125,6 +125,6 @@
 | [0230](0230-github-adapter-identity-and-connection.md) | GitHub adapter: identifiers, configuration, App token cache, quota buckets, error mapping | accepted (no spec change needed) |
 | [0231](0231-github-facet-drivers.md) | GitHub facet drivers: apply semantics, dynamic capabilities, branch rules, Change Requests | accepted (spec updated) |
 | [0260](0260-capability-matrix-shape.md) | Capability matrix shape, registry ownership, dynamic overlay | agent-decided |
-| [0261](0261-capability-matrix-vs-mapping-tables.md) | Declared capabilities versus the 05-facets mapping tables: disagreements | agent-decided |
+| [0261](0261-capability-matrix-vs-mapping-tables.md) | Adapter capabilities aligned to the 05-facets mapping tables | agent-decided |
 
 New ADRs continue from 0028. Implementor decisions use `status: agent-decided` (PROC-005). T-002 uses 0065–0069.
