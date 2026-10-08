@@ -1,0 +1,53 @@
+# ADR-0231: GitHub facet drivers: reads, apply semantics and delivery
+
+- Status: agent-decided
+- Date: 2026-10-08
+- Task: T-033
+- Affects: ADP-011, ADP-012, ADP-013, ADP-014, FAC-ACL-002, FAC-BRR-002, FAC-BRR-003, FAC-COD, FAC-DKY-002, FAC-PIP-001, FAC-SET-002, FAC-WEB, LIF-047, LIF-045
+
+## Context
+
+ADP-011 requires an idempotent `apply` that changes only what differs, but does not say whether it deletes what exists only on the target, how a dynamic fact (an organization that forbids private forking) reaches the capability matrix, how `deploy-keys.key-in-use` leaves the driver, or which facets have a GitHub driver.
+
+## Decision
+
+1. **Apply semantics.** `apply` creates and updates. It deletes target-only items only for `branch-rules`, where the lifecycle needs it (step 3a lifts rules by applying a desired document without them, and the rules are framework-managed per pattern). Everywhere else target-only items stay: webhooks, members and teams are not drift (ADR-0141, ADR-0150), and deleting hand-made grants, keys or variables on adoption would lose data. When `current` is `null` the driver reads it; reads are cheap and a stale `current` is the runner's responsibility. A second apply of the same desired document yields nothing (tested for every facet with a driver).
+2. **Mutations.** One `MutationRecord` per provider-side change with a `resourceRef` that names the resource (`kind`, repository, id or key) so a later rollback can find it. Webhook records hold the redacted URL only. Rollback of adopted targets needs a driver-level undo or `apply(before)`; it is a follow-up for the rollback task.
+3. **Dynamic capabilities.** `FacetRead` gains the optional `capabilities` (field path to `FieldSupport`), merged by the analysis over the static `ProviderCapabilities`. `repository-settings` reports `/forking` as `unsupported` when `GET /orgs/{org}` says `members_can_fork_private_repositories: false` (T-050 follow-up), and then does not write `allow_forking`. GitHub receives every canonical webhook event, so no `/hooks/events` constraint is declared (T-053 follow-up).
+4. **Branch rules.** Read patterns verbatim; `restrictMerges` is `null`, `deletionExempt` is `[]`, `enforcement` is `enforced`, `enforce_admins` is false (FAC-BRR-004). Pushing actors resolve to node ids; an unresolvable push actor is left out (narrower), an unresolvable exempt actor is dropped (fail closed). New rules are created in `branchRuleApplyOrder(desired.rules)` order, only ever on `desired` rules (never on raw target patterns, so the `branchPatternCovers` caveat on `**` does not apply); existing rules are updated in place to keep their age. A refused force-push bypass list (GraphQL validation error) is retried without it, the ledger record carries `exemptionsDropped: true` and `after.forcePushExempt: []`, and the lifecycle reports `branch-rules.exemptions-dropped` (ADR-0040). Status check names are never invented; existing ones are kept when builds are still wanted.
+5. **Deploy keys.** A `conflict` (422 "key is already in use") is logged with `finding: deploy-keys.key-in-use` and skipped; the key stays missing and the lifecycle raises the post task.
+6. **Access control.** Direct collaborators are written only for organization members; anyone else is skipped with a log line, so no outside-collaborator invitation is ever sent. Org owners and bot accounts are not read as grants.
+7. **Code ownership.** `read` parses `.github/CODEOWNERS` (then `CODEOWNERS`, `docs/CODEOWNERS`); unresolvable owners and emails become warnings. `apply` renders the file (`renderCodeowners`) and delivers it through the Change Request writer (purpose `codeowners`, branch `git-migrator/codeowners`).
+8. **Pipelines, change-requests, members, secrets, org-secrets** are read-only (`write: false`): pipelines are delivered by the lifecycle with `ChangeRequestWriter` (it also adds the original file at `.github/git-migrator/bitbucket-pipelines.yml`, FAC-PIP-003); secret values are never written (FAC-SEC-001); members change only through approved batches. The pipelines read looks at the default branch only (FAC-PIP-004). Open pull requests whose head branch starts with `git-migrator/` are not listed as change requests.
+9. **Teams** are created with `privacy: closed`; the name is the planned name unless GitHub would derive a different slug from it, then the slug. Members are added only when they are organization members (AUTH-061).
+10. **No `extras` driver.** Detect-only on the source; GitHub has nothing to detect.
+11. **Duplicate webhooks.** `mergeDuplicateWebhooks` lives in `facets`, which adapters may not import (ARC-012), so the reader has an equivalent `mergeHooks` and reports `webhooks.duplicate-url` as an adapter warning with a redacted URL. Follow-up: move the helper to `canonical` so both adapters share it. Hook lists can contain credential-bearing URLs (body fields cannot be recognised), so webhook and org-webhook reads do not capture the response at all (`rawResponseIds` is empty); the Snapshot is the record.
+12. **Change Request writer.** `upsert` finds the pull request by head branch (`git-migrator/<purpose>`); merged is returned untouched, open is updated, closed is replaced by a new one. Files that already match the branch (or the default branch) are skipped; when nothing differs and nothing is open it returns `{ state: 'merged', mutations: [] }` ("already satisfied"). A missing default branch is `conflict`. Commits are authored by `git-migrator <noreply@git-migrator.invalid>`.
+
+## Alternatives
+
+- Delete target-only items everywhere: rejected, data loss on adoption.
+- Raise `deploy-keys.key-in-use` by throwing: rejected, the step must continue (FAC-DKY-002).
+- A separate capability call for org-level facts: rejected, the read already has the data.
+
+## Round 2 amendments (review findings)
+
+13. **Partial failure of a Change Request.** `upsert` attaches the mutations written so far to a thrown error (`partialMutations(error)`). When the purpose branch exists and no pull request does, the next call records the branch as an `adopted` create. `status` returns `none` when nothing was ever opened, while `upsert` returns `merged` for content that is already present; the second means "satisfied". An optional `migrationUrl(repo)` adapter option appends the Migration link to bodies (LIF-047); the runner supplies it.
+14. **Idempotency.** Environments are satisfied when every wanted branch policy exists (extra branch policies stay; tag policies are skipped with `environments.tag-policy-skipped`). Organization owners in `access-control` desired are skipped. A bypass list GitHub refused is attempted again only when it is the sole difference, and a second refusal yields no record. `exemptionsDropped` is also set when an exempt actor cannot be resolved. Only a GraphQL validation error (`UNPROCESSABLE`, `VALIDATION`, `INVALID`) triggers the no-bypass retry.
+15. **GraphQL limits.** A `RATE_LIMITED` error (or a secondary-limit message) in a 200 response is a limit signal in `interpret`, so it becomes `rate_limited` with `retryAt` and is recorded with the quota service.
+16. **Emptiness and deletion.** `isEmpty` means no branches and no tags; a missing repository is `not_found`. `delete` refuses (`conflict`) when `ref.providerId` differs from the current `node_id`. `setDefaultBranch` marks an unchanged branch with `resourceRef.noop`. A per-object LFS error counts as missing. A 422 on `invite` is resolved through `listPending` by email. A webhook with a secret is created inactive whatever `desired` says. With no representable merge strategy, `merge-settings` leaves the strategies alone and logs.
+
+## Round 3 amendments (review findings, round 2 adversarial review)
+
+Amendments 13 and 14 are extended as follows.
+
+- **13 (adoption, round 3).** An existing `git-migrator/<purpose>` branch is adopted only when every commit it is ahead of the default branch by is authored by `git-migrator <noreply@git-migrator.invalid>`. One compare call decides it (`compare/{default}...{branch}`; `total_commits` must not exceed the listed commits). Otherwise `upsert` throws `conflict` naming the branch and writes nothing. An `adopted` record has `before` equal to `after` (the observed sha). Undo of an `adopted` record is a no-op, and so is undo of a `noop` record.
+- **14 (environments, round 3).** Target-only deployment branch policies are never deleted (the subset rule). When the target policies strictly contain the wanted ones, the driver logs `environment keeps deployment branch policies the source does not have; they are not removed` with the environment and the extra policy names, and yields no record. The environment record is yielded right after the PUT that creates or changes it, before the policy POSTs, so a failed POST still leaves a ledgered `create` (a retry then sees an `update`).
+
+18. **Partial writes through the code-ownership driver.** `codeOwnershipDriver.apply` yields `partialMutations(error)` before it rethrows a failed `upsert`. The lifecycle `ChangeRequestWriter` path is unchanged in this task: pipeline callers need the same partial-error convention (follow-up for the runner task).
+19. **Lost responses on a Change Request.** When `POST /pulls` fails with `transient`, the writer reads back with `find()`. An open pull request found there is recorded as `create` and the upsert succeeds, as T-032 does for ambiguous writes (ADR-0222).
+20. **Invitation daily cap (AUTH-060).** The 24 h rewrite applies only to a 422 whose provider body message names the invitation cap, and only when the error code is not already `rate_limited`. The match runs on the body message, with the `METHOD <url>:` prefix cut off first, so the request URL never matches. A 403 secondary limit or a 429 keeps the SDK's `retryAt`.
+21. **Repository delete (LIF-077).** A `RepositoryRef` without a `providerId` is refused with `invalid` before any request. Deleting needs the provider id to prove the name still holds the repository. This supersedes the `conflict` rule in 16 for an empty id.
+22. **Default branch no-op.** `setDefaultBranch` still returns one record (the SDK signature), now with `before === after === branch` and `resourceRef.noop`. Follow-up for the runner: a `noop` record must never be undone.
+23. **Webhook secret (FAC-WEB-003).** A target hook with no secret is never set `active: true` when the desired hook has a secret, on any apply, not only at create.
+24. **GraphQL error classes (ADP-060).** An untyped GraphQL error, or an empty response with no `data`, is `transient` for reads (provider timeouts). For writes it stays `invalid`, because a mutation must not be retried blind.

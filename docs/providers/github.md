@@ -43,7 +43,7 @@ The backticked names are the permission keys used in the installation manifest a
   - The `x-ratelimit-*` headers, not `GET /rate_limit`, are authoritative when they disagree ([S7](#sources)).
 - **Primary (GraphQL):** separate `graphql` resource, points-based: 5,000 points per hour for a non-Cloud installation (+50 per repository above 20, and per org user above 20, capped at 12,500), 10,000 on a Cloud org. Max 500,000 nodes per call. Cost is reported via the `rateLimit { cost remaining resetAt }` field and the same `x-ratelimit-*` headers with `x-ratelimit-resource: graphql` ([S9](#sources)).
 - **Secondary:** tracked locally (JOB-045). Verified numbers ([S10](#sources)): at most 100 concurrent requests (REST and GraphQL together); 900 points per minute per REST endpoint and 2,000 per minute for GraphQL (GET/HEAD/OPTIONS = 1 point, POST/PATCH/PUT/DELETE = 5, GraphQL query = 1, GraphQL mutation = 5); 90 s CPU time per 60 s, of which at most 60 s may be GraphQL; content creation at most 80 requests per minute and 500 per hour (some endpoints lower); 2,000 OAuth token requests per hour. Responses are 403 or 429 with a message naming the secondary limit; honor `retry-after`, else if `x-ratelimit-remaining` is 0 wait until `x-ratelimit-reset`, else wait at least 60 s with exponential backoff. `GET /rate_limit` does not count against the primary limit but can count against the secondary limit ([S7](#sources)); there is no way to read secondary limit status. The JOB-045 defaults (10 concurrent, 80/min, 500/h) are within these limits.
-- **Org invitations:** at most 50 invitations per 24 h, or 500 per 24 h when the org is more than one month old or on a paid plan; invitations expire after 7 days; a paid per-seat org needs an unused license before inviting ([S11](#sources)).
+- **Org invitations:** at most 50 invitations per 24 h, or 500 per 24 h when the org is more than one month old or on a paid plan; invitations expire after 7 days; a paid per-seat org needs an unused license before inviting ([S11](#sources)). The text of the 422 that GitHub returns when the daily cap is hit is not documented; the adapter matches `invitation` with `limit` or `exceed`, which is unverified (follow-up: capture on a staging org).
 - **Push and object limits:** blobs over 100 MiB are blocked, warning at 50 MiB ([S12](#sources)); a single push is limited to 2 GiB ([S13](#sources)); the LIF-044 default `git.maxPushBytes` of 1.5 GiB leaves headroom. Git LFS maximum file size depends on the plan: 2 GB Free and Pro, **4 GB Team**, 5 GB Cloud ([S23](#sources)); GitHub Team applies here. The LFS batch API has a separate limit of 3,000 requests per minute authenticated, 100 objects per request by default ([S7](#sources)).
 
 ## Namespace model
@@ -56,7 +56,7 @@ The backticked names are the permission keys used in the installation manifest a
 |---|---|
 | Org | `GET /orgs/{org}` (plan seats) |
 | Members | `GET /orgs/{org}/members`, `GET /orgs/{org}/outside_collaborators`, `GET /orgs/{org}/invitations`, `POST /orgs/{org}/invitations`, `DELETE /orgs/{org}/invitations/{invitation_id}` |
-| Users | `GET /users/{login}` (name, public email) |
+| Users | `GET /users/{login}` (name, public email); `GET /orgs/{org}/members?role=admin` (owners) |
 | Teams | `GET/POST /orgs/{org}/teams`, `GET /orgs/{org}/teams/{slug}`, `PUT /orgs/{org}/teams/{slug}/memberships/{login}`, `GET /orgs/{org}/teams/{slug}/members` |
 | Repo create / get / update / delete | `POST /orgs/{org}/repos`, `GET/PATCH/DELETE /repos/{o}/{r}` |
 | Collaborators | `GET /repos/{o}/{r}/collaborators?affiliation=direct`, `GET /repos/{o}/{r}/invitations`, `PUT/DELETE /repos/{o}/{r}/collaborators/{login}` |
@@ -73,6 +73,10 @@ The backticked names are the permission keys used in the installation manifest a
 | Compare | `GET /repos/{o}/{r}/compare/{base}...{head}` (FAC-GIT-006). The OpenAPI path parameter is `basehead`; `status` is one of `diverged`, `ahead`, `behind`, `identical` ([S1](#sources)) |
 | LFS | `POST https://github.com/{o}/{r}.git/info/lfs/objects/batch` (`download` existence check) |
 | Refs | `git ls-remote --symref` |
+| Installation repositories | `GET /installation/repositories` (inventory: exactly what the App can read) |
+| Installation token | `POST /app/installations/{id}/access_tokens` (App JWT) |
+| Failed invitations | `GET /orgs/{org}/failed_invitations` (AUTH-060 expiry) |
+| Emptiness | `GET /repos/{o}/{r}/git/matching-refs/{ref}` for `heads` and `tags` (409 means no commit yet) |
 | Default branch | `PATCH /repos/{o}/{r}` `{default_branch}` |
 
 ## Quirks
