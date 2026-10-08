@@ -1,6 +1,6 @@
 # ADR-0156: extras facet: detect-only warnings and desired state
 
-- Status: agent-decided
+- Status: accepted (no spec change needed)
 - Date: 2026-10-08
 - Task: T-055
 - Affects: FAC-EXT, FAC-EXT-001, FAC-002

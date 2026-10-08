@@ -86,7 +86,7 @@
 | [0107](0107-facet-guidance-coverage-test-location.md) | Facet guidance coverage is asserted from `testing/integration` | accepted (no spec change needed) |
 | [0130](0130-fixture-world-structure.md) | Fixture world structure, async fixtures and expectation derivation | accepted (no spec change needed) |
 | [0145](0145-environments-variables-secrets-facets.md) | environments, variables and secrets facet semantics | accepted (spec updated) |
-| [0155](0155-change-requests-facet.md) | change-requests facet: blocker parameters, list cap and desired state | agent-decided |
-| [0156](0156-extras-facet.md) | extras facet: detect-only warnings and desired state | agent-decided |
+| [0155](0155-change-requests-facet.md) | change-requests facet: blocker parameters, list cap and desired state | accepted (no spec change needed) |
+| [0156](0156-extras-facet.md) | extras facet: detect-only warnings and desired state | accepted (no spec change needed) |
 
 New ADRs continue from 0028. Implementor decisions use `status: agent-decided` (PROC-005). T-002 uses 0065–0069.

@@ -1,6 +1,6 @@
 # ADR-0155: change-requests facet: blocker parameters and desired state
 
-- Status: agent-decided
+- Status: accepted (no spec change needed)
 - Date: 2026-10-08
 - Task: T-055
 - Affects: FAC-CRQ, FAC-002, UI-040
