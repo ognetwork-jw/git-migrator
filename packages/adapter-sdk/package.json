@@ -16,6 +16,7 @@
   "dependencies": {
     "@git-migrator/core": "workspace:*",
     "@git-migrator/canonical": "workspace:*",
-    "@git-migrator/quota": "workspace:*"
+    "@git-migrator/quota": "workspace:*",
+    "zod": "4.6.5"
   }
 }
