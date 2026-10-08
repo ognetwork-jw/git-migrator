@@ -15,6 +15,7 @@ export * from './merge-settings/index.ts';
 export * from './org-secrets/index.ts';
 export * from './org-variables/index.ts';
 export * from './org-webhooks/index.ts';
+export * from './pipelines/index.ts';
 export * from './repository-settings/index.ts';
 export * from './secrets/index.ts';
 export * from './teams/index.ts';
