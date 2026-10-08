@@ -28,7 +28,7 @@ The orchestrator maintains this table (see [workflow](workflow.md)). Integration
 | T-034 | todo |  | | | |
 | T-040 | merged | task/T-040-fake-git-server | [#8](https://github.com/ognetwork-jw/git-migrator/pull/8) | 2 | merged to ai-main 7875b6a; ADR-0070..0072 accepted |
 | T-041 | merged | task/T-041-fake-bitbucket | [#5](https://github.com/ognetwork-jw/git-migrator/pull/5) | 2 | merged to ai-main 69844e8; ADR-0060/0061 accepted |
-| T-042 | in_review | task/T-042-fake-github | [#12](https://github.com/ognetwork-jw/git-migrator/pull/12) | 2 | r1 fixed (7253011); round-2 review |
+| T-042 | in_review | task/T-042-fake-github | [#12](https://github.com/ognetwork-jw/git-migrator/pull/12) | 3 | r2: BLOCKER (lint) + MAJOR (flaky git tests) in fix pass |
 | T-043 | todo |  | | | |
 | T-050 | todo |  | | | |
 | T-051 | todo |  | | | |
