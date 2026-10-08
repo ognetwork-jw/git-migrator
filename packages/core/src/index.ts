@@ -2,6 +2,7 @@
 export const PACKAGE_NAME = '@git-migrator/core';
 
 export * from './collections.ts';
+export * from './events.ts';
 export * from './facet-engine.ts';
 export * from './facet-types.ts';
 export * from './field-path.ts';

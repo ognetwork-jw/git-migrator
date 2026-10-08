@@ -117,3 +117,7 @@ Test names carry the requirement ID. The facet engine is tested with two synthet
 cross-product against an independently written copy of the spec table. Coverage target: 90% lines and
 branches (TST-005); an architecture test fails if a `core` file imports anything but a sibling file or
 uses provider vocabulary (GLO-002).
+
+## Events (JOB-060)
+
+`events.ts`: `DomainEvent` (`{ type, ids, at }`), `encodeEvent` / `decodeEvent` (7,000-byte NOTIFY limit), `topicsForEvent`, and `parseTopicList` / `isValidTopic` for the SSE `topics` parameter (ADR-0270).
