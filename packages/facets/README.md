@@ -14,10 +14,14 @@ Implemented:
 | `repository-settings` | `src/repository-settings` | T-050 | 0102 |
 | `change-requests` | `src/change-requests` | T-055 | 0155 |
 | `extras` | `src/extras` | T-055 | 0156 |
+| `webhooks` | `src/webhooks` | T-053 | 0141 |
+| `deploy-keys` | `src/deploy-keys` | T-053 | 0142 |
 
-Each module exports its `FacetDefinition` (`gitRefsDefinition`, `mergeSettingsDefinition`, `repositorySettingsDefinition`), built from the schema in `@git-migrator/canonical` and the contract in `@git-migrator/core`. Facets are pure and provider-neutral: they see canonical documents and capabilities, never provider payloads.
+Each module exports its `FacetDefinition` (`gitRefsDefinition`, `mergeSettingsDefinition`, `repositorySettingsDefinition`, `webhooksDefinition`, `deployKeysDefinition`), built from the schema in `@git-migrator/canonical` and the contract in `@git-migrator/core`. Facets are pure and provider-neutral: they see canonical documents and capabilities, never provider payloads.
 
 Tests for each facet check every row of its mapping table in `docs/spec/05-facets.md`, and `testing/integration/src/facets-git-settings-guidance.test.ts` calls `assertGuidanceCoverage` with the declared finding codes (ADR-0103).
+
+T-053 follows the same rule in `facets-webhooks-deploykeys-guidance.test.ts`. Reader helper: `mergeDuplicateWebhooks` (adapters call it before building a `webhooks` document, ADR-0141). Inputs the Route supplies: `route.webhookAllowlist` (URL patterns) and `routeIndex.deployKeyUsage` (`Record<publicKey, number>`, plain JSON).
 
 Declared internal dependencies (ARC-012, checked by `pnpm lint`): @git-migrator/core, @git-migrator/canonical.
 

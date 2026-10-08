@@ -86,6 +86,8 @@
 | [0107](0107-facet-guidance-coverage-test-location.md) | Facet guidance coverage is asserted from `testing/integration` | accepted (no spec change needed) |
 | [0130](0130-fixture-world-structure.md) | Fixture world structure, async fixtures and expectation derivation | accepted (no spec change needed) |
 | [0140](0140-facet-context-plain-json.md) | The facet translate context must be plain JSON | agent-decided |
+| [0141](0141-webhooks-facet.md) | webhooks facet semantics | agent-decided |
+| [0142](0142-deploy-keys-facet.md) | deploy-keys facet semantics | agent-decided |
 | [0145](0145-environments-variables-secrets-facets.md) | environments, variables and secrets facet semantics | accepted (spec updated) |
 | [0155](0155-change-requests-facet.md) | change-requests facet: blocker parameters, list cap and desired state | accepted (no spec change needed) |
 | [0156](0156-extras-facet.md) | extras facet: detect-only warnings and desired state | accepted (no spec change needed) |
