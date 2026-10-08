@@ -465,7 +465,14 @@ importers:
 
   testing/fixtures: {}
 
-  testing/integration: {}
+  testing/integration:
+    dependencies:
+      '@git-migrator/facets':
+        specifier: workspace:*
+        version: link:../../packages/facets
+      '@git-migrator/guidance':
+        specifier: workspace:*
+        version: link:../../packages/guidance
 
   testing/provider-fakes:
     dependencies:

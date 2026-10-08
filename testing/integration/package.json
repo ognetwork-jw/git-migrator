@@ -12,5 +12,9 @@
     "typecheck": "tsc -b",
     "lint": "biome check .",
     "test": "vitest run --root ../.. --project unit testing/integration"
+  },
+  "dependencies": {
+    "@git-migrator/facets": "workspace:*",
+    "@git-migrator/guidance": "workspace:*"
   }
 }
