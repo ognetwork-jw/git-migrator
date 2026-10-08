@@ -39,8 +39,8 @@ The orchestrator maintains this table (see [workflow](workflow.md)). Integration
 | T-056 | merged | task/T-056-facets-members-teams-org | [#24](https://github.com/ognetwork-jw/git-migrator/pull/24) | 2 | merged to ai-main c37018c; ADR-0150..0152 folded into 05-facets members/teams/org-* |
 | T-057 | merged | task/T-057-facets-pipelines | [#25](https://github.com/ognetwork-jw/git-migrator/pull/25) | 4 | merged to ai-main bfbf891 (r4 ACCEPTABLE; MINORs → followups.md); ADR-0160..0162 folded into FAC-PIP-002/003 |
 | T-058 | merged | task/T-058-registry | [#35](https://github.com/ognetwork-jw/git-migrator/pull/35) | 2 | merged to ai-main cc59642 (r2 ACCEPTABLE; adapters aligned to 05 tables); ADR folding pending |
-| T-060 | in_review | task/T-060-inventory | [#37](https://github.com/ognetwork-jw/git-migrator/pull/37) | 2 | r2 ACCEPTABLE (both); rebasing for merge |
-| T-061 | todo |  | | | |
+| T-060 | merged | task/T-060-inventory | [#37](https://github.com/ognetwork-jw/git-migrator/pull/37) | 2 | merged to ai-main cc60a17 (r2 ACCEPTABLE; MINORs → followups.md); ADR folding pending |
+| T-061 | in_review | task/T-061-analysis | [#40](https://github.com/ognetwork-jw/git-migrator/pull/40) | 1 | r1: spec ACCEPTABLE, adversarial 5 MAJOR; fix pass |
 | T-062 | todo |  | | | |
 | T-070 | todo |  | | | |
 | T-071 | todo |  | | | |
@@ -48,17 +48,17 @@ The orchestrator maintains this table (see [workflow](workflow.md)). Integration
 | T-073 | todo |  | | | |
 | T-074 | todo |  | | | |
 | T-075 | todo |  | | | |
-| T-080 | todo |  | | | |
+| T-080 | merged | task/T-080-web-shell | [#39](https://github.com/ognetwork-jw/git-migrator/pull/39) | 2 | merged to ai-main 31b7577 (MINORs → followups.md; role gating is client-only, server check needed before T-081/T-091); ADR folding pending |
 | T-081 | todo |  | | | |
 | T-082 | todo |  | | | |
 | T-083 | todo |  | | | |
-| T-084 | todo |  | | | |
+| T-084 | in_progress | task/T-084-identity-mapping | | | implementor dispatched |
 | T-085 | todo |  | | | |
 | T-086 | todo |  | | | |
 | T-087 | todo |  | | | |
 | T-088 | todo |  | | | |
 | T-089 | todo |  | | | |
-| T-090 | in_review | task/T-090-release | [#38](https://github.com/ognetwork-jw/git-migrator/pull/38) | 1 | r1: BLOCKER (secretspec.toml missing from image) + MAJOR (smoke Postgres race); fix pass |
+| T-090 | merged | task/T-090-release | [#38](https://github.com/ognetwork-jw/git-migrator/pull/38) | 2 | merged to ai-main 441c0ff (r2 ACCEPTABLE + reviewed erasable-syntax CI fix); ADR folding pending |
 | T-091 | todo |  | | | |
 | T-093 | merged | task/T-093-devenv-ci | [#18](https://github.com/ognetwork-jw/git-migrator/pull/18) | 2 | merged to ai-main 8dba617 (r2 ACCEPTABLE; CI green incl. devenv test); ADR-0135/0137 folded into DEV-010/DEV-030 |
 | T-095 | todo |  | | | |
