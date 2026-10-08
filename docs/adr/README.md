@@ -84,10 +84,10 @@
 | [0105](0105-access-control-facet.md) | access-control facet: role merging, principal outcomes, finding paths, pending-invitation verification | accepted (spec updated) |
 | [0106](0106-code-ownership-facet.md) | code-ownership facet: lossy keys, access check, empty entries, Change Request task | accepted (spec updated) |
 | [0107](0107-facet-guidance-coverage-test-location.md) | Facet guidance coverage is asserted from `testing/integration` | accepted (no spec change needed) |
-| [0110](0110-branch-rule-pattern-and-desired-syntax.md) | Branch-rule patterns in `desired` use the target dialect | agent-decided |
-| [0111](0111-branch-rules-principal-findings.md) | Principal findings of branch-rules | agent-decided |
-| [0112](0112-branch-rules-normalization-and-compare.md) | Branch-rules normalization and comparison | agent-decided |
-| [0113](0113-branch-rule-overlap.md) | Overlapping branch-rule patterns and merged restrictions | agent-decided |
+| [0110](0110-branch-rule-pattern-and-desired-syntax.md) | Branch-rule patterns in `desired` use the target dialect | accepted (spec updated) |
+| [0111](0111-branch-rules-principal-findings.md) | Principal findings of branch-rules | accepted (no spec change needed) |
+| [0112](0112-branch-rules-normalization-and-compare.md) | Branch-rules normalization and comparison | accepted (no spec change needed) |
+| [0113](0113-branch-rule-overlap.md) | Overlapping branch-rule patterns and merged restrictions | accepted (spec updated) |
 | [0130](0130-fixture-world-structure.md) | Fixture world structure, async fixtures and expectation derivation | accepted (no spec change needed) |
 | [0140](0140-facet-context-plain-json.md) | The facet translate context must be plain JSON | accepted (no spec change needed) |
 | [0141](0141-webhooks-facet.md) | webhooks facet semantics | accepted (spec updated) |

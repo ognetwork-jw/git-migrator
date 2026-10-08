@@ -1,6 +1,6 @@
 # ADR-0112: Branch-rules normalization and comparison
 
-- Status: agent-decided
+- Status: accepted (no spec change needed)
 - Date: 2026-10-08
 - Task: T-052
 - Affects: FAC-BRR-001, FAC-BRR-002, ADP-021, LIF-060

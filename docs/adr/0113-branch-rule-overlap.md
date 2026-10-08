@@ -1,6 +1,6 @@
 # ADR-0113: Overlapping branch-rule patterns and merged restrictions
 
-- Status: agent-decided
+- Status: accepted (spec updated)
 - Date: 2026-10-08
 - Task: T-052
 - Affects: FAC-BRR-002, FAC-BRR-003, ADR-0110, T-033 (target writer)

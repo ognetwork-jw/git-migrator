@@ -1,6 +1,6 @@
 # ADR-0111: Principal findings of branch-rules
 
-- Status: agent-decided
+- Status: accepted (no spec change needed)
 - Date: 2026-10-08
 - Task: T-052
 - Affects: FAC-006, FAC-002, FAC-BRR-002, LIF-061

@@ -1,6 +1,6 @@
 # ADR-0110: Branch-rule patterns in `desired` use the target's dialect
 
-- Status: agent-decided
+- Status: accepted (spec updated)
 - Date: 2026-10-08
 - Task: T-052
 - Affects: FAC-BRR-002, FAC-BRR-003, ADP-021
