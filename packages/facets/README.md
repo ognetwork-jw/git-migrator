@@ -6,6 +6,9 @@ Implemented:
 
 | Facet | Module | Task | ADR |
 |---|---|---|---|
+| `environments` | `src/environments` | T-054 | 0145 |
+| `secrets` | `src/secrets` | T-054 | 0145 |
+| `variables` | `src/variables` | T-054 | 0145 |
 | `git-refs` | `src/git-refs` | T-050 | 0100 |
 | `merge-settings` | `src/merge-settings` | T-050 | 0101 |
 | `repository-settings` | `src/repository-settings` | T-050 | 0102 |
