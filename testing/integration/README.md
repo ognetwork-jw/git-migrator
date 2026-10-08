@@ -12,4 +12,8 @@ Integration-tier tests. Files under `src/` run in the unit project today; T-075 
 
 To add an adapter: write a connection factory and one scenario per readable Facet; the suite fails if a readable Facet has none.
 
-Declared internal dependencies (ARC-012, checked by `pnpm lint`): adapters, `adapter-sdk`, `canonical`, `core`, `facets`, `guidance` and `provider-fakes`.
+## Inventory (T-060)
+
+`src/inventory.test.ts` runs the inventory processor against the TST-012 fixture world with a throw-away Postgres database.
+
+Declared internal dependencies (ARC-012, checked by `pnpm lint`): adapters, `adapter-sdk`, `canonical`, `config`, `core`, `db`, `facets`, `fixtures`, `guidance`, `jobs`, `observability`, `provider-fakes`, `quota` and `registry`.

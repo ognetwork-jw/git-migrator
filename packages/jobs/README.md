@@ -1,6 +1,6 @@
 # @git-migrator/jobs
 
-Queue names, job payloads, the BullMQ runtime on PostgreSQL, the scheduler leader, schedulers, maintenance jobs, Run leases and the reaper, retention, scratch handling and the worker health server (JOB-010 to JOB-015, JOB-046, JOB-050, ARC-023, LIF-046, DATA-020). Decisions: ADR-0210, ADR-0211, ADR-0212.
+Queue names, job payloads, the BullMQ runtime on PostgreSQL, the scheduler leader, schedulers, maintenance jobs, Run leases and the reaper, retention, scratch handling and the worker health server (JOB-010 to JOB-015, JOB-046, JOB-050, ARC-023, LIF-046, DATA-020). Inventory (JOB-030, DOM-014, AUTH-050 step 2). Decisions: ADR-0210, ADR-0211, ADR-0212, ADR-0280, ADR-0281.
 
 Internal dependencies (ARC-012, checked by `pnpm lint`): @git-migrator/core, @git-migrator/canonical, @git-migrator/db, @git-migrator/quota, @git-migrator/registry, @git-migrator/git, @git-migrator/adapter-sdk, @git-migrator/config, @git-migrator/observability, @git-migrator/guidance.
 
@@ -16,6 +16,7 @@ Internal dependencies (ARC-012, checked by `pnpm lint`): @git-migrator/core, @gi
 - `run-leases.ts`, `reaper.ts`: Run lease claim, renew, release and `keepRunLease`; pending markers that carry the awaited job's deduplication id; `reapRuns`, which counts a dead resume or hand-off job toward the bound (LIF-046). The Run executor (T-070) uses `keepRunLease`.
 - `scratch.ts`: size class, disk precheck, per-Run scratch directory, cleanup (JOB-015).
 - `provider-wiring.ts`: `RawCaptureSink` over `RawResponse`, `ProviderTelemetry` over `MetricRecorders` and the tracer, and `createProviderEnvironment` for the adapter host (ADR-0190).
+- `inventory/`: the `inventory.endpoint` processor (`runInventory`, `inventoryHandlers`). One pass per Endpoint under an advisory lock: namespaces, repositories (upsert by provider id, presence, renames, size class, stale marking), Migrations (DOM-014), `source_missing` / `source_present` through the lifecycle machine, identities, groups, and the AUTH-050 matching cascade (`matching.ts`, pure) for every Route the Endpoint belongs to. `connector.ts`: `EndpointConnector` and `createEndpointConnector` (adapter config, credential and account key from config and secrets, through the registry). Handlers check `ctx.shutdown.aborted` and throw `InventoryInterruptedError`. Inventory is not a Run: it uses no Run lease. Live-update events are not published yet (T-022).
 - `health.ts`, `queue-metrics.ts`: the worker health server (port 8081) and the `gm_queue_jobs` gauge.
 
 Handlers are registered by the process: `JobHandlers` maps a job name to `(payload, { job, queue, log, shutdown }) => Promise`. A job without a handler fails without retry.
