@@ -94,3 +94,81 @@ jobs:
       # Scans every commit reachable from the checked-out commit, with the repository's allowlists.
       - name: Scan history
         run: gitleaks git --config .gitleaks.toml --log-opts "HEAD" --redact --no-banner
+
+  # DEP-033: helm lint, helm template + kubeconform for every ci/*.yaml, and the helm-unittest suites.
+  # helm is the version preinstalled on the runner image. kubeconform and helm-unittest are release
+  # binaries checked against a SHA-256 before they are unpacked (the same pattern as gitleaks above).
+  helm:
+    name: Helm chart
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      # The kubeconform value is the entry in the release's CHECKSUMS file.
+      KUBECONFORM_VERSION: 0.7.0
+      KUBECONFORM_SHA256: c31518ddd122663b3f3aa874cfe8178cb0988de944f29c74a0b9260920d115d3
+      # helm-unittest publishes no checksum file; this is the SHA-256 of the v1.0.3 tarball as
+      # downloaded when the workflow was written. The tarball holds the standalone binary `untt`.
+      HELM_UNITTEST_VERSION: 1.0.3
+      HELM_UNITTEST_SHA256: 9761f23d9509c98770c026e019e743b524b57010f4bc29175f78d2582ace0633
+    steps:
+      - name: Check out
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Set up pnpm
+        uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
+
+      - name: Set up Node
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 24
+
+      - name: Install chart tools
+        run: |
+          set -euo pipefail
+          bin="${RUNNER_TEMP}/chart-tools"
+          mkdir -p "${bin}"
+          kc="${RUNNER_TEMP}/kubeconform.tar.gz"
+          curl --proto '=https' --tlsv1.2 -sSfL -o "${kc}" \
+            "https://github.com/yannh/kubeconform/releases/download/v${KUBECONFORM_VERSION}/kubeconform-linux-amd64.tar.gz"
+          echo "${KUBECONFORM_SHA256}  ${kc}" | sha256sum --check --strict
+          tar -xzf "${kc}" -C "${bin}" kubeconform
+          hu="${RUNNER_TEMP}/helm-unittest.tgz"
+          curl --proto '=https' --tlsv1.2 -sSfL -o "${hu}" \
+            "https://github.com/helm-unittest/helm-unittest/releases/download/v${HELM_UNITTEST_VERSION}/helm-unittest-linux-amd64-${HELM_UNITTEST_VERSION}.tgz"
+          echo "${HELM_UNITTEST_SHA256}  ${hu}" | sha256sum --check --strict
+          tar -xzf "${hu}" -C "${bin}" untt
+          mv "${bin}/untt" "${bin}/helm-unittest"
+          echo "${bin}" >> "${GITHUB_PATH}"
+          helm version --short
+
+      # CI is set, so a missing helm-unittest fails the check instead of warning.
+      - name: Helm check
+        run: pnpm helm:check
+
+  # DEP-001, DEP-003, DEP-060: build the runtime image (no push) and smoke-test it read-only as
+  # UID 10001 against a throw-away Postgres (deploy/docker/smoke.sh).
+  image:
+    name: Docker image (build, no push)
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - name: Check out
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+
+      - name: Build runtime image
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+        with:
+          context: .
+          file: deploy/docker/Dockerfile
+          target: runtime
+          push: false
+          load: true
+          tags: git-migrator:ci
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Smoke test (read-only root filesystem, UID 10001)
+        run: deploy/docker/smoke.sh git-migrator:ci

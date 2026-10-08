@@ -1,0 +1,188 @@
+# Release (DEP-060, ADR-0292). Runs on version tags only: builds and pushes the multi-arch image to
+# ghcr.io/<owner>/git-migrator, then packages the chart with appVersion equal to the tag and pushes
+# it as an OCI artifact to ghcr.io/<owner>/charts. Nothing publishes from a branch or a pull request.
+# Gate: the tagged commit must be on main, the amd64 image must pass the smoke test before anything
+# is pushed, an existing image or chart version is never overwritten, and the publishing jobs run in
+# the `release` environment (configure required reviewers on it in the repository settings).
+name: Release
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  verify:
+    name: Verify tag
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      version: ${{ steps.tag.outputs.version }}
+      owner: ${{ steps.tag.outputs.owner }}
+    steps:
+      - name: Check out
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+
+      # A tag on a side branch or an unreviewed commit must not publish.
+      - name: Tagged commit is on main
+        run: |
+          set -euo pipefail
+          git fetch --no-tags origin main:refs/remotes/origin/main
+          if ! git merge-base --is-ancestor "${GITHUB_SHA}" origin/main; then
+            echo "commit ${GITHUB_SHA} is not an ancestor of origin/main" >&2
+            exit 1
+          fi
+
+      # The tag must be v<semver>. The chart version is the tag without the leading v; the image tag
+      # and the chart appVersion are the tag itself.
+      - name: Check the tag
+        id: tag
+        env:
+          TAG: ${{ github.ref_name }}
+          REPOSITORY_OWNER: ${{ github.repository_owner }}
+        run: |
+          set -euo pipefail
+          if ! [[ "${TAG}" =~ ^v[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$ ]]; then
+            echo "tag ${TAG} is not v<major>.<minor>.<patch>[-prerelease]" >&2
+            exit 1
+          fi
+          echo "version=${TAG#v}" >> "${GITHUB_OUTPUT}"
+          # Registry paths are lower case.
+          echo "owner=${REPOSITORY_OWNER,,}" >> "${GITHUB_OUTPUT}"
+
+  image:
+    name: Image (linux/amd64, linux/arm64)
+    needs: verify
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    environment: release
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - name: Check out
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@99012661954931238ded8c8b007157a8430204e1 # v4.4.0
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+
+      # Nothing is pushed until the amd64 image passes the read-only smoke test. arm64 is built from
+      # the same Dockerfile and runs under QEMU only at build time; it is not smoke-tested.
+      - name: Build amd64 image for the smoke test
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+        with:
+          context: .
+          file: deploy/docker/Dockerfile
+          target: runtime
+          platforms: linux/amd64
+          push: false
+          load: true
+          tags: git-migrator:smoke
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Smoke test (read-only root filesystem, UID 10001)
+        run: deploy/docker/smoke.sh git-migrator:smoke
+
+      - name: Log in to ghcr.io
+        uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      # Releases are immutable: refuse to overwrite a published tag.
+      - name: Refuse to overwrite an existing image tag
+        env:
+          IMAGE: ghcr.io/${{ needs.verify.outputs.owner }}/git-migrator:${{ github.ref_name }}
+        run: |
+          set -euo pipefail
+          if docker buildx imagetools inspect "${IMAGE}" >/dev/null 2>&1; then
+            echo "${IMAGE} already exists" >&2
+            exit 1
+          fi
+
+      - name: Image tags and labels
+        id: meta
+        uses: docker/metadata-action@dc802804100637a589fabce1cb79ff13a1411302 # v6.2.0
+        with:
+          images: ghcr.io/${{ needs.verify.outputs.owner }}/git-migrator
+          tags: |
+            type=ref,event=tag
+          flavor: |
+            latest=false
+
+      - name: Build and push
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+        with:
+          context: .
+          file: deploy/docker/Dockerfile
+          target: runtime
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          provenance: mode=max
+          sbom: true
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+  chart:
+    name: Chart
+    needs: [verify, image]
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    environment: release
+    permissions:
+      contents: read
+      packages: write
+    env:
+      TAG: ${{ github.ref_name }}
+      VERSION: ${{ needs.verify.outputs.version }}
+      OWNER: ${{ needs.verify.outputs.owner }}
+    steps:
+      - name: Check out
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Lint the chart
+        run: |
+          set -euo pipefail
+          helm lint deploy/helm/git-migrator --strict -f deploy/helm/git-migrator/ci/default-values.yaml
+
+      # version is the tag without the v, appVersion is the tag (the default image tag, DEP-031).
+      - name: Package
+        run: |
+          set -euo pipefail
+          helm package deploy/helm/git-migrator \
+            --version "${VERSION}" --app-version "${TAG}" --destination "${RUNNER_TEMP}/chart"
+
+      - name: Log in to ghcr.io
+        env:
+          REGISTRY_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          printf '%s' "${REGISTRY_TOKEN}" | helm registry login ghcr.io --username "${GITHUB_ACTOR}" --password-stdin
+
+      - name: Refuse to overwrite an existing chart version
+        run: |
+          set -euo pipefail
+          if helm show chart "oci://ghcr.io/${OWNER}/charts/git-migrator" --version "${VERSION}" >/dev/null 2>&1; then
+            echo "chart version ${VERSION} already exists" >&2
+            exit 1
+          fi
+
+      - name: Push
+        run: |
+          set -euo pipefail
+          helm push "${RUNNER_TEMP}/chart/git-migrator-${VERSION}.tgz" "oci://ghcr.io/${OWNER}/charts"
