@@ -30,3 +30,6 @@ export {
   SOURCE_POST_ACTIONS,
   SSL_MODES,
 } from './schema.ts';
+
+/** The workspace package name (ARC-011). */
+export const PACKAGE_NAME = '@git-migrator/config';
