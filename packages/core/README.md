@@ -3,7 +3,7 @@
 Pure domain primitives: field paths, collection normalization, canonical hashing, Expected Difference
 patterns, the lifecycle state machine, readiness and Route-policy resolution. No I/O, no provider
 vocabulary, no internal dependencies (ARC-012). Everything is exported from `src/index.ts`; the
-package is consumed as source. Decisions are recorded in ADR-0055 to ADR-0059.
+package is consumed as source. Decisions are recorded in ADR-0055 to ADR-0059 and ADR-0080 to ADR-0082 (facet engine).
 
 Declared internal dependencies (ARC-012, checked by `pnpm lint`): none.
 
@@ -77,9 +77,34 @@ decisions, policies)` returns the decisions with `accepted` set, the `<facet>.ac
 (one per unaccepted policy key) and the `lossy_accepted` Expected Differences to record (deduplicated
 by facet and path). `fidelityEffect` states what each fidelity means for the plan.
 
+## Facet engine (ADP-030 to ADP-032)
+
+```ts
+const registry = new FacetRegistry().register(defA).register(defB); // validates each definition
+registry.registerOverride({ source: 'p1', target: 'p2', facet: 'a', translate });  // ADP-032
+const { translations } = translateAll(registry, { env, sources, sourceCaps, targetCaps, pair, expectedDifferences });
+const plan = buildPlan({ registry, translations, targetCaps, flags: new Set(['sourceReadOnly']) });
+const parity = compareFacet(registry, 'a', desired, actual /* null = unreadable */, { expectedDifferences });
+```
+
+- `FacetRegistry`: validates definitions (finding codes `<facet>.<name>`, policy keys, completion modes,
+  collections) and `ordered()` gives a deterministic dependency order (missing dependency and cycle are errors).
+- `translateFacet` / `translateAll` run `translate` on deep-frozen, normalized copies, reject async or mutating
+  facets, validate decisions and findings against the definition, recompute `accepted` through
+  `applyLossyPolicies` (a facet cannot accept its own lossy decision), add the `<facet>.accept-lossy` pre
+  tasks and draft Expected Differences (`lossy_accepted`, `unreadable_defaulted`). A migration-scoped
+  `lossy_accepted` record (done accept task) marks a decision `accepted: 'migration'`.
+- Expected Difference caller contract: pass the Route's records and the Migration's own with `migrationId`; records of other Migrations never apply. Accept tasks carry `{policyKey, paths}` (uncovered paths), so a new lossy path re-opens acceptance. `framework_mutation` masks target extras only.
+- `compareFacet` normalizes both documents, validates and sorts the diffs and subtracts only the masking
+  Expected Differences (`framework_mutation`, `identity_excluded`, `manual_accepted`, LIF-063).
+  `diffDocuments` is a structural default; `satisfiedTasks` evaluates `isTaskSatisfied` for `parity` tasks.
+- `buildPlan` aggregates translations (plus `extraFindings`) into Steps (LIF-040/081 templates), blockers,
+  pre/post tasks and warnings, merged by (facet, code, `paramsHash`) and ordered deterministically.
+- Contract violations by a facet throw `FacetEngineError`; plan inconsistencies throw `PlanError`.
+
 ## Tests
 
-Test names carry the requirement ID. The lifecycle suite generates the full status x event
+Test names carry the requirement ID. The facet engine is tested with two synthetic facets defined in the tests only. The lifecycle suite generates the full status x event
 cross-product against an independently written copy of the spec table. Coverage target: 90% lines and
 branches (TST-005); an architecture test fails if a `core` file imports anything but a sibling file or
 uses provider vocabulary (GLO-002).

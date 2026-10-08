@@ -20,6 +20,11 @@ export interface FieldDecision {
   readonly policyKey?: PolicyKey;
   readonly accepted: 'policy' | 'migration' | false;
   readonly note?: string;
+  /**
+   * Only with `fidelity: 'unreadable'`: the desired document holds a Route default for the field,
+   * so the engine records an `unreadable_defaulted` Expected Difference (no task, FAC-MRG-002).
+   */
+  readonly defaulted?: boolean;
 }
 
 export interface Finding {
