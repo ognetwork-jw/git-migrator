@@ -141,5 +141,9 @@
 | [0294](0294-erasable-syntax-only.md) | Runtime TypeScript must be erasable (erasableSyntaxOnly, strip-only import guard) | accepted (spec updated) |
 | [0300](0300-role-aware-navigation.md) | Which sidebar items each role sees | accepted (spec updated) |
 | [0301](0301-web-shell-build-and-visual-tests.md) | Web shell build, standalone server and visual test placement | accepted (no spec change needed) |
+| [0310](0310-analysis-processor.md) | Analysis processor: persistence, guards, staleness, rolling mean | agent-decided |
+| [0311](0311-analysis-route-index.md) | What the Analysis puts into the translate context (pipelines text, key usage, endpoint index) | agent-decided |
+| [0312](0312-analysis-feeder.md) | Analysis feeder: capacity, backlog, priority, endpoint Migrations | agent-decided |
+| [0313](0313-fixture-table-and-implementation.md) | Where the T-043 table and the implementation disagreed | agent-decided |
 
 New ADRs continue from 0028. Implementor decisions use `status: agent-decided` (PROC-005). T-002 uses 0065–0069.

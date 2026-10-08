@@ -1,6 +1,6 @@
 # @git-migrator/jobs
 
-Queue names, job payloads, the BullMQ runtime on PostgreSQL, the scheduler leader, schedulers, maintenance jobs, Run leases and the reaper, retention, scratch handling and the worker health server (JOB-010 to JOB-015, JOB-046, JOB-050, ARC-023, LIF-046, DATA-020). Inventory (JOB-030, DOM-014, AUTH-050 step 2). Decisions: ADR-0210, ADR-0211, ADR-0212, ADR-0280, ADR-0281.
+Queue names, job payloads, the BullMQ runtime on PostgreSQL, the scheduler leader, schedulers, maintenance jobs, Run leases and the reaper, retention, scratch handling and the worker health server (JOB-010 to JOB-015, JOB-046, JOB-050, ARC-023, LIF-046, DATA-020). Inventory (JOB-030, DOM-014, AUTH-050 step 2). Analysis and feeder (LIF-020 to LIF-022, JOB-020, JOB-022). Decisions: ADR-0210, ADR-0211, ADR-0212, ADR-0280, ADR-0281, ADR-0310, ADR-0311, ADR-0312.
 
 Internal dependencies (ARC-012, checked by `pnpm lint`): @git-migrator/core, @git-migrator/canonical, @git-migrator/db, @git-migrator/quota, @git-migrator/registry, @git-migrator/git, @git-migrator/adapter-sdk, @git-migrator/config, @git-migrator/observability, @git-migrator/guidance.
 
@@ -23,8 +23,8 @@ Internal dependencies (ARC-012, checked by `pnpm lint`): @git-migrator/core, @gi
   - `context.ts`: pure helpers (FAC-006 resolvers, deploy-key usage, LIF-045 filtering, read warnings).
   - `fresh.ts`: `needsReanalysis`, `analyzeForRun` and `readinessWorsened` for the Run executor (LIF-021, LIF-022: abort with `readiness_changed`).
   - `feeder.ts`: enqueues background analyses per source Endpoint within the free background capacity of its quota buckets, minus the queued backlog, in JOB-022 priority order, through `JobRuntime.enqueueAnalysis` (dedupe ids); `maxBatch` 50.
-  - Failures: a fault retrying cannot fix is an `AnalysisError` (`UnrecoverableError`); the last failed attempt sets `Migration.analysisFailedAt` / `analysisFailureCount` and the feeder backs off 5 min doubling to 6 h (ADR-0312). A future mapping-edit endpoint must call `markAnalysesStale` for the Route (AUTH-050 step 5), and every task-dismiss path must set `completedById` (ADR-0310).
-  - Staleness: `analysisStaleAt <= now` is stale. Marked by `syncConfig` (Route configuration), a database trigger (NamingRule, WebhookAllowlistEntry, Overlay), inventory (provider timestamp, mappings) and the Analysis itself (deploy-key holders), all through `markAnalysesStale` or its SQL twin in `@git-migrator/db`.
+  - Failures: a fault retrying cannot fix is an `AnalysisError` (`UnrecoverableError`). The attempt is recorded before it runs (`analysisFailureCount`, `analysisFailedAt`, `analysisRetryAt`); a success clears it, and the feeder skips Migrations until `analysisRetryAt` (5 min doubling to 6 h, ADR-0312). A future mapping-edit endpoint must call `markAnalysesStale` for the Route (AUTH-050 step 5), and every task-dismiss or reopen path must keep `completedById` set for Actor dismissals (ADR-0310).
+  - Staleness: `analysisStaleAt <= now` is stale. Marked by `syncConfig` (Route configuration), a database trigger (NamingRule, WebhookAllowlistEntry, Overlay, also on TRUNCATE), inventory (provider timestamp, mappings) and the Analysis itself (deploy-key holders), all through `markAnalysesStale` or its SQL twin in `@git-migrator/db`. Every marker bumps `Migration.staleGeneration`; an Analysis that started under another generation stays stale (ADR-0310).
 - `health.ts`, `queue-metrics.ts`: the worker health server (port 8081) and the `gm_queue_jobs` gauge.
 
 Handlers are registered by the process: `JobHandlers` maps a job name to `(payload, { job, queue, log, shutdown }) => Promise`. A job without a handler fails without retry.

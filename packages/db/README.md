@@ -46,3 +46,7 @@ A `rpc.wave.delete` event lists `clearedMigrationIds`, the Migrations whose `wav
 ## Events (JOB-060)
 
 `publishEvent(executor, event)` and `publishEventIn(tx, event)` run `pg_notify('gm_events', ...)` with the payload from `encodeEvent` (`@git-migrator/core`, at most 7,000 bytes); inside a transaction the notification is delivered on commit only. `createEventListener({ createClient: pgListenClient(pool) })` holds one dedicated `LISTEN gm_events` connection (not counted in `poolMax`), reconnects with backoff, probes the connection with `select 1` every 30 s (a half-open connection raises no error), bounds the connect at 10 s, and tells subscribers to resync after every successful connect. Fan-out to SSE clients is in `@git-migrator/api`.
+
+## Staleness (LIF-021, API-012)
+
+`markAnalysesStale(client, { routeId | ids | sourceRepositoryIds }, now)` sets `analysisStaleAt` to `now` for Migrations with an Analysis that are not yet stale (null or in the future) and returns their ids. A write to `naming_rule`, `webhook_allowlist_entry` or `overlay` marks the whole Route in the same transaction through a database trigger (`mark_route_analyses_stale`, migration `20261008000004_analysis_staleness`), whichever client wrote it (ADR-0310). `Route.avgCallsPerAnalysis` is the rolling mean of provider calls per Analysis (JOB-020, default 30).
