@@ -11,5 +11,19 @@
       "account_not_linked": "This sign-in could not be matched to a git-migrator account. Contact an administrator.",
       "unknown": "Sign-in failed. Try again, or contact an administrator if it keeps happening."
     }
+  },
+  "problem": {
+    "unauthenticated": "Your session has ended or is not valid. Sign in again.",
+    "forbidden": "Your role does not allow this action. Ask an administrator if you need access.",
+    "origin_not_allowed": "This request did not come from the application. Reload the page and try again.",
+    "not_found": "The item you asked for does not exist.",
+    "conflict": "This change conflicts with the current state. Reload and try again.",
+    "payload_too_large": "The request is too large.",
+    "validation_failed": "Some of the values you entered are not valid.",
+    "not_ready": "The service is starting or temporarily unavailable. Try again shortly.",
+    "internal_error": "Something went wrong on our side. Try again, or contact an administrator if it keeps happening.",
+    "bad_request": "The request could not be understood. Reload the page and try again.",
+    "unsupported_media_type": "The request was sent in a format the service does not accept.",
+    "last_admin": "This change would leave the system without an enabled administrator. Make another account an administrator first."
   }
 }

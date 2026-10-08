@@ -1,17 +1,27 @@
 {
   "extends": "../../tsconfig.base.json",
   "compilerOptions": {
-    "rootDir": "src",
+    "rootDir": ".",
     "outDir": "dist",
     "tsBuildInfoFile": "dist/.tsbuildinfo"
   },
-  "include": ["src"],
-  "exclude": ["src/**/*.test.*", "src/**/*.spec.*"],
+  "include": ["src", "app"],
+  "exclude": ["src/**/*.test.*", "src/**/*.spec.*", "app/**/*.test.*"],
   "references": [
-    { "path": "../../packages/api" },
-    { "path": "../../packages/auth" },
-    { "path": "../../packages/config" },
-    { "path": "../../packages/observability" },
-    { "path": "../../packages/db" }
+    {
+      "path": "../../packages/api"
+    },
+    {
+      "path": "../../packages/auth"
+    },
+    {
+      "path": "../../packages/config"
+    },
+    {
+      "path": "../../packages/observability"
+    },
+    {
+      "path": "../../packages/db"
+    }
   ]
 }
