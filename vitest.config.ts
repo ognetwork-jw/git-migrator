@@ -22,6 +22,9 @@ export default defineConfig({
     ],
     coverage: {
       provider: 'v8',
+      // Stable for CI; set VITEST_COVERAGE_DIR to run two coverage runs in one worktree at once.
+      // biome-ignore lint/suspicious/noUndeclaredEnvVars: local override only; not a turbo task input
+      reportsDirectory: process.env.VITEST_COVERAGE_DIR ?? './coverage',
       reporter: ['text-summary', 'lcov'],
       // Keep .tsx in every glob: apps/web and packages/api contain React/JSX sources (TST-005).
       include: [

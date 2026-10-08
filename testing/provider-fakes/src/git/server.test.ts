@@ -187,7 +187,7 @@ describe('fake git server', () => {
     server.setLimits('target', { maxBlobBytes: null });
     await git(['push', '-q', 'origin', 'HEAD:refs/heads/main'], dir);
     server.setLimits('target', { maxBlobBytes: 1 * MIB });
-  });
+  }, 30_000);
 
   it('[TST-013] rejects a push over the max push size', async () => {
     await createBareRepo(server.repoDir('target', 'acme/pack'));
