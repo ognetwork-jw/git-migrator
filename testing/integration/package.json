@@ -14,10 +14,13 @@
     "test": "vitest run --root ../.. --project unit testing/integration"
   },
   "dependencies": {
+    "@git-migrator/adapter-bitbucket-cloud": "workspace:*",
     "@git-migrator/adapter-github": "workspace:*",
+    "@git-migrator/adapter-sdk": "workspace:*",
     "@git-migrator/canonical": "workspace:*",
     "@git-migrator/core": "workspace:*",
     "@git-migrator/facets": "workspace:*",
-    "@git-migrator/guidance": "workspace:*"
+    "@git-migrator/guidance": "workspace:*",
+    "@git-migrator/provider-fakes": "workspace:*"
   }
 }

@@ -613,9 +613,15 @@ importers:
 
   testing/integration:
     dependencies:
+      '@git-migrator/adapter-bitbucket-cloud':
+        specifier: workspace:*
+        version: link:../../packages/adapters/bitbucket-cloud
       '@git-migrator/adapter-github':
         specifier: workspace:*
         version: link:../../packages/adapters/github
+      '@git-migrator/adapter-sdk':
+        specifier: workspace:*
+        version: link:../../packages/adapter-sdk
       '@git-migrator/canonical':
         specifier: workspace:*
         version: link:../../packages/canonical
@@ -628,6 +634,9 @@ importers:
       '@git-migrator/guidance':
         specifier: workspace:*
         version: link:../../packages/guidance
+      '@git-migrator/provider-fakes':
+        specifier: workspace:*
+        version: link:../provider-fakes
 
   testing/provider-fakes:
     dependencies:
