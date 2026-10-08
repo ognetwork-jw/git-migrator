@@ -22,3 +22,10 @@ paths = ['''^packages/observability/src/(logger|logger\.sweep|redact)\.test\.ts$
 description = "Fake GitHub's fixed public key for secrets encryption (base64 of a placeholder string, T-042)"
 targetRules = ["generic-api-key"]
 paths = ['''^testing/provider-fakes/src/github/routes/scopes\.ts$''']
+
+[[allowlists]]
+description = "Fixed fake credentials that the git package tests must find in no argv, file or log (T-027)"
+condition = "AND"
+targetRules = ["generic-api-key"]
+paths = ['''^packages/git/src/(askpass|errors|service)\.test\.ts$''']
+regexes = ['''^(?:pw-0123456789-secret|tok-9f8e7d6c5b4a-secret)$''']

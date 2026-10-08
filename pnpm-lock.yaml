@@ -457,6 +457,10 @@ importers:
       '@git-migrator/core':
         specifier: workspace:*
         version: link:../core
+    devDependencies:
+      '@git-migrator/provider-fakes':
+        specifier: workspace:*
+        version: link:../../testing/provider-fakes
 
   packages/guidance:
     dependencies:

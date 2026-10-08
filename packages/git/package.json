@@ -17,5 +17,8 @@
     "@git-migrator/adapter-sdk": "workspace:*",
     "@git-migrator/core": "workspace:*",
     "@git-migrator/canonical": "workspace:*"
+  },
+  "devDependencies": {
+    "@git-migrator/provider-fakes": "workspace:*"
   }
 }
