@@ -1,0 +1,21 @@
+{
+  "name": "@git-migrator/adapter-sdk",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Adapter and FacetDriver interfaces, provider HTTP client, quota client.",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "build": "tsc -b",
+    "typecheck": "tsc -b",
+    "lint": "biome check .",
+    "test": "vitest run --root ../.. --project unit packages/adapter-sdk"
+  },
+  "dependencies": {
+    "@git-migrator/core": "workspace:*",
+    "@git-migrator/canonical": "workspace:*",
+    "@git-migrator/quota": "workspace:*"
+  }
+}

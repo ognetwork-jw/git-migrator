@@ -1,0 +1,20 @@
+{
+  "name": "@git-migrator/db",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "ZModel schema, generated client, migrations, privileged client factory.",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "build": "tsc -b",
+    "typecheck": "tsc -b",
+    "lint": "biome check .",
+    "test": "vitest run --root ../.. --project unit packages/db"
+  },
+  "dependencies": {
+    "@git-migrator/core": "workspace:*",
+    "@git-migrator/canonical": "workspace:*"
+  }
+}

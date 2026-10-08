@@ -1,0 +1,19 @@
+{
+  "name": "@git-migrator/canonical",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Canonical types and Zod schemas of the built-in facets.",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "build": "tsc -b",
+    "typecheck": "tsc -b",
+    "lint": "biome check .",
+    "test": "vitest run --root ../.. --project unit packages/canonical"
+  },
+  "dependencies": {
+    "@git-migrator/core": "workspace:*"
+  }
+}

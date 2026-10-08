@@ -1,0 +1,16 @@
+{
+  "name": "@git-migrator/provider-fakes",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Stateful HTTP fakes of the provider APIs plus a git http-backend server.",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "build": "tsc -b",
+    "typecheck": "tsc -b",
+    "lint": "biome check .",
+    "test": "vitest run --root ../.. --project unit testing/provider-fakes"
+  }
+}

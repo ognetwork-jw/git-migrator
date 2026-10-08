@@ -1,0 +1,22 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "rootDir": "src",
+    "outDir": "dist",
+    "tsBuildInfoFile": "dist/.tsbuildinfo"
+  },
+  "include": ["src"],
+  "exclude": ["src/**/*.test.*", "src/**/*.spec.*"],
+  "references": [
+    { "path": "../../packages/core" },
+    { "path": "../../packages/canonical" },
+    { "path": "../../packages/db" },
+    { "path": "../../packages/quota" },
+    { "path": "../../packages/registry" },
+    { "path": "../../packages/git" },
+    { "path": "../../packages/adapter-sdk" },
+    { "path": "../../packages/config" },
+    { "path": "../../packages/observability" },
+    { "path": "../../packages/guidance" }
+  ]
+}

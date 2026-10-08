@@ -1,0 +1,22 @@
+{
+  "name": "@git-migrator/registry",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Build-time composition of adapters, facets and pair overrides.",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "build": "tsc -b",
+    "typecheck": "tsc -b",
+    "lint": "biome check .",
+    "test": "vitest run --root ../.. --project unit packages/registry"
+  },
+  "dependencies": {
+    "@git-migrator/core": "workspace:*",
+    "@git-migrator/canonical": "workspace:*",
+    "@git-migrator/adapter-sdk": "workspace:*",
+    "@git-migrator/facets": "workspace:*"
+  }
+}

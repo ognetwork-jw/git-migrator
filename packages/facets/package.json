@@ -1,0 +1,20 @@
+{
+  "name": "@git-migrator/facets",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Built-in FacetDefinitions, one module per facet.",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "build": "tsc -b",
+    "typecheck": "tsc -b",
+    "lint": "biome check .",
+    "test": "vitest run --root ../.. --project unit packages/facets"
+  },
+  "dependencies": {
+    "@git-migrator/core": "workspace:*",
+    "@git-migrator/canonical": "workspace:*"
+  }
+}

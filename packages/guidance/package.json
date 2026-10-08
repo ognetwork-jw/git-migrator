@@ -1,0 +1,20 @@
+{
+  "name": "@git-migrator/guidance",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Manual-task guidance content.",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "build": "tsc -b",
+    "typecheck": "tsc -b",
+    "lint": "biome check .",
+    "test": "vitest run --root ../.. --project unit packages/guidance"
+  },
+  "dependencies": {
+    "@git-migrator/core": "workspace:*",
+    "@git-migrator/canonical": "workspace:*"
+  }
+}
