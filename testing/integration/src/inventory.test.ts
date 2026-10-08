@@ -486,9 +486,27 @@ describe('inventory against the fixture world', () => {
       plannedSlug: 'platform-team',
       targetGroupId: null,
     });
+    // An analyzed Migration of the Route: the group's resolution changes below.
+    const db = t.db.privileged;
+    const analyzed = await db.migration.findFirstOrThrow({
+      where: { routeId: 'r-auto', scope: 'repository', sourceRepository: { slug: 'with-secrets' } },
+    });
+    const analysis = await db.analysis.create({
+      data: { migrationId: analyzed.id, readiness: 'ready', translation: {} },
+    });
+    await db.migration.update({
+      where: { id: analyzed.id },
+      data: { latestAnalysisId: analysis.id, analysisStaleAt: new Date(Date.now() + 86_400_000) },
+    });
+    const generation = (await db.migration.findUniqueOrThrow({ where: { id: analyzed.id } }))
+      .staleGeneration;
     // A team with that slug appears on the target: the next pass suggests it.
     fakes.github?.state.addTeam('acme', { name: 'Platform Team' });
     await run(TARGET);
+    // `team_missing` became `unmapped` for the resolver: the Route's Analyses are stale (AUTH-050 step 5).
+    const marked = await db.migration.findUniqueOrThrow({ where: { id: analyzed.id } });
+    expect(marked.staleGeneration).toBeGreaterThan(generation);
+    expect((marked.analysisStaleAt as Date) <= new Date()).toBe(true);
     const after = await t.db.privileged.groupMapping.findFirst({
       where: { id: platform?.id ?? '' },
       include: { targetGroup: true },

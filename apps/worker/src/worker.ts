@@ -1,8 +1,11 @@
 import { type Config, loadConfigOrExit } from '@git-migrator/config';
 import { createDb } from '@git-migrator/db';
 import {
+  analysisHandlers,
+  createAnalysisGitClient,
   createEndpointConnector,
   createProviderEnvironment,
+  feederHandlers,
   HEALTH_PORT,
   type HealthServer,
   inventoryHandlers,
@@ -224,6 +227,16 @@ export async function startWorker(options: StartWorkerOptions): Promise<WorkerHa
     checkpoint();
 
     const registry = createBuiltinRegistry();
+    const connector = createEndpointConnector({
+      config,
+      registry,
+      env,
+      environment: providerEnvironment,
+      git: noGitClient,
+    });
+    // ls-remote for the `git-refs` read. Its one unit per Analysis in the git bucket is not
+    // pre-acquired yet (ADR-0310): the host cannot name an adapter's git bucket.
+    const git = createAnalysisGitClient({ scratchDir: scratchRoot(env), logger: log });
     const handlers = {
       ...maintenanceHandlers({
         appPool: db.pool,
@@ -237,17 +250,21 @@ export async function startWorker(options: StartWorkerOptions): Promise<WorkerHa
       ...inventoryHandlers({
         db: db.privileged,
         appPool: db.pool,
-        connector: createEndpointConnector({
-          config,
-          registry,
-          env,
-          environment: providerEnvironment,
-          git: noGitClient,
-        }),
+        connector,
         registry,
         config,
         log,
       }),
+      ...analysisHandlers({
+        db: db.privileged,
+        appPool: db.pool,
+        connector,
+        registry,
+        config,
+        git,
+        log,
+      }),
+      ...feederHandlers({ db: db.privileged, runtime: jobs, quota, log }),
       ...(options.handlers ?? {}),
     };
     await jobs.startWorkers(role, config, handlers);

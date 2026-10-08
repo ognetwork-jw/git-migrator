@@ -2,6 +2,38 @@
 export const PACKAGE_NAME = '@git-migrator/jobs';
 
 export {
+  type AnalysisDeps,
+  AnalysisError,
+  AnalysisInterruptedError,
+  type AnalysisResult,
+  type AnalysisRunOptions,
+  analysisHandlers,
+  runAnalysis,
+} from './analysis/analysis.ts';
+export {
+  deployKeyUsage,
+  groupResolver,
+  identityResolver,
+  withoutFrameworkCreated,
+} from './analysis/context.ts';
+export {
+  DEFAULT_MAX_BATCH,
+  FEEDER_EXCLUDED_STATUSES,
+  type FeederDeps,
+  type FeederResult,
+  feederHandlers,
+  freeBackgroundCalls,
+  runFeeder,
+} from './analysis/feeder.ts';
+export {
+  type AnalysisAge,
+  analyzeForRun,
+  needsReanalysis,
+  type RunAnalysisOutcome,
+  readinessWorsened,
+} from './analysis/fresh.ts';
+export { createAnalysisGitClient } from './analysis/git.ts';
+export {
   assertBullmqSchemaReady,
   BULLMQ_SCHEMA,
   type BullmqPoolOptions,

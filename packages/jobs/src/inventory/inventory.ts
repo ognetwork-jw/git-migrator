@@ -17,10 +17,11 @@ import {
   resolveRoutePolicies,
   transition,
 } from '@git-migrator/core';
-import { type Db, markAnalysesStale, type StaleScope } from '@git-migrator/db';
+import { type Db, markAnalysesStale, publishEvent, type StaleScope } from '@git-migrator/db';
 import type { Logger } from '@git-migrator/observability';
 import type { ProviderRegistry } from '@git-migrator/registry';
 import type pg from 'pg';
+import { databaseNow } from '../db-clock.ts';
 import type { JobHandlers } from '../runtime.ts';
 import type { EndpointConnector } from './connector.ts';
 import {
@@ -195,7 +196,9 @@ export async function runInventory(
   }
 
   async function pass(): Promise<InventoryResult> {
-    const startedAt = now();
+    // The database clock when no test clock is injected: `lastInventoriedAt` is compared with
+    // Analysis times by the feeder (ADR-0312).
+    const startedAt = deps.now ? now() : await databaseNow(db);
     const routes = await db.route.findMany({
       where: {
         retiredAt: null,
@@ -522,8 +525,17 @@ export async function runInventory(
   }
 
   /** Marks Analyses stale (LIF-021): a still-fresh one becomes stale now (ADR-0310). */
-  function markStale(scope: StaleScope): Promise<number> {
-    return markAnalysesStale(db, scope, now());
+  async function markStale(scope: StaleScope): Promise<number> {
+    const marked = await markAnalysesStale(db, scope);
+    // The list topic is enough for a batch (JOB-060).
+    if (marked.length > 0) {
+      await publishEvent(deps.appPool, {
+        type: 'migration.updated',
+        ids: {},
+        at: now().toISOString(),
+      });
+    }
+    return marked.length;
   }
 
   /**
@@ -769,10 +781,14 @@ export async function runInventory(
       }
       const identityChanges = await mapIdentities(route, autoConfirmEmail);
       const groupChanges = await mapGroups(route);
-      changed += identityChanges.changed + groupChanges;
+      changed += identityChanges.changed + groupChanges.changed;
       // AUTH-050 step 5: a mapping that now resolves (or no longer resolves) a principal changes
       // what translation produces, so the Route's Analyses are stale.
-      if (identityChanges.resolution) await markStale({ routeId: route.id });
+      // The same holds for groups: a team appearing or disappearing moves a mapping between
+      // `team_missing` and `unmapped` for the resolver (ADR-0310).
+      if (identityChanges.resolution || groupChanges.resolution) {
+        await markStale({ routeId: route.id });
+      }
     }
     return changed;
   }
@@ -870,7 +886,7 @@ export async function runInventory(
     return { changed, resolution };
   }
 
-  async function mapGroups(route: RouteRow): Promise<number> {
+  async function mapGroups(route: RouteRow): Promise<{ changed: number; resolution: boolean }> {
     const [sources, targets, mappings] = await Promise.all([
       db.group.findMany({ where: { endpointId: route.sourceEndpointId }, orderBy: { id: 'asc' } }),
       db.group.findMany({ where: { endpointId: route.targetEndpointId }, orderBy: { id: 'asc' } }),
@@ -884,6 +900,10 @@ export async function runInventory(
       targetGroupId: string | null;
     }> = [];
     let changed = 0;
+    let resolution = false;
+    // What the Analysis's group resolver makes of a mapping: no row and `unmapped` are both a team
+    // that is missing, `suggested` is a team that still needs an operator (ADR-0310).
+    const resolves = (status: string | undefined) => (status === 'suggested' ? 'S' : 'M');
     for (const source of sources) {
       checkpoint();
       const existing = bySource.get(source.id);
@@ -892,6 +912,7 @@ export async function runInventory(
       if (!existing) {
         toCreate.push({ sourceGroupId: source.id, plannedSlug: source.slug, ...next });
         changed++;
+        resolution ||= resolves(undefined) !== resolves(next.status);
         continue;
       }
       if (existing.status === next.status && existing.targetGroupId === next.targetGroupId)
@@ -901,7 +922,10 @@ export async function runInventory(
         where: { id: existing.id, status: { in: ['unmapped', 'suggested'] } },
         data: { status: next.status, targetGroupId: next.targetGroupId },
       });
-      if (written.count > 0) changed++;
+      if (written.count > 0) {
+        changed++;
+        resolution ||= resolves(existing.status) !== resolves(next.status);
+      }
     }
     for (const batch of chunks(toCreate)) {
       await db.groupMapping.createMany({
@@ -909,7 +933,7 @@ export async function runInventory(
         skipDuplicates: true,
       });
     }
-    return changed;
+    return { changed, resolution };
   }
 }
 

@@ -81,7 +81,6 @@ describe('maintenance handlers', () => {
       'maintenance.prune',
       'maintenance.scratch-cleanup',
       'maintenance.run-reaper',
-      'analysis.feeder',
       'drift.sweep',
       'parity.migration',
     ] as const) {
@@ -90,8 +89,10 @@ describe('maintenance handlers', () => {
     // User-triggered jobs stay unregistered, so they fail visibly until their task lands.
     expect(handlers['run.execute']).toBeUndefined();
     expect(handlers['analysis.migration']).toBeUndefined();
-    const feeder = handlers['analysis.feeder'] as unknown as () => Promise<unknown>;
-    expect(await feeder()).toEqual({ skipped: true });
+    // The feeder has its own processor now (T-061); the others still complete as skipped.
+    expect(handlers['analysis.feeder']).toBeUndefined();
+    const sweep = handlers['drift.sweep'] as unknown as () => Promise<unknown>;
+    expect(await sweep()).toEqual({ skipped: true });
   });
 
   it('[JOB-015] maintenance.scratch-cleanup removes scratch directories older than a day', async () => {

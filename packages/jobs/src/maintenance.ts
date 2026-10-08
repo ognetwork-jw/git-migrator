@@ -53,11 +53,10 @@ export function createPruner(deps: MaintenanceDeps): () => Promise<PruneResult> 
 
 /** Scheduler-driven jobs whose processors arrive with later tasks (ADR-0212). */
 const PENDING: ReadonlyArray<readonly [name: PendingJob, task: string]> = [
-  ['analysis.feeder', 'T-061'],
   ['drift.sweep', 'T-089'],
   ['parity.migration', 'T-072'],
 ];
-type PendingJob = 'analysis.feeder' | 'drift.sweep' | 'parity.migration';
+type PendingJob = 'drift.sweep' | 'parity.migration';
 
 /**
  * The handlers this module provides: `maintenance.prune`, `maintenance.scratch-cleanup` and
