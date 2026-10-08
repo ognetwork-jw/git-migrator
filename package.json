@@ -9,7 +9,7 @@
     "node": "24.x"
   },
   "scripts": {
-    "dev": "node tools/not-implemented.ts dev T-002",
+    "dev": "turbo run dev",
     "build": "turbo run build",
     "db:migrate": "node tools/not-implemented.ts db:migrate T-010",
     "db:seed": "node tools/not-implemented.ts db:seed T-010",
