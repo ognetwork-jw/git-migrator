@@ -13,10 +13,12 @@
     "lint": "biome check .",
     "test": "vitest run --root ../.. --project unit testing/provider-fakes",
     "start": "node src/main.ts",
-    "start:git": "node src/git/main.ts"
+    "start:git": "node src/git/main.ts",
+    "start:github": "node src/github/main.ts"
   },
   "dependencies": {
     "@hono/node-server": "2.1.4",
+    "graphql": "16.9.0",
     "hono": "4.13.13"
   },
   "devDependencies": {

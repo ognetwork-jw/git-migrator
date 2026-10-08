@@ -5,6 +5,7 @@ export {
   isolatedGitEnv,
   runGit,
 } from './client.ts';
+export { POLICY_FLAG_FILE } from './hook.ts';
 export { LfsObjectStore } from './lfs.ts';
 export { assertGitPrerequisites, MIN_GIT_VERSION } from './preconditions.ts';
 export {

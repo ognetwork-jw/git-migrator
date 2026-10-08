@@ -4,4 +4,11 @@ export type { FakeBitbucket, FakeBitbucketOptions } from './bitbucket/index.ts';
 export * as bitbucket from './bitbucket/index.ts';
 export { createFakeBitbucket } from './bitbucket/index.ts';
 export * from './git/index.ts';
+export * as github from './github/index.ts';
+export {
+  createFakeGitHub,
+  type FakeGitHub,
+  type FakeGitHubOptions,
+  startFakeGitHub,
+} from './github/index.ts';
 export { type RunningFakes, type StartOptions, startFakes } from './start.ts';

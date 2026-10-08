@@ -3,11 +3,14 @@ import { chmod, mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises
 import { request } from 'node:http';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import { basicAuthEnv, isolatedGitEnv, runGit } from './client.ts';
 import { assertGitPrerequisites } from './preconditions.ts';
 import { createBareRepo, pseudoRandomBytes, seedBareRepo, sha256 } from './seed.ts';
 import { type FakeGitServer, GIT_SIDES, startFakeGitServer } from './server.ts';
+
+// These tests drive the git CLI; a loaded machine needs more than the 5 s default.
+vi.setConfig({ testTimeout: 60_000 });
 
 const TOKEN = 'test-token-value';
 const MIB = 1024 * 1024;

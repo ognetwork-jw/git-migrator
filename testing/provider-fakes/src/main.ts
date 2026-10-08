@@ -1,17 +1,24 @@
-import { startFakes } from './start.ts';
+import { DEFAULT_PORTS, startFakes } from './start.ts';
 
-/** Entry of `pnpm --filter @git-migrator/provider-fakes start`. Env: FAKE_BITBUCKET_PORT, FAKE_GIT_PORT, FAKE_GIT_ROOT, FAKE_GIT_PUBLIC_URL. */
+/** Entry of `pnpm --filter @git-migrator/provider-fakes start`. Env: FAKE_BITBUCKET_PORT, FAKE_GITHUB_PORT, FAKE_GIT_PORT, FAKE_GIT_ROOT, FAKE_GIT_PUBLIC_URL. */
 const fakes = await startFakes({
   bitbucketPort: process.env.FAKE_BITBUCKET_PORT
     ? Number(process.env.FAKE_BITBUCKET_PORT)
     : undefined,
+  githubPort: process.env.FAKE_GITHUB_PORT
+    ? Number(process.env.FAKE_GITHUB_PORT)
+    : DEFAULT_PORTS.github,
   gitPort: process.env.FAKE_GIT_PORT ? Number(process.env.FAKE_GIT_PORT) : undefined,
   gitRootDir: process.env.FAKE_GIT_ROOT,
   hostname: process.env.FAKES_HOST,
   bitbucket: process.env.FAKE_GIT_BASE_URL ? { gitBaseUrl: process.env.FAKE_GIT_BASE_URL } : {},
+  github: process.env.FAKE_GIT_BASE_URL
+    ? { gitBaseUrl: `${process.env.FAKE_GIT_BASE_URL}/target` }
+    : {},
   git: process.env.FAKE_GIT_PUBLIC_URL ? { publicUrl: process.env.FAKE_GIT_PUBLIC_URL } : {},
 });
 console.log(`fake Bitbucket listening on :${fakes.bitbucket.port}`);
+if (fakes.github) console.log(`fake GitHub listening on :${fakes.github.port}`);
 if (fakes.git) console.log(`fake git server listening on ${fakes.git.baseUrl}`);
 
 const stop = () => {

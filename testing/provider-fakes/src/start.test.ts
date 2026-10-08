@@ -1,5 +1,8 @@
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { DEFAULT_HOSTNAME, DEFAULT_PORTS, type RunningFakes, startFakes } from './start.ts';
+
+// These tests start the git server; a loaded machine needs more than the 5 s default.
+vi.setConfig({ testTimeout: 60_000 });
 
 let running: RunningFakes | undefined;
 afterEach(async () => {

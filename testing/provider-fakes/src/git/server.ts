@@ -1,10 +1,11 @@
 import { type ChildProcess, spawn } from 'node:child_process';
+import { randomUUID } from 'node:crypto';
 import { existsSync } from 'node:fs';
 import { chmod, mkdir, writeFile } from 'node:fs/promises';
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'node:http';
 import type { AddressInfo } from 'node:net';
 import { join } from 'node:path';
-import { PRE_RECEIVE_HOOK } from './hook.ts';
+import { POLICY_FLAG_FILE, PRE_RECEIVE_HOOK } from './hook.ts';
 import { handleLfs, LfsObjectStore } from './lfs.ts';
 import { assertGitPrerequisites } from './preconditions.ts';
 
@@ -32,6 +33,44 @@ export interface GitSideOptions {
    * source is read-only). Seeding does not need it, it writes to the filesystem.
    */
   allowPush?: boolean;
+  /**
+   * Per-request authorization after a successful credential check: return an HTTP status (403, 404)
+   * to refuse, nothing to allow. `repo` is the repository path without `.git`, `operation` is `write`
+   * for `git-receive-pack`. Used by the fake GitHub to tie git access to its installation tokens.
+   */
+  authorize?: (request: {
+    username: string;
+    password: string;
+    repo: string;
+    operation: 'read' | 'write';
+  }) => number | undefined | Promise<number | undefined>;
+  /**
+   * With `refPolicyFlag` the pre-receive hook only calls `refPolicy` when the file
+   * `{bare repo}/gm-policy-active` exists when the hook runs (faster pushes for repositories without
+   * rules). The provider fake keeps the file in step with its rules (`syncPolicyFlag`), so a rule
+   * committed before the hook runs is always enforced. Pushes to `refs/pull/*` are denied by the hook
+   * itself whenever `refPolicy` is set, flag or not.
+   */
+  refPolicyFlag?: boolean;
+  /**
+   * Called when a CGI process (`git http-backend`) is started for a request, before the body is
+   * consumed. A test seam to observe that a push is in flight.
+   */
+  onCgiSpawn?: (info: { repo: string; operation: 'read' | 'write' }) => void;
+  /**
+   * Ref policy for pushes (pre-receive hook): called per updated ref, return a message to reject the
+   * push or nothing to accept. `old`/`new` are object ids (all zeros = absent); `fastForward` is
+   * false when `old` is not an ancestor of `new`. Used for branch protection (ADR-0040).
+   */
+  refPolicy?: (update: {
+    username: string;
+    password: string;
+    repo: string;
+    ref: string;
+    old: string;
+    new: string;
+    fastForward: boolean;
+  }) => string | undefined | Promise<string | undefined>;
 }
 
 export interface FakeGitServerOptions {
@@ -56,6 +95,10 @@ interface SideState {
   tokens: string[];
   usernames?: string[];
   authenticate?: GitSideOptions['authenticate'];
+  authorize?: GitSideOptions['authorize'];
+  refPolicy?: GitSideOptions['refPolicy'];
+  refPolicyFlag?: GitSideOptions['refPolicyFlag'];
+  onCgiSpawn?: GitSideOptions['onCgiSpawn'];
   maxBlobBytes: number | null;
   maxPushBytes: number | null;
   allowPush: boolean;
@@ -116,6 +159,10 @@ export async function startFakeGitServer(options: FakeGitServerOptions): Promise
       tokens: o.tokens ?? ['fake-token'],
       usernames: o.usernames,
       authenticate: o.authenticate,
+      authorize: o.authorize,
+      refPolicy: o.refPolicy,
+      refPolicyFlag: o.refPolicyFlag,
+      onCgiSpawn: o.onCgiSpawn,
       maxBlobBytes:
         o.maxBlobBytes === undefined ? (isTarget ? DEFAULT_MAX_BLOB_BYTES : null) : o.maxBlobBytes,
       maxPushBytes:
@@ -135,6 +182,13 @@ export async function startFakeGitServer(options: FakeGitServerOptions): Promise
     });
   });
 
+  /** Tickets let the pre-receive hook identify the push without the credentials entering its env. */
+  const tickets = new Map<
+    string,
+    { side: SideState; repo: string; username: string; password: string }
+  >();
+  const policyKey = randomUUID();
+
   function authenticate(side: SideState, header: string | undefined): string | undefined {
     const m = /^Basic (.+)$/i.exec(header ?? '');
     if (!m?.[1]) return undefined;
@@ -149,7 +203,32 @@ export async function startFakeGitServer(options: FakeGitServerOptions): Promise
     return side.tokens.includes(password) ? username : undefined;
   }
 
+  /** Internal endpoint for the pre-receive hook: `POST /__policy/{ticket}` with `old new ref ff` lines. */
+  async function policy(req: IncomingMessage, res: ServerResponse): Promise<void> {
+    const ticket = tickets.get((req.url ?? '').split('/').pop() ?? '');
+    const chunks: Buffer[] = [];
+    for await (const c of req) chunks.push(c as Buffer);
+    if (req.headers['x-policy-key'] !== policyKey || !ticket) return text(res, 403, 'forbidden\n');
+    const messages: string[] = [];
+    for (const line of Buffer.concat(chunks).toString('utf8').split('\n')) {
+      const [old, next, ref, ff] = line.split(' ');
+      if (!old || !next || !ref) continue;
+      const msg = await ticket.side.refPolicy?.({
+        username: ticket.username,
+        password: ticket.password,
+        repo: ticket.repo,
+        ref,
+        old,
+        new: next,
+        fastForward: ff !== '0',
+      });
+      if (msg) messages.push(msg);
+    }
+    text(res, messages.length ? 409 : 200, messages.join('\n'));
+  }
+
   async function route(req: IncomingMessage, res: ServerResponse): Promise<void> {
+    if (req.method === 'POST' && (req.url ?? '').startsWith('/__policy/')) return policy(req, res);
     // Judge the raw target: URL parsing would silently resolve `..` segments.
     const rawPath = (req.url ?? '/').split('?')[0] ?? '/';
     if (rawPath.split('/').some((seg) => seg === '..' || seg === '.')) {
@@ -168,6 +247,19 @@ export async function startFakeGitServer(options: FakeGitServerOptions): Promise
       });
       req.resume();
       return void res.end('Authentication required\n');
+    }
+    const creds = credentials(req.headers.authorization);
+    if (side.authorize && creds) {
+      const repoPath = rest.replace(/\.git(\/.*)?$/, '');
+      const operation =
+        rest.endsWith('/git-receive-pack') || url.searchParams.get('service') === 'git-receive-pack'
+          ? 'write'
+          : 'read';
+      const status = await side.authorize({ ...creds, repo: repoPath, operation });
+      if (status !== undefined) {
+        req.resume();
+        return text(res, status, status === 404 ? 'Repository not found\n' : 'Permission denied\n');
+      }
     }
     const lfs = /^(.+?)\/info\/lfs(\/.*)$/.exec(rest);
     if (lfs) {
@@ -191,7 +283,7 @@ export async function startFakeGitServer(options: FakeGitServerOptions): Promise
     if (!/^[A-Za-z0-9._/-]+$/.test(rest) || rest.split('/').some((seg) => seg === '..')) {
       return text(res, 404, 'Not found\n');
     }
-    return cgi(req, res, side, `/${rest}`, url.search.slice(1), user);
+    return cgi(req, res, side, `/${rest}`, url.search.slice(1), user, creds);
   }
 
   function cgi(
@@ -201,6 +293,7 @@ export async function startFakeGitServer(options: FakeGitServerOptions): Promise
     pathInfo: string,
     query: string,
     user: string,
+    creds?: { username: string; password: string },
   ): Promise<void> {
     const config: [string, string][] = [
       ['safe.directory', '*'],
@@ -229,12 +322,27 @@ export async function startFakeGitServer(options: FakeGitServerOptions): Promise
       env[`GIT_CONFIG_KEY_${i}`] = k;
       env[`GIT_CONFIG_VALUE_${i}`] = v;
     });
+    let ticketId: string | undefined;
+    const policyRepo = pathInfo.replace(/^\//, '').replace(/\.git\/.*$/, '');
+    if (side.refPolicy && creds && pathInfo.endsWith('/git-receive-pack')) {
+      ticketId = randomUUID();
+      tickets.set(ticketId, { side, repo: policyRepo, ...creds });
+      env.GM_FAKE_POLICY_URL = `http://127.0.0.1:${port()}/__policy/${ticketId}`;
+      env.GM_FAKE_POLICY_KEY = policyKey;
+      env.GM_FAKE_NODE = process.execPath;
+      if (side.refPolicyFlag) env.GM_FAKE_POLICY_FLAG = POLICY_FLAG_FILE;
+    }
     if (side.maxBlobBytes !== null) env.GM_FAKE_MAX_BLOB_BYTES = String(side.maxBlobBytes);
     for (const k of Object.keys(env)) if (env[k] === undefined) delete env[k];
 
     const child = spawn('git', ['http-backend'], { env, stdio: ['pipe', 'pipe', 'pipe'] });
+    side.onCgiSpawn?.({
+      repo: policyRepo,
+      operation: pathInfo.endsWith('/git-receive-pack') ? 'write' : 'read',
+    });
     const isPush = req.method === 'POST' && pathInfo.endsWith('/git-receive-pack');
-    return pumpCgi(req, res, child, isPush ? side.maxPushBytes : null);
+    const done = pumpCgi(req, res, child, isPush ? side.maxPushBytes : null);
+    return ticketId ? done.finally(() => tickets.delete(ticketId as string)) : done;
   }
 
   function port(): number {
@@ -269,6 +377,16 @@ export async function startFakeGitServer(options: FakeGitServerOptions): Promise
         server.closeAllConnections();
       }),
   };
+}
+
+function credentials(
+  header: string | undefined,
+): { username: string; password: string } | undefined {
+  const m = /^Basic (.+)$/i.exec(header ?? '');
+  if (!m?.[1]) return undefined;
+  const decoded = Buffer.from(m[1], 'base64').toString('utf8');
+  const i = decoded.indexOf(':');
+  return i < 0 ? undefined : { username: decoded.slice(0, i), password: decoded.slice(i + 1) };
 }
 
 function advertisedHost(host: string | undefined): string {
