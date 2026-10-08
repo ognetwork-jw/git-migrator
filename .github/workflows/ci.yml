@@ -19,6 +19,21 @@ jobs:
     name: Lint, typecheck and unit tests
     runs-on: ubuntu-latest
     timeout-minutes: 20
+    # Database tests create throw-away databases (ADR-0123). The role matches devenv and Compose.
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: git_migrator
+          POSTGRES_PASSWORD: git_migrator
+          POSTGRES_DB: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U git_migrator"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
     steps:
       - name: Check out
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
