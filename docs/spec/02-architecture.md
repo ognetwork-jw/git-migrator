@@ -78,7 +78,8 @@ Package names use the scope `@git-migrator/` (for example `@git-migrator/core`).
 - `quota` depends on `db`. It is the only infrastructure package `adapter-sdk` may depend on.
 - `registry` is the only package that imports concrete adapters and facets.
 - `apps/*` may depend on anything.
-- Biome's `noRestrictedImports` (or an equivalent dependency-cruiser check run in CI) enforces these rules.
+- `tools/check-deps.ts`, run by `pnpm lint`, enforces these rules on `package.json` dependencies, TypeScript project references and parsed imports; it fails closed (ADR-0028). Where these rules are silent, its rule table allows the minimal set implied by ARC-010 (for example `git`, `quota` and `db` may use `core`/`canonical`); a task needing a new edge changes the table and records an ADR.
+- Any package MAY list `@git-migrator/provider-fakes` and `@git-migrator/fixtures` as `devDependencies` and import them only from `*.test.*` files (ADR-0028).
 
 ## Runtime components (ARC-020)
 

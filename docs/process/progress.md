@@ -4,12 +4,12 @@ The orchestrator maintains this table (see [workflow](workflow.md)). Integration
 
 | Task | Status | Branch | PR | Review rounds | Notes |
 |---|---|---|---|---|---|
-| T-001 | in_review | task/T-001-bootstrap | [#1](https://github.com/ognetwork-jw/git-migrator/pull/1) | 5 | r4: 1 MAJOR (skipped describe counted) in fix pass; round 5 is the last |
+| T-001 | merged | task/T-001-bootstrap | [#1](https://github.com/ognetwork-jw/git-migrator/pull/1) | 5 | merged to ai-main 26d7246; ADR-0028..0030 folded into spec |
 | T-002 | todo |  | | | |
-| T-003 | todo |  | | | |
-| T-004 | todo |  | | | |
+| T-003 | in_progress | task/T-003-agent-tooling-ci | | | |
+| T-004 | in_progress | task/T-004-config-observability | | | |
 | T-010 | todo |  | | | |
-| T-011 | todo |  | | | |
+| T-011 | in_progress | task/T-011-core-primitives | | | |
 | T-012 | todo |  | | | |
 | T-013 | todo |  | | | |
 | T-014 | todo |  | | | |
@@ -27,7 +27,7 @@ The orchestrator maintains this table (see [workflow](workflow.md)). Integration
 | T-033 | todo |  | | | |
 | T-034 | todo |  | | | |
 | T-040 | todo |  | | | |
-| T-041 | todo |  | | | |
+| T-041 | in_progress | task/T-041-fake-bitbucket | | | |
 | T-042 | todo |  | | | |
 | T-043 | todo |  | | | |
 | T-050 | todo |  | | | |

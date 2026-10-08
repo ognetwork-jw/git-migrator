@@ -1,6 +1,6 @@
 # ADR-0029: spec:coverage runs report-only until the end of the project
 
-- Status: agent-decided
+- Status: accepted (spec updated)
 - Date: 2026-10-08
 
 ## Context

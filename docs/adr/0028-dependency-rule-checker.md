@@ -1,6 +1,6 @@
 # ADR-0028: Custom dependency-rule checker for ARC-012
 
-- Status: agent-decided
+- Status: accepted (spec updated)
 - Date: 2026-10-08
 
 ## Context

@@ -9,8 +9,8 @@
 | UI e2e (fakes) | Playwright | The full app (web + worker) against the fakes, signed in via test sign-in | ✓ |
 | Live e2e | Playwright | The same flow against real Bitbucket and GitHub test accounts | ✗ (human, on demand) |
 
-- **TST-002** Tests name the requirement IDs they cover, as in `it('[FAC-BRR-002] maps restrictPushes to restrictions')`. A script (`pnpm spec:coverage`) lists requirement IDs from `docs/spec` with no referencing test. CI prints the list. It fails only for IDs in a `must-test.txt` allowlist that T-001 initializes with every LIF, FAC, JOB-04x and AUTH-0xx ID.
-- **TST-005 Coverage thresholds** (Vitest v8, enforced per package): `core` and `facets` ≥ 90% lines and branches; `quota`, `git`, adapters, `api`, `jobs` ≥ 80% lines; apps ≥ 60% lines.
+- **TST-002** Tests name the requirement IDs they cover, as in `it('[FAC-BRR-002] maps restrictPushes to restrictions')`. A script (`pnpm spec:coverage`) lists requirement IDs from `docs/spec` with no referencing test. CI prints the list. It fails only for IDs in a `must-test.txt` allowlist that T-001 initializes with every LIF, FAC, JOB-04x and AUTH-0xx ID. Until T-097 it runs report-only in CI; `--strict` enables the gate, and T-097 switches CI to strict (ADR-0029). An ID counts only in the title of a test that actually runs (not skipped, todo or conditional).
+- **TST-005 Coverage thresholds** (Vitest v8, enforced per package through glob thresholds by the root `pnpm test`, which CI runs; ADR-0030). In packages and apps only `*.test.*` files are tests; they are type-checked by `tsconfig.tests.json` through the root `pnpm typecheck`: `core` and `facets` ≥ 90% lines and branches; `quota`, `git`, adapters, `api`, `jobs` ≥ 80% lines; apps ≥ 60% lines.
 - **TST-006** No test may call a real provider, except the live e2e. The provider HTTP client refuses non-allowlisted hosts when `GM_ENVIRONMENT=test`.
 
 ## Provider fakes (TST-010)

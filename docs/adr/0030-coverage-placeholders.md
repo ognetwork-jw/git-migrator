@@ -1,6 +1,6 @@
 # ADR-0030: Coverage thresholds, placeholders and module resolution
 
-- Status: agent-decided
+- Status: accepted (spec updated)
 - Date: 2026-10-08
 
 ## Context
