@@ -1,6 +1,6 @@
 # ADR-0087: Endpoint-level secrets/variables/webhooks schemas; strict objects
 
-- Status: agent-decided
+- Status: accepted (spec updated)
 - Date: 2026-10-08
 - Task: T-015
 - Affects: FAC-001, FAC-END (`org-variables`, `org-secrets`, `org-webhooks`), FAC-WEB, FAC-VAR

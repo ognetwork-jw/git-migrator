@@ -44,7 +44,7 @@ Default `acceptLossy`: `["branch-rules.advisory-enforced", "environments.categor
 | `org-secrets` | endpoint | yes | — |
 | `org-webhooks` | endpoint | yes | — |
 
-`PrincipalRef = { kind: 'identity' | 'group'; id: string }`. Here `id` is the Provider-stable ID. In translated documents, principals refer to target IDs.
+`PrincipalRef = { kind: 'identity' | 'group'; id: string }`. Here `id` is the Provider-stable ID. In translated documents, principals refer to target IDs. Lists of principals are stored as `PrincipalEntry = { principal: PrincipalRef }` elements keyed by `principal` (rendered `kind:id` in field paths, e.g. `[principal=identity:42]`), so they are keyed collections (ADP-021, ADR-0085).
 
 **FAC-006 Principal resolution.** Every facet that contains principals resolves each source principal through the Route's mappings:
 
@@ -151,12 +151,12 @@ type AccessControl = {
 type BranchRule = {                          // key: pattern
   pattern: string;                           // glob, canonical: '**' crosses '/', '*' does not
   enforcement: 'advisory' | 'enforced';
-  restrictPushes: PrincipalRef[] | null;     // null = unrestricted; [] = nobody
-  restrictMerges: PrincipalRef[] | null;
+  restrictPushes: PrincipalEntry[] | null;   // null = unrestricted; [] = nobody; key: principal
+  restrictMerges: PrincipalEntry[] | null;
   blockForcePush: boolean;
-  forcePushExempt: PrincipalRef[];
+  forcePushExempt: PrincipalEntry[];
   blockDeletion: boolean;
-  deletionExempt: PrincipalRef[];
+  deletionExempt: PrincipalEntry[];
   changeRequest: null | {
     minApprovals: number;
     requireCodeOwnerApproval: boolean;       // from "default reviewer approvals"
@@ -214,8 +214,9 @@ type BranchRules = { rules: BranchRule[] };
 ## webhooks (FAC-WEB)
 
 ```ts
-type Webhook = {                                   // key: url
-  url: string;
+type Webhook = {                                   // key: key = webhookKey(url) = <origin>#<16 hex of sha256(normalized URL)> (ADR-0088)
+  key: string;
+  url: string;                                     // may carry credentials in path/query: redact before logging or display (redactWebhookUrl)
   events: CanonicalEvent[];                        // sorted set
   active: boolean;
   hasSecret: boolean;                              // secret value is unreadable
@@ -277,8 +278,8 @@ type Environments = { environments: { name: string; category: 'test' | 'staging'
 ## variables (FAC-VAR) and secrets (FAC-SEC)
 
 ```ts
-type Variables = { variables: { scope: string; name: string; value: string }[] };  // key: scope+name; scope "repository" | "environment:<name>"
-type Secrets   = { secrets:   { scope: string; name: string }[] };                 // key: scope+name
+type Variables = { variables: { key: string; scope: string; name: string; value: string }[] };  // key: key = `<scope>/<name>`; scope "repository" | "environment:<name>"; name has no '/' (ADR-0086)
+type Secrets   = { secrets:   { key: string; scope: string; name: string }[] };    // key: key = `<scope>/<name>`
 ```
 
 - **FAC-VAR-001 Bitbucket.** Repository pipeline variables and deployment environment variables. `secured: false` goes to `variables`, `secured: true` goes to `secrets` (value unreadable).
@@ -339,7 +340,7 @@ type Pipelines = {
 ## code-ownership (FAC-COD)
 
 ```ts
-type CodeOwnership = { owners: { pattern: string; principals: PrincipalRef[] }[] };  // key: pattern
+type CodeOwnership = { owners: { pattern: string; principals: PrincipalEntry[] }[] };  // key: pattern; principals key: principal
 ```
 
 - Source: Bitbucket effective default reviewers, which become one entry with pattern `*`. Default reviewers per branch condition don't exist in Bitbucket Cloud.
@@ -390,7 +391,7 @@ type Members = { members: { principal: PrincipalRef; role: 'member' | 'admin' }[
 ### teams
 
 ```ts
-type Teams = { teams: { slug: string; name: string; members: PrincipalRef[] }[] };   // key: slug
+type Teams = { teams: { slug: string; name: string; members: PrincipalEntry[] }[] };   // key: slug; members key: principal
 ```
 
 - Source: Bitbucket groups (1.0 groups API, with members). Target: GitHub teams (`privacy: closed`).
@@ -399,6 +400,14 @@ type Teams = { teams: { slug: string; name: string; members: PrincipalRef[] }[] 
 - **Findings:** `teams.slug-collision` B · `teams.set-membership` post (v), only when source membership is unreadable.
 
 ### org-variables, org-secrets, org-webhooks
+
+```ts
+type OrgVariables = { variables: { name: string; value: string; visibility: 'all' }[] };  // key: name
+type OrgSecrets   = { secrets: { name: string }[] };                                     // key: name (values never read or stored)
+type OrgWebhooks  = { hooks: Webhook[] };                                                // key: key (as webhooks)
+```
+
+(ADR-0087.)
 
 - Workspace pipeline variables (unsecured) become organization variables with `visibility: all`. Secured ones become organization secret post tasks (`org-secrets.set-value`, v), with the same rules as the repository Facets.
 - Workspace webhooks become organization webhooks under the same allowlist, secret and payload rules as FAC-WEB.

@@ -1,6 +1,6 @@
 # ADR-0086: `variables` and `secrets` carry a derived `key` field
 
-- Status: agent-decided
+- Status: accepted (spec updated)
 - Date: 2026-10-08
 - Task: T-015
 - Affects: FAC-VAR, FAC-SEC, ADP-021

@@ -1,6 +1,6 @@
 # ADR-0088: Parse-time key validation, webhook keys, URL and text rules, schema versions
 
-- Status: agent-decided
+- Status: accepted (spec updated)
 - Date: 2026-10-08
 - Task: T-015
 - Affects: FAC-001, ADP-021, FAC-WEB, FAC-DKY, FAC-VAR, FAC-SEC

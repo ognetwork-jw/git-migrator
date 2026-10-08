@@ -1,6 +1,6 @@
 # ADR-0085: Principal lists are keyed collections of `{ principal }`
 
-- Status: agent-decided
+- Status: accepted (spec updated)
 - Date: 2026-10-08
 - Task: T-015
 - Affects: FAC-001, ADP-020, ADP-021, 05-facets (`restrictPushes`, `restrictMerges`, `forcePushExempt`, `deletionExempt`, `CodeOwnership.principals`, `Teams.members`)
