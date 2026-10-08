@@ -14,15 +14,27 @@
     "test": "vitest run --root ../.. --project unit packages/jobs"
   },
   "dependencies": {
-    "@git-migrator/core": "workspace:*",
+    "@git-migrator/adapter-sdk": "workspace:*",
     "@git-migrator/canonical": "workspace:*",
+    "@git-migrator/config": "workspace:*",
+    "@git-migrator/core": "workspace:*",
     "@git-migrator/db": "workspace:*",
+    "@git-migrator/git": "workspace:*",
+    "@git-migrator/guidance": "workspace:*",
+    "@git-migrator/observability": "workspace:*",
     "@git-migrator/quota": "workspace:*",
     "@git-migrator/registry": "workspace:*",
-    "@git-migrator/git": "workspace:*",
-    "@git-migrator/adapter-sdk": "workspace:*",
-    "@git-migrator/config": "workspace:*",
-    "@git-migrator/observability": "workspace:*",
-    "@git-migrator/guidance": "workspace:*"
+    "@opentelemetry/api": "1.9.1",
+    "bullmq": "6.3.11",
+    "bullmq-otel": "2.0.1",
+    "cron-parser": "5.10.1",
+    "pg": "8.23.1",
+    "zod": "4.6.5"
+  },
+  "devDependencies": {
+    "@opentelemetry/context-async-hooks": "2.12.0",
+    "@opentelemetry/core": "2.12.0",
+    "@opentelemetry/sdk-trace-base": "2.12.0",
+    "@types/pg": "8.23.1"
   }
 }
