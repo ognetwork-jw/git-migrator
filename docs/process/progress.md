@@ -4,7 +4,7 @@ The orchestrator maintains this table (see [workflow](workflow.md)). Status valu
 
 | Task | Status | Branch | PR | Review rounds | Notes |
 |---|---|---|---|---|---|
-| T-001 | in_progress | task/T-001-bootstrap | | | |
+| T-001 | in_review | task/T-001-bootstrap | [#1](https://github.com/ognetwork-jw/git-migrator/pull/1) | 1 | |
 | T-002 | todo |  | | | |
 | T-003 | todo |  | | | |
 | T-004 | todo |  | | | |
@@ -21,8 +21,8 @@ The orchestrator maintains this table (see [workflow](workflow.md)). Status valu
 | T-026 | todo |  | | | |
 | T-027 | todo |  | | | |
 | T-028 | todo |  | | | |
-| T-030 | in_progress | task/T-030-bitbucket-api-verification | | | Unblocked after network allowlist change |
-| T-031 | in_progress | task/T-031-github-api-verification | | | |
+| T-030 | in_review | task/T-030-bitbucket-api-verification | [#2](https://github.com/ognetwork-jw/git-migrator/pull/2) | 1 | Unblocked after network allowlist change; ADR-0035, 0036 |
+| T-031 | in_review | task/T-031-github-api-verification | [#3](https://github.com/ognetwork-jw/git-migrator/pull/3) | 1 | |
 | T-032 | todo |  | | | |
 | T-033 | todo |  | | | |
 | T-034 | todo |  | | | |
