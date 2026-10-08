@@ -166,6 +166,11 @@ export const WORLD_REPOSITORIES: readonly WorldRepository[] = [
           'pre',
           'FAC-006: bob is only login-suggested (AUTH-050 step 2) until an operator confirms the mapping',
         ),
+        f(
+          'branch-rules.team-missing',
+          'blocker',
+          'FAC-006: the push restriction names the same group, which has no created target team',
+        ),
       ],
     },
     stages: [

@@ -24,12 +24,12 @@ Things to know:
 
 ## Expected readiness and findings
 
-Derived from the spec text, not from running facets (`packages/facets` is not built yet): FAC-ACL/FAC-006 (principals), FAC-DKY-003, FAC-WEB-002, FAC-PIP-003, FAC-SEC-001, FAC-CRQ, FAC-EXT, FAC-GIT-004/LIF-049, LIF-031, LIF-004 (blocker beats pre task beats Ready; post tasks and warnings never affect readiness). `ops/hooks` gets only `webhooks.recreate-manually`: a non-allowlisted hook is omitted from `desired` (FAC-WEB-002), so `webhooks.set-secret` does not apply to its secret. A test checks every code and severity against `@git-migrator/guidance` and that the table equals `world-spec.ts`. When a facet lands and disagrees, fix the data and this table together, and record why.
+Derived from the spec text, not from running facets (`packages/facets` is not built yet): FAC-ACL/FAC-006 (principals), FAC-DKY-003, FAC-WEB-002, FAC-PIP-003, FAC-SEC-001, FAC-CRQ, FAC-EXT, FAC-GIT-004/LIF-049, LIF-031, LIF-004 (blocker beats pre task beats Ready; post tasks and warnings never affect readiness). `ops/hooks` gets only `webhooks.recreate-manually`: a non-allowlisted hook is omitted from `desired` (FAC-WEB-002), so `webhooks.set-secret` does not apply to its secret. A test checks every code and severity against `@git-migrator/guidance` and that the table equals `world-spec.ts`. When a facet lands and disagrees, fix the data and this table together, and record why. T-061 (ADR-0313): `data/with-grants` also gets blocker `branch-rules.team-missing` (FAC-006: the push restriction names the group), and the table assumes the Atlassian Admin email enrichment of AUTH-050 step 1, which the analysis test supplies as a decorator because the adapter does not build it yet.
 
 | Repository | Planned target | Expected after Analysis | Later |
 |---|---|---|---|
 | `plat/auto-ok` | plat-auto-ok | Ready | - |
-| `data/with-grants` | data-with-grants | Blocked: `access-control.team-missing` (B), `access-control.unmapped-principal` (pre) | After endpoint migration created the team platform-team and bob was confirmed: Ready |
+| `data/with-grants` | data-with-grants | Blocked: `access-control.team-missing` (B), `access-control.unmapped-principal` (pre), `branch-rules.team-missing` (B) | After endpoint migration created the team platform-team and bob was confirmed: Ready |
 | `plat/with-secrets` | plat-with-secrets | Ready: `secrets.set-value` (post) | - |
 | `plat/open-pr` | plat-open-pr | Blocked: `change-requests.open` (B) | - |
 | `data/unmapped-user` | data-unmapped-user | NeedsAttention: `access-control.unmapped-principal` (pre) | - |
