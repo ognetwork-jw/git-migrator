@@ -77,9 +77,9 @@
 | [0093](0093-guidance-messages-and-i18n.md) | Where guidance messages live, and how next-intl renders them | accepted (spec updated) |
 | [0094](0094-guidance-severity-links-and-unverified-urls.md) | Guidance severity model, and links that could not be verified | accepted (spec updated) |
 | [0095](0095-naming-semantics.md) | Naming pipeline semantics, validation and collision keys | accepted (spec updated) |
-| [0100](0100-git-refs-facet.md) | git-refs facet semantics | agent-decided |
-| [0101](0101-merge-settings-facet.md) | merge-settings facet semantics | agent-decided |
-| [0102](0102-repository-settings-facet.md) | repository-settings facet semantics | agent-decided |
-| [0103](0103-facets-guidance-test-edge.md) | Guidance coverage test for the git/settings facets lives in testing/integration | agent-decided |
+| [0100](0100-git-refs-facet.md) | git-refs facet semantics | accepted (spec updated) |
+| [0101](0101-merge-settings-facet.md) | merge-settings facet semantics | accepted (spec updated) |
+| [0102](0102-repository-settings-facet.md) | repository-settings facet semantics | accepted (spec updated) |
+| [0103](0103-facets-guidance-test-edge.md) | Guidance coverage test for the git/settings facets lives in testing/integration | accepted (no spec change needed) |
 
 New ADRs continue from 0028. Implementor decisions use `status: agent-decided` (PROC-005). T-002 uses 0065–0069.

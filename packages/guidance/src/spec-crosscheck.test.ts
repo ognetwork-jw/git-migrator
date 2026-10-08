@@ -66,6 +66,7 @@ const KNOWN_POLICY_KEYS: readonly string[] = [
   'code-ownership.owner-insufficient-access',
   'environments.category-dropped',
   'merge-settings.ff-only-as-rebase',
+  'repository-settings.description-truncated',
   'repository-settings.public-fork-policy',
   'variables.uppercase-names',
   'webhooks.event-dropped',

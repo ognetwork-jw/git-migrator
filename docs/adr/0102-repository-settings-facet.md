@@ -1,6 +1,6 @@
 # ADR-0102: repository-settings facet semantics
 
-- Status: agent-decided
+- Status: accepted (spec updated)
 - Date: 2026-10-08
 - Task: T-050
 - Affects: FAC-SET, FAC-SET-001, FAC-SET-002, FAC-SET-003, FAC-005

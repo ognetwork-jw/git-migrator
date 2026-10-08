@@ -1,6 +1,6 @@
 # ADR-0101: merge-settings facet semantics
 
-- Status: agent-decided
+- Status: accepted (spec updated)
 - Date: 2026-10-08
 - Task: T-050
 - Affects: FAC-MRG-001, FAC-MRG-002, FAC-005

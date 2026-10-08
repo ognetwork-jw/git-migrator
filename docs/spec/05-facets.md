@@ -76,7 +76,7 @@ type GitRefs = {
 - **FAC-GIT-003 Fidelity.** Exact.
 - **FAC-GIT-004 Large blobs.** During `git.prepare`, every reachable blob larger than the target's `maxBlobBytes` raises blocker `git-refs.blob-too-large` with path and size params, and the Run stops before any target write. Blobs between 50 MiB and 100 MiB raise warning `git-refs.blob-large`.
 - **FAC-GIT-005 LFS parity.** After pushing, every LFS OID referenced by any ref in the mirror (`git lfs ls-files --all --long`) MUST exist on the target, checked through the LFS batch API `download` operation. Drift checks re-verify LFS only when refs changed.
-- **FAC-GIT-006 Post-cutover containment.** Once `sourceReadOnlyApplied` is true, git parity relaxes for drift purposes. Each source ref must exist on the target, and the target ref must equal it or descend from it (GitHub compare API: `identical` or `ahead`). Extra target refs are allowed. This permits normal development after cutover, including merging the framework's Change Requests.
+- **FAC-GIT-006 Post-cutover containment.** Once `sourceReadOnlyApplied` is true, git parity relaxes for drift purposes. Each source ref must exist on the target, and the target ref must equal it or descend from it (GitHub compare API: `identical` or `ahead`). Extra target refs are allowed. This permits normal development after cutover, including merging the framework's Change Requests. The facet's `compare` stays strict; the drift check applies containment on top of it (ADR-0100).
 - **FAC-GIT-007** Refs under `refs/heads/git-migrator/` on the target are framework branches for Change Requests. Config sync (DATA-030 step 5) creates one system Expected Difference per Route: `framework_mutation`, facet `git-refs`, path `/refs[name=refs/heads/git-migrator/*]`.
 - **Findings:** `git-refs.blob-too-large` B · `git-refs.blob-large` W · `git-refs.hidden-refs-skipped` W (lists ignored refs) · `git-refs.empty-repository` W (source has no refs; the Migration creates an empty target).
 
@@ -94,11 +94,11 @@ type RepositorySettings = {
 
 | Field | Bitbucket | GitHub | Fidelity |
 |---|---|---|---|
-| description | `description` | `description` (truncated at 350 chars → lossy) | exact |
+| description | `description` | `description` (truncated at 350 chars → lossy, `repository-settings.description-truncated`) | exact |
 | homepage | `website` | `homepage` | exact |
 | visibility | `is_private` | `private` | exact |
 | features.issues / wiki | `has_issues` / `has_wiki` | `has_issues` / `has_wiki` | exact (content not migrated, see `extras`) |
-| forking | `fork_policy`: `allow_forks` → allowed, `no_public_forks` → private-only, `no_forks` → disallowed | `allow_forking` | private repo: `private-only` ≡ `allowed` (translated). Public repo with `private-only`: lossy (`repository-settings.public-fork-policy`, maps to `allow_forking: true`). |
+| forking | `fork_policy`: `allow_forks` → allowed, `no_public_forks` → private-only, `no_forks` → disallowed | `allow_forking` | private repo: `private-only` ≡ `allowed` (translated). Public repo with `private-only` or `disallowed`: lossy (`repository-settings.public-fork-policy`; `private-only` maps to `allow_forking: true`). |
 
 - **FAC-SET-001** The target repository name is not part of this Facet. It comes from naming rules (LIF-030), and parity compares it to `Migration.plannedTargetName`.
 - **FAC-SET-002** `allow_forking` is only writable when the target organization permits private forking. If it doesn't, the adapter reports `unsupported` and the Facet emits `repository-settings.org-forking-disabled` as a post task.
@@ -116,7 +116,7 @@ type MergeSettings = {
 
 - **FAC-MRG-001 Mapping to GitHub.** `merge-commit` → `allow_merge_commit`, `squash` → `allow_squash_merge`, `rebase` → `allow_rebase_merge`. Bitbucket's rebase variants (`rebase_merge`, `rebase_fast_forward`) map to `rebase`, translated. `fast-forward-only` has no GitHub equivalent and maps to `rebase`, lossy with policy key `merge-settings.ff-only-as-rebase`. `deleteBranchOnMerge` ↔ GitHub `delete_branch_on_merge`.
 - **FAC-MRG-002 Bitbucket readability.** Resolved by T-030 (ADR-0035): both values are exposed and MUST be read.
-  - `allowed` comes from `merge_strategies` on the repository's main branch (`GET …/refs/branches/{mainbranch}`). `squash_fast_forward` is mapped by T-050.
+  - `allowed` comes from `merge_strategies` on the repository's main branch (`GET …/refs/branches/{mainbranch}`). The Bitbucket reader maps strategies to canonical values before the facet sees them (`squash` and `squash_fast_forward` → `squash`, `rebase_*` → `rebase`, `fast_forward` → `fast-forward-only`), so `squash_fast_forward` is not lossy (ADR-0101).
   - `deleteBranchOnMerge` comes from `default_branch_deletion` on `GET …/branching-model/settings` (a string `"true"`/`"false"` absent from the schema; accept string or boolean).
   - A field that cannot be read (403, 404, missing field, or no main branch) is `unreadable` on the source. The desired target uses `routes[].defaults.mergeSettings` from config (default: all three GitHub strategies allowed, `deleteBranchOnMerge: true`). The analysis records an `unreadable_defaulted` Expected Difference automatically, with no task.
   - Whether these values reflect project-level inheritance is unverified; the live e2e validates it (ADR-0036).

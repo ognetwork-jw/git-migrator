@@ -30,8 +30,8 @@ The orchestrator maintains this table (see [workflow](workflow.md)). Integration
 | T-041 | merged | task/T-041-fake-bitbucket | [#5](https://github.com/ognetwork-jw/git-migrator/pull/5) | 2 | merged to ai-main 69844e8; ADR-0060/0061 accepted |
 | T-042 | merged | task/T-042-fake-github | [#12](https://github.com/ognetwork-jw/git-migrator/pull/12) | 5 | merged to ai-main ec3f28a; ADR-0075..0077 accepted (fake internals, no spec change) |
 | T-043 | in_progress | task/T-043-fixture-world | | 0 | implementing (ADR range 0130-0134) |
-| T-050 | in_review | task/T-050-facets-git-settings | [#16](https://github.com/ognetwork-jw/git-migrator/pull/16) | 1 | r1 ACCEPTABLE (MINORs → followups.md); merge pending |
-| T-051 | in_review | task/T-051-facets-access-codeowners | [#15](https://github.com/ognetwork-jw/git-migrator/pull/15) | 2 | r1: 2 MAJOR fixed (a40bac0); round-2 review |
+| T-050 | merged | task/T-050-facets-git-settings | [#16](https://github.com/ognetwork-jw/git-migrator/pull/16) | 1 | merged to ai-main 3a7d6a2; ADR-0100..0102 folded into 05-facets, 0103 accepted |
+| T-051 | in_review | task/T-051-facets-access-codeowners | [#15](https://github.com/ognetwork-jw/git-migrator/pull/15) | 3 | r2: 1 MAJOR (unreadable team membership drops owner); fix pass |
 | T-052 | in_review | task/T-052-facets-branch-rules | [#17](https://github.com/ognetwork-jw/git-migrator/pull/17) | 1 | round-1 review (spec ACCEPTABLE) |
 | T-053 | todo |  | | | |
 | T-054 | todo |  | | | |

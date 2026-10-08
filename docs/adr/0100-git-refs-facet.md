@@ -1,6 +1,6 @@
 # ADR-0100: git-refs facet semantics
 
-- Status: agent-decided
+- Status: accepted (spec updated)
 - Date: 2026-10-08
 - Task: T-050
 - Affects: FAC-GIT-001, FAC-GIT-002, FAC-GIT-003, FAC-GIT-004, FAC-GIT-005, FAC-GIT-006, FAC-GIT-007

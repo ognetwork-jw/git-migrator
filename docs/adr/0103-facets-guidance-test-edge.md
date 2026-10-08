@@ -1,6 +1,6 @@
 # ADR-0103: guidance coverage test for the git/settings facets lives in testing/integration
 
-- Status: agent-decided
+- Status: accepted (no spec change needed)
 - Date: 2026-10-08
 - Task: T-050
 - Affects: ARC-012, FAC-002
