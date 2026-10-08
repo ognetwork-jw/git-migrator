@@ -73,7 +73,7 @@ export const RULES: Readonly<Record<string, readonly string[]>> = {
 export const TEST_SUPPORT = ['provider-fakes', 'fixtures'] as const;
 
 export interface Violation {
-  rule: 'ARC-012';
+  rule: 'ARC-012' | 'ADP-060';
   file: string;
   message: string;
 }
@@ -369,6 +369,156 @@ export function findModuleReferences(
   return { references, ok };
 }
 
+/** Modules that open provider connections on their own. Adapters use `ProviderHttpClient` (ADP-060). */
+export const FORBIDDEN_HTTP_MODULES: ReadonlySet<string> = new Set([
+  'http',
+  'https',
+  'http2',
+  'net',
+  'tls',
+  'dgram',
+  'dns',
+  'child_process',
+  'worker_threads',
+  'cloudflare:sockets',
+  'ws',
+  'undici',
+  'axios',
+  'got',
+  'ky',
+  'node-fetch',
+  'superagent',
+  'needle',
+  'request',
+]);
+
+/** Globals (as members of the global object, or bare) that open connections. */
+const BANNED_GLOBALS: ReadonlySet<string> = new Set([
+  'fetch',
+  'XMLHttpRequest',
+  'WebSocket',
+  'EventSource',
+]);
+const GLOBAL_OBJECTS: readonly string[] = ['globalThis', 'self', 'window', 'global'];
+
+/** Names bound anywhere in the file (variables, parameters, functions, classes, catch). */
+function boundNames(program: Node): Set<string> {
+  const bound = new Set<string>();
+  const pattern = (p: Node | undefined): void => {
+    if (!p) return;
+    switch (p.type) {
+      case 'Identifier':
+        bound.add(p.name as string);
+        break;
+      case 'ObjectPattern':
+        for (const prop of p.properties as Node[])
+          pattern(prop.type === 'Property' ? prop.value : prop);
+        break;
+      case 'ArrayPattern':
+        for (const el of p.elements as Node[]) pattern(el);
+        break;
+      case 'AssignmentPattern':
+        pattern(p.left);
+        break;
+      case 'RestElement':
+        pattern(p.argument);
+        break;
+    }
+  };
+  walkAst(program, (n) => {
+    if (n.type === 'VariableDeclarator') pattern(n.id);
+    else if (n.type === 'FunctionDeclaration' || n.type === 'ClassDeclaration') pattern(n.id);
+    else if (n.type === 'CatchClause') pattern(n.param);
+    if (
+      n.type === 'FunctionDeclaration' ||
+      n.type === 'FunctionExpression' ||
+      n.type === 'ArrowFunctionExpression'
+    ) {
+      for (const param of (n.params ?? []) as Node[]) pattern(param);
+    }
+  });
+  return bound;
+}
+
+/**
+ * Direct HTTP in adapter source (ADP-060): the global `fetch`, `XMLHttpRequest`, `WebSocket` or
+ * `EventSource` (bare or as a member of the global object), `navigator.sendBeacon`, `eval` and
+ * the `Function` constructor, `process.getBuiltinModule` of a banned module, and imports of HTTP
+ * and socket modules. Other members of the global object (`globalThis.crypto`, `typeof window`)
+ * and names shadowed by a local binding are fine; aliasing, destructuring, computed access and
+ * `Reflect` use of the global object are not, because they can reach `fetch` unnamed.
+ *
+ * This is a lint-level guard, not a sandbox: determined code can still evade a static check. The
+ * SDK's runtime origin pinning and host allowlist are the backstop.
+ */
+export function findDirectHttp(source: string, filename = 'file.ts'): string[] {
+  const { program, ok } = parse(source, filename);
+  if (!ok) return ['could not be parsed'];
+  const found: string[] = [];
+  const names = new Set<Node>();
+  const explained = new Set<Node>();
+  const bound = boundNames(program);
+  const isGlobal = (name: unknown): boolean =>
+    typeof name === 'string' && GLOBAL_OBJECTS.includes(name) && !bound.has(name);
+  walkAst(program, (n) => {
+    if (n.type === 'MemberExpression' && !n.computed && n.property) names.add(n.property as Node);
+    if ((n.type === 'Property' || n.type === 'PropertyDefinition') && !n.computed && n.key) {
+      names.add(n.key as Node);
+    }
+    if (n.type === 'MemberExpression' && n.object?.type === 'Identifier' && !n.computed) {
+      const object = n.object.name as string;
+      const property = n.property?.name as string | undefined;
+      if (isGlobal(object) && property !== undefined) {
+        // A static member of the global object is fine unless it opens connections.
+        explained.add(n.object as Node);
+        if (BANNED_GLOBALS.has(property)) found.push('globalThis.fetch');
+      }
+      if (object === 'navigator' && !bound.has('navigator') && property === 'sendBeacon') {
+        found.push('navigator.sendBeacon');
+      }
+    }
+    if (
+      n.type === 'UnaryExpression' &&
+      n.operator === 'typeof' &&
+      n.argument?.type === 'Identifier'
+    ) {
+      explained.add(n.argument as Node);
+    }
+    if (
+      (n.type === 'CallExpression' || n.type === 'NewExpression') &&
+      n.callee?.type === 'Identifier'
+    ) {
+      const callee = n.callee.name as string;
+      if ((callee === 'eval' || callee === 'Function') && !bound.has(callee)) {
+        found.push(`${callee} (dynamic code)`);
+      }
+    }
+    if (n.type === 'CallExpression' && n.callee?.type === 'MemberExpression') {
+      const callee = n.callee as Node;
+      if (callee.property?.name === 'getBuiltinModule' && !callee.computed) {
+        const arg = stringValue(n.arguments?.[0] as Node | undefined);
+        const first = arg?.value.replace(/^node:/, '').split('/')[0] ?? '';
+        if (arg === undefined || arg.dynamic || FORBIDDEN_HTTP_MODULES.has(first)) {
+          found.push(`process.getBuiltinModule(${arg?.dynamic === false ? arg.value : '…'})`);
+        }
+      }
+    }
+  });
+  walkAst(program, (n) => {
+    if (n.type !== 'Identifier' || names.has(n) || explained.has(n)) return;
+    const name = n.name as string;
+    if (bound.has(name)) return;
+    if (BANNED_GLOBALS.has(name)) found.push(name);
+    else if (isGlobal(name)) found.push(`use of the global object (${name})`);
+  });
+  const { references } = findModuleReferences(source, filename);
+  for (const ref of references) {
+    const first = ref.specifier.replace(/^node:/, '').split('/')[0] ?? '';
+    if (FORBIDDEN_HTTP_MODULES.has(first)) found.push(`import of ${ref.specifier}`);
+  }
+  return [...new Set(found)];
+}
+
 function isTestFile(ws: Workspace, file: string): boolean {
   return TEST_FILE.test(file) || (ws.isTesting && SPEC_FILE.test(file));
 }
@@ -516,6 +666,15 @@ export function checkDependencies(root: string): Violation[] {
         );
       const { references, ok } = findModuleReferences(readFileSync(file, 'utf8'), file);
       if (!ok) add(file, 'could not be parsed (syntax error); fix the file');
+      if (ws.isAdapter && !testFile) {
+        for (const what of findDirectHttp(readFileSync(file, 'utf8'), file)) {
+          violations.push({
+            rule: 'ADP-060',
+            file: relative(root, file),
+            message: `${what}: provider HTTP must go through ProviderHttpClient (ADP-060)`,
+          });
+        }
+      }
       for (const ref of references) {
         const { dynamic } = ref;
         // A path through node_modules/@git-migrator/ is the package, not a relative file.

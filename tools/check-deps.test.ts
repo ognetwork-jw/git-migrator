@@ -4,7 +4,7 @@ import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { afterEach, describe, expect, it } from 'vitest';
-import { checkDependencies } from './check-deps.ts';
+import { checkDependencies, findDirectHttp } from './check-deps.ts';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const repoRoot = join(here, '..');
@@ -468,5 +468,94 @@ describe('ARC-012 dependency-rule check', () => {
     expect(checkDependencies(root).map((v) => v.file)).toEqual([
       join('packages', 'core', 'src', 'build', 'y.ts'),
     ]);
+  });
+});
+
+describe('ADP-060 adapters make no direct HTTP calls', () => {
+  it('[ADP-060] flags fetch calls, references, global access and HTTP imports', () => {
+    expect(findDirectHttp("await fetch('https://x');")).toEqual(['fetch']);
+    expect(findDirectHttp('const f = fetch;')).toEqual(['fetch']);
+    expect(findDirectHttp('globalThis.fetch(u);')).toEqual(['globalThis.fetch']);
+    expect(findDirectHttp("import https from 'node:https';")).toEqual(['import of node:https']);
+    expect(findDirectHttp("import { request } from 'undici';")).toEqual(['import of undici']);
+    expect(findDirectHttp('new XMLHttpRequest();')).toEqual(['XMLHttpRequest']);
+  });
+
+  it('[ADP-060] flags sub-path imports, sockets, WebSocket and global-object tricks', () => {
+    expect(findDirectHttp("import { request } from 'undici/lib/x';")).toEqual([
+      'import of undici/lib/x',
+    ]);
+    expect(findDirectHttp("import net from 'node:net';")).toEqual(['import of node:net']);
+    expect(findDirectHttp("import tls from 'tls'; import d from 'dgram';")).toEqual([
+      'import of tls',
+      'import of dgram',
+    ]);
+    expect(findDirectHttp("new WebSocket('wss://x');")).toEqual(['WebSocket']);
+    expect(findDirectHttp('const g = globalThis; g.fetch(u);')).toEqual([
+      'use of the global object (globalThis)',
+    ]);
+    expect(findDirectHttp('const { fetch: f } = globalThis;')).toEqual([
+      'use of the global object (globalThis)',
+    ]);
+    expect(findDirectHttp("Reflect.get(globalThis, 'fetch');")).toEqual([
+      'use of the global object (globalThis)',
+    ]);
+    expect(findDirectHttp("globalThis['fe' + 'tch'](u);")).toEqual([
+      'use of the global object (globalThis)',
+    ]);
+    expect(findDirectHttp('self.fetch(u); window.fetch(u); global.fetch(u);')).toEqual([
+      'globalThis.fetch',
+    ]);
+  });
+
+  it('[ADP-060] allows ordinary members of the global object, typeof checks and local bindings', () => {
+    expect(findDirectHttp('const id = globalThis.crypto.randomUUID();')).toEqual([]);
+    expect(findDirectHttp('globalThis.setTimeout(f, 1); global.queueMicrotask(f);')).toEqual([]);
+    expect(findDirectHttp("const isBrowser = typeof window !== 'undefined';")).toEqual([]);
+    expect(findDirectHttp('const self = { a: 1 }; export const b = self.a;')).toEqual([]);
+    expect(findDirectHttp('export function f(self: number) { return self + 1; }')).toEqual([]);
+    expect(findDirectHttp('function fetch(x: number) { return x; } fetch(1);')).toEqual([]);
+  });
+
+  it('[ADP-060] flags the remaining bypasses', () => {
+    expect(findDirectHttp("process.getBuiltinModule('node:http');")).toEqual([
+      'process.getBuiltinModule(node:http)',
+    ]);
+    expect(findDirectHttp('process.getBuiltinModule(name);')).toEqual([
+      'process.getBuiltinModule(…)',
+    ]);
+    expect(findDirectHttp("process.getBuiltinModule('node:path');")).toEqual([]);
+    expect(findDirectHttp("eval('fetch(u)');")).toEqual(['eval (dynamic code)']);
+    expect(findDirectHttp("new Function('return fetch')();")).toEqual(['Function (dynamic code)']);
+    for (const m of ['dns', 'node:child_process', 'worker_threads', 'cloudflare:sockets']) {
+      expect(findDirectHttp(`import x from '${m}'; export default x;`)).toEqual([`import of ${m}`]);
+    }
+    expect(findDirectHttp("new EventSource('https://x');")).toEqual(['EventSource']);
+    expect(findDirectHttp("navigator.sendBeacon('https://x');")).toEqual(['navigator.sendBeacon']);
+    expect(findDirectHttp('globalThis.WebSocket;')).toEqual(['globalThis.fetch']);
+  });
+
+  it('[ADP-060] allows property names called fetch and the SDK client', () => {
+    expect(findDirectHttp('const x = ctx.fetch; const o = { fetch: 1 };')).toEqual([]);
+    expect(
+      findDirectHttp("import { ProviderHttpClient } from '@git-migrator/adapter-sdk';"),
+    ).toEqual([]);
+  });
+
+  it('[ADP-060] check-deps reports adapter source but not adapter tests or other packages', () => {
+    const root = fixture({
+      'packages/adapter-sdk': {},
+      'packages/canonical': {},
+      'packages/core': {},
+      'packages/adapters/x': {
+        deps: ['adapter-sdk'],
+        src: "export const get = () => fetch('https://x');\n",
+        files: { 'src/a.test.ts': "import http from 'node:http';\nexport const t = http;\n" },
+      },
+      'packages/git': { src: "export const get = () => fetch('https://x');\n" },
+    });
+    const violations = checkDependencies(root).filter((v) => v.rule === 'ADP-060');
+    expect(violations).toHaveLength(1);
+    expect(violations[0]?.file).toBe('packages/adapters/x/src/index.ts');
   });
 });
