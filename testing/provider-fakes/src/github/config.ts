@@ -117,7 +117,7 @@ export interface FakeGitHubOptions {
   /** Initial runtime configuration; also overridable per reset and via `POST /__config`. */
   config?: Partial<RuntimeConfig>;
   /** Named fixtures for `POST /__reset`, run against freshly reset state. `empty` is built in. */
-  fixtures?: Record<string, (state: import('./state.ts').GitHubState) => void>;
+  fixtures?: Record<string, (state: import('./state.ts').GitHubState) => void | Promise<void>>;
   /**
    * Allowed `iat` clock skew in seconds. GitHub rejects an `iat` in the future, which is why the docs
    * suggest backdating it by 60 s. Default 0.

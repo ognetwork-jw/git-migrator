@@ -69,8 +69,11 @@ export interface FakeBitbucket {
   state: BitbucketState;
   limiter: RateLimiter;
   config: RuntimeConfig;
-  /** Same as `POST /__reset`. Throws on an unknown fixture name. */
-  reset(fixture?: string, overrides?: ResetOverrides): void;
+  /**
+   * Same as `POST /__reset`. Throws on an unknown fixture name. Returns a promise only when the
+   * fixture builder is async; resets requested meanwhile queue behind it.
+   */
+  reset(fixture?: string, overrides?: ResetOverrides): void | Promise<void>;
 }
 
 export interface ResetOverrides {
@@ -130,6 +133,11 @@ export function createFakeBitbucket(options: FakeBitbucketOptions = {}): FakeBit
   const webBase = options.webBaseUrl ?? 'https://bitbucket.org';
   const gitBase = options.gitBaseUrl ?? 'http://localhost:4030';
 
+  /** Set while an async fixture builder runs (ADR-0130). */
+  let pendingReset: Promise<void> | undefined;
+  /** True from the start of a reset until its builder succeeded: a failed builder leaves half a world. */
+  let incomplete = false;
+
   const fake: FakeBitbucket = {
     app: new Hono(),
     state,
@@ -144,12 +152,34 @@ export function createFakeBitbucket(options: FakeBitbucketOptions = {}): FakeBit
           `Unknown fixture '${name}'. Known: ${Object.keys(fixtures).join(', ')}`,
         );
       }
+      // An async builder is still running: queue behind it instead of resetting state under it.
+      if (pendingReset) {
+        const run = () => fake.reset(fixture, overrides);
+        return pendingReset.then(run, run);
+      }
       Object.assign(config, defaults());
       if (overrides.groupsEndpoint) config.groupsEndpoint = overrides.groupsEndpoint;
       if (overrides.putSemantics) config.putSemantics = overrides.putSemantics;
       limiter.reset({ ...(options.limits ?? {}), ...(overrides.limits ?? {}) });
       state.reset(name);
-      build(state);
+      incomplete = true;
+      const built = build(state);
+      if (!built) {
+        incomplete = false;
+        return;
+      }
+      const done: Promise<void> = built.then(
+        () => {
+          incomplete = false;
+          if (pendingReset === done) pendingReset = undefined;
+        },
+        (error) => {
+          if (pendingReset === done) pendingReset = undefined;
+          throw error;
+        },
+      );
+      pendingReset = done;
+      return done;
     },
   };
 
@@ -160,6 +190,13 @@ export function createFakeBitbucket(options: FakeBitbucketOptions = {}): FakeBit
     if (e instanceof QueryError) return c.json(errorBody(e.message), 400);
     if (e instanceof PageNotFoundError) return c.json(errorBody(e.message), 404);
     return c.json(errorBody(e instanceof Error ? e.message : 'Internal error'), 500);
+  });
+  // While an async fixture builds the world, the REST API would show half a world.
+  app.use('*', async (c, next) => {
+    if (incomplete && !c.req.path.startsWith('/__')) {
+      return c.json(errorBody('The fake is being reset, try again'), 503);
+    }
+    return next();
   });
   app.notFound((c) => c.json(errorBody(`No such resource: ${c.req.method} ${c.req.path}`), 404));
 
@@ -176,7 +213,7 @@ export function createFakeBitbucket(options: FakeBitbucketOptions = {}): FakeBit
       }
     }
     const fixture = typeof body.fixture === 'string' ? body.fixture : 'empty';
-    fake.reset(fixture, toOverrides(body));
+    await fake.reset(fixture, toOverrides(body));
     return c.json({ ok: true, fixture });
   });
 
@@ -191,12 +228,14 @@ export function createFakeBitbucket(options: FakeBitbucketOptions = {}): FakeBit
   });
 
   app.get('/__state', (c) =>
-    c.json({
-      fixture: state.data.fixture,
-      config,
-      limits: limiter.snapshot(),
-      state: state.snapshot(),
-    }),
+    incomplete
+      ? c.json(errorBody('The fake is being reset, try again'), 503)
+      : c.json({
+          fixture: state.data.fixture,
+          config,
+          limits: limiter.snapshot(),
+          state: state.snapshot(),
+        }),
   );
 
   // A `src` path is a file download (raw-files) unless it names a directory of the tree.

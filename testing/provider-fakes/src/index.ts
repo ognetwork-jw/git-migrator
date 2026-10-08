@@ -11,4 +11,4 @@ export {
   type FakeGitHubOptions,
   startFakeGitHub,
 } from './github/index.ts';
-export { type RunningFakes, type StartOptions, startFakes } from './start.ts';
+export { DEFAULT_PORTS, type RunningFakes, type StartOptions, startFakes } from './start.ts';

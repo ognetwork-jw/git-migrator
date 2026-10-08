@@ -54,7 +54,7 @@ export function createFakeGitHub(options: FakeGitHubOptions = {}): FakeGitHub {
   const state = new GitHubState(options);
   const limiter = new RateLimiter(state);
   const app = new Hono();
-  const fixtures: Record<string, (s: GitHubState) => void> = {
+  const fixtures: Record<string, (s: GitHubState) => void | Promise<void>> = {
     empty: () => {},
     ...options.fixtures,
   };
@@ -125,7 +125,7 @@ export function createFakeGitHub(options: FakeGitHubOptions = {}): FakeGitHub {
       state.reset(overrides);
       limiter.clear();
       state.fixture = fixture || 'empty';
-      run(state);
+      await run(state);
     } finally {
       resetting = false;
       idle = undefined;
