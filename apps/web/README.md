@@ -2,7 +2,18 @@
 
 Next.js app: UI and Hono API.
 
-Status: the API is mounted (T-021); the UI shell is a later task (T-080). `pnpm dev` still runs the placeholder server in `src/dev-server.ts`, which does not serve the API yet.
+Status: the API is mounted (T-021) and the UI shell exists (T-080). `pnpm dev` runs `next dev` (HOST and PORT honoured).
+
+## UI shell (UI-001, UI-010, UI-036)
+
+- `app/` is the App Router: `layout.tsx` (next-intl, `AntdRegistry layer`, theme and query providers), `(shell)/` (signed-in pages inside the sidebar layout), `signin`, `auth/error`. Pages the later UI tasks build answer through `(shell)/[...slug]` until they exist.
+- CSS: `app/globals.css` declares the layer order `theme, base, antd, components, utilities`, so Tailwind utilities beat antd, which beats Tailwind's reset. Do not reorder it. Themes follow the OS (`theme.algorithm` plus Tailwind `dark:`).
+- `src/shell/navigation.ts` is the single table of sidebar items and their capability (ADR-0300). `app-shell.tsx` loads the Actor from `GET /api/v1/me`, redirects signed-out visitors to `/signin?next=` and Actors without the role to `/denied?required=<role>`. Server routes still enforce permissions.
+- Strings: every text is in `messages/en.json`; a test fails on literal JSX text. The live indicator shows the `polling` mode of `useLiveInvalidation` (`shell.live.polling`).
+- Sign-in: Entra button, plus the test form when `auth.testSignIn.enabled` (read on the server by `src/server/settings.ts`). `/auth/error?error=<code>` renders `auth.error.<code>`.
+- Antd compound components (`Typography.Title`, ...) must be used from client components; server pages use `src/ui/page-heading.tsx`.
+- Build: `pnpm --filter @git-migrator/web build` (`tsc -b && next build`, standalone output). `pnpm --filter @git-migrator/web start` runs `.next/standalone` (ADR-0301).
+- Visual regression: `pnpm test:visual` (Playwright in `testing/e2e/visual`, mocked API). Update baselines with `pnpm --filter @git-migrator/e2e exec playwright test --config visual/playwright.config.ts --update-snapshots` after a build.
 
 ## Production entrypoint (DEP-002, ADR-0290)
 

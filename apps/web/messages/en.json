@@ -1,5 +1,93 @@
 {
+  "app": {
+    "name": "git-migrator",
+    "description": "Migrate repositories between git providers."
+  },
+  "shell": {
+    "skipToContent": "Skip to content",
+    "openMenu": "Open navigation menu",
+    "closeMenu": "Close navigation menu",
+    "navigation": "Main navigation",
+    "menuTitle": "Navigation",
+    "signedInAs": "Signed in as {name}",
+    "role": {
+      "viewer": "Viewer",
+      "operator": "Operator",
+      "admin": "Admin"
+    },
+    "signOut": "Sign out",
+    "signingOut": "Signing out",
+    "loading": "Loading your account",
+    "retry": "Try again",
+    "failed": "Your account could not be loaded",
+    "live": {
+      "label": "Live updates",
+      "connecting": "Connecting",
+      "sse": "Live",
+      "polling": "Polling",
+      "pollingHint": "The live connection is unavailable. Data refreshes every few seconds."
+    }
+  },
+  "nav": {
+    "section": {
+      "migration": "Migration",
+      "people": "People",
+      "configuration": "Configuration",
+      "admin": "Admin"
+    },
+    "item": {
+      "dashboard": "Dashboard",
+      "repositories": "Repositories",
+      "waves": "Waves",
+      "endpoints": "Endpoints",
+      "identities": "Identity mapping",
+      "teams": "Team mapping",
+      "invitations": "Invitations",
+      "naming": "Naming rules",
+      "webhookAllowlist": "Webhook allowlist",
+      "overlays": "Overlays",
+      "capabilities": "Capability matrix",
+      "actors": "Actors and API keys",
+      "audit": "Audit log"
+    }
+  },
+  "dashboard": {
+    "title": "Dashboard",
+    "placeholder": "The dashboard shows status, readiness, Waves, quota and recent Runs. It arrives with the next UI release."
+  },
+  "comingSoon": {
+    "title": "{page}",
+    "body": "This page is not available yet. It arrives with a later UI release."
+  },
+  "notFound": {
+    "title": "Page not found",
+    "body": "There is nothing at this address.",
+    "back": "Back to the dashboard"
+  },
+  "denied": {
+    "title": "Your role does not allow this page",
+    "body": "This page needs the {required} role. You are signed in as {name} with the {role} role. Ask an administrator if you need access.",
+    "bodyUnknown": "This page needs a higher role than yours. Ask an administrator if you need access.",
+    "back": "Back to the dashboard"
+  },
   "auth": {
+    "signin": {
+      "title": "Sign in to git-migrator",
+      "subtitle": "Use your organization account to continue.",
+      "entra": "Sign in with Microsoft",
+      "starting": "Redirecting to Microsoft",
+      "testHeading": "Test sign-in",
+      "testNotice": "Test sign-in is enabled for this environment. It is not available in production.",
+      "email": "Email",
+      "password": "Password",
+      "submit": "Sign in",
+      "emailRequired": "Enter your email address.",
+      "passwordRequired": "Enter your password.",
+      "invalidCredentials": "The email or password is not correct."
+    },
+    "errorPage": {
+      "backToSignIn": "Back to sign-in"
+    },
     "error": {
       "title": "Sign-in was not completed",
       "role_assignment_required": "You are not assigned an app role for git-migrator. Ask a tenant administrator to assign you one of the git-migrator app roles in Microsoft Entra ID, then sign in again.",
