@@ -1,6 +1,6 @@
 # ADR-0130: Fixture world structure, async fixtures and expectation derivation
 
-- Status: agent-decided
+- Status: accepted (no spec change needed)
 - Date: 2026-10-08
 - Task: T-043
 - Affects: TST-012, TST-010, TST-011, TST-013, LIF-031, FAC-MRG-001, FAC-DKY-003
