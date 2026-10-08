@@ -30,7 +30,7 @@ Use the ZenStack RPC API whenever policy-guarded CRUD over models is enough. A c
 3. spans multiple models with domain rules (state machine, Expected Difference creation, audit); or
 4. returns computed data not stored as a model.
 
-**API-011** Custom endpoints validate input and output with Zod, and errors use RFC 9457 `application/problem+json` with `type` URIs `https://git-migrator.invalid/problems/<code>`. List endpoints use cursor pagination (`cursor`, `limit` ≤ 200).
+**API-011** Custom endpoints validate input and output with Zod, and errors use RFC 9457 `application/problem+json` with `type` URIs `https://git-migrator.invalid/problems/<code>`. List endpoints use cursor pagination (`cursor`, `limit` ≤ 200). Every 4xx and 5xx under `/api/v1` is `application/problem+json`, including those from framework code (`bad_request` 400, `unsupported_media_type` 415). The RPC mount answers an operation it does not expose with 404, and every 5xx with a generic `internal_error` that carries no internal message (ADR-0202).
 
 **API-012 RPC write allow-list.** All models are default-deny for writes through RPC (DOM-005). The only RPC writes permitted are:
 
@@ -38,6 +38,8 @@ Use the ZenStack RPC API whenever policy-guarded CRUD over models is enough. A c
 - `Migration.waveId`: update (operator).
 - `NamingRule`, `WebhookAllowlistEntry`, `Overlay`: create, update, delete (admin). The server marks affected Analyses stale via a ZenStack after-mutation hook.
 - `ManualTask.note`: update (operator).
+
+Primary keys are immutable through RPC.
 
 Everything else is read-only through RPC, including Actor, ApiKey, mappings, invitations, Expected Differences and ManualTask status, and changes only through `/api/v1`. API keys' `hash` is denied for **read** to every role, admin included, because no AUTH-020 row grants it; key verification (AUTH-040) reads it with the server-only client. RawResponse bodies are denied for read to viewers (ADR-0122).
 
@@ -68,12 +70,12 @@ All are under `/api/v1`. The required role is shown in brackets.
 | `POST /routes/{id}/naming/preview` [operator] | `{rule}` | Names and collisions for the rule |
 | `GET /migrations/{id}/diff` [viewer] | `?facetKey` | Latest ParityResult and Snapshots side by side |
 | `GET /quota` [viewer] | — | JOB-047 |
-| `GET /capability-matrix` [viewer] | — | Facet × source → target fidelity from registry capabilities |
+| `GET /capability-matrix` [viewer] | — | Facet × source → target fidelity from registry capabilities. Returns `{adapters, rows, ceiling: "static"}`: one row per Facet in dependency order, one cell per ordered pair of distinct adapters with `fidelity`, `read`, `write`, `override` and per-field `{path, source, target, fidelity}` (ADR-0260). |
 | `GET /dashboard` [viewer] | — | Aggregated counts (UI-020) |
 | `POST /actors` [admin] | `{displayName, role}` | Create a service Actor |
-| `PATCH /actors/{id}` [admin] | `{disabled?, role?}` | `role` is only allowed for service Actors |
-| `POST /actors/{id}/api-keys` [admin] | `{name, expiresAt?}` | Returns the key once |
+| `PATCH /actors/{id}` [admin] | `{disabled?, role?}` | `role` is only allowed for service Actors. 409 `last_admin` if the change would leave no enabled admin Actor (service Actors count). 409 `conflict` for self-disable and for a serialization failure. 422 for an empty body. Actor changes run one at a time. |
+| `POST /actors/{id}/api-keys` [admin] | `{name, expiresAt?}` | Returns the key once. 422 unless `expiresAt` is in the future. |
 | `DELETE /api-keys/{id}` [admin] | — | Revoke |
-| `GET /events` [viewer] | `?topics=` | SSE |
+| `GET /events` [viewer] | `?topics=` | SSE (JOB-060). 1 to 50 topics; an unknown topic is 422 `validation_failed`. 429 `too_many_streams` with `Retry-After: 5` over the stream limits. |
 
 Each endpoint has an integration test that covers its role requirement (403 for insufficient role) and its main success path (API-021).

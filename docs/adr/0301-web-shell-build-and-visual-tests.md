@@ -1,6 +1,6 @@
 # ADR-0301: Web shell build, standalone server and visual test placement
 
-- Status: agent-decided
+- Status: accepted (no spec change needed)
 - Date: 2026-10-08
 
 ## Context

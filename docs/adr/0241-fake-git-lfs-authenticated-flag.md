@@ -1,6 +1,6 @@
 # ADR-0241: The fake git server's LFS batch responses carry per-action headers
 
-- Status: agent-decided
+- Status: accepted (no spec change needed)
 - Date: 2026-10-08
 - Task: T-027
 - Affects: TST-013, ADP-071, FAC-GIT-005

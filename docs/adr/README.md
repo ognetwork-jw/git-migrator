@@ -110,36 +110,36 @@
 | [0170](0170-auth-claims-session-and-tenant.md) | Entra claims read in `validateUserInfo`, request-scoped hand-off to Actor sync, tenant check, denial surface | accepted (spec updated) |
 | [0171](0171-auth-provisioning-test-users-and-migration.md) | Actor linking, test sign-in users, production guard, programmatic Better Auth migration | accepted (spec updated) |
 | [0190](0190-adapter-sdk-design.md) | Adapter SDK design: interpret hook, quota gates, origin pinning, raw capture, test allowlist | accepted (spec updated) |
-| [0240](0240-git-package-design.md) | Git package design: askpass confined to one origin, quota interface, resumable mirror, adaptive batched push, injected LFS batch client | agent-decided |
-| [0241](0241-fake-git-lfs-authenticated-flag.md) | The fake git server's LFS batch responses carry per-action headers | agent-decided |
+| [0240](0240-git-package-design.md) | Git package design: askpass confined to one origin, quota interface, resumable mirror, adaptive batched push, injected LFS batch client | accepted (spec updated) |
+| [0241](0241-fake-git-lfs-authenticated-flag.md) | The fake git server's LFS batch responses carry per-action headers | accepted (no spec change needed) |
 | [0135](0135-headless-secrets-in-devenv-ci.md) | Headless secretspec route for the devenv CI job (env provider, test profile) | accepted (spec updated) |
 | [0136](0136-devenv-ci-cli-and-lock.md) | devenv CI pins the CLI to the v2.4.0 tag and uses the devenv cache; devenv.lock not committed yet | accepted (no spec change needed) |
 | [0137](0137-devenv-test-readiness.md) | devenv test waits on readiness probes; Postgres probed over the socket; CREATEDB for the app role | accepted (spec updated) |
-| [0210](0210-bullmq-runtime-wiring.md) | BullMQ runtime wiring: shared pool, job tracing, retries | agent-decided |
-| [0211](0211-worker-process-decisions.md) | Worker process decisions: scratch cleanup, retention gate, leader, entrypoints | agent-decided |
-| [0212](0212-reaper-and-pending-processors.md) | Run reaper details and processors owned by later tasks | agent-decided |
-| [0213](0213-worker-readiness-and-cold-start.md) | Worker readiness probe and cold start | agent-decided |
+| [0210](0210-bullmq-runtime-wiring.md) | BullMQ runtime wiring: shared pool, job tracing, retries | accepted (spec updated) |
+| [0211](0211-worker-process-decisions.md) | Worker process decisions: scratch cleanup, retention gate, leader, entrypoints | accepted (spec updated) |
+| [0212](0212-reaper-and-pending-processors.md) | Run reaper details and processors owned by later tasks | accepted (spec updated) |
+| [0213](0213-worker-readiness-and-cold-start.md) | Worker readiness probe and cold start | accepted (spec updated) |
 | [0220](0220-bitbucket-adapter-connection-and-inventory.md) | Bitbucket adapter config and credential shape, ids, bucket-key sanitising, inventory | accepted (no spec change needed) |
 | [0221](0221-bitbucket-facet-read-mappings.md) | Bitbucket Facet read mappings the spec leaves open (grants, enforcement, webhooks, failure policy) | accepted (spec updated) |
 | [0222](0222-bitbucket-source-lock.md) | Source read-only apply and undo, partial results | accepted (spec updated) |
 | [0223](0223-adapter-http-ban-and-sdk-quota-exports.md) | check-deps rule banning direct HTTP in adapters; SDK quota re-exports | accepted (no spec change needed) |
-| [0200](0200-facade-argument-clone.md) | The policy facade passes ZenStack a deep clone of its arguments (amends ADR-0122 item 9) | agent-decided |
-| [0201](0201-rpc-audit-plugin.md) | How RPC mutations are audited: entity-mutation hook in the mutation's transaction, redacted diff, narrow AuditEvent create rule | agent-decided |
-| [0202](0202-rpc-ids-last-admin-and-error-shapes.md) | RPC primary keys are immutable, the last-admin guard, problem+json for every /api/v1 error, argument limits | agent-decided |
+| [0200](0200-facade-argument-clone.md) | The policy facade passes ZenStack a deep clone of its arguments (amends ADR-0122 item 9) | accepted (spec updated) |
+| [0201](0201-rpc-audit-plugin.md) | How RPC mutations are audited: entity-mutation hook in the mutation's transaction, redacted diff, narrow AuditEvent create rule | accepted (spec updated) |
+| [0202](0202-rpc-ids-last-admin-and-error-shapes.md) | RPC primary keys are immutable, the last-admin guard, problem+json for every /api/v1 error, argument limits | accepted (spec updated) |
 | [0230](0230-github-adapter-identity-and-connection.md) | GitHub adapter: identifiers, configuration, App token cache, quota buckets, error mapping | accepted (no spec change needed) |
 | [0231](0231-github-facet-drivers.md) | GitHub facet drivers: apply semantics, dynamic capabilities, branch rules, Change Requests | accepted (spec updated) |
-| [0250](0250-adapter-contract-suite.md) | Adapter contract suite: shape, placement and normalisations | agent-decided |
-| [0260](0260-capability-matrix-shape.md) | Capability matrix shape, registry ownership, dynamic overlay | agent-decided |
-| [0261](0261-capability-matrix-vs-mapping-tables.md) | Adapter capabilities aligned to the 05-facets mapping tables | agent-decided |
-| [0280](0280-inventory-processor.md) | Inventory processor design | agent-decided |
-| [0281](0281-endpoint-connector.md) | Endpoint connector for jobs | agent-decided |
-| [0270](0270-events-topics-and-sse-details.md) | Event payload `ids`, topics, authorization, heartbeat, gap handling and stream bounds for SSE | agent-decided |
-| [0290](0290-runtime-image-layout.md) | Runtime image layout, production-pruned workspace, web entrypoint before the UI | agent-decided |
-| [0291](0291-helm-chart-decisions.md) | Helm chart naming, configuration merge, required values and helm:check | agent-decided |
-| [0292](0292-release-and-ci-image-jobs.md) | Release workflow and the CI image and chart jobs | agent-decided |
-| [0293](0293-secretspec-production-profile.md) | secretspec production profile and manifest in the image | agent-decided |
-| [0294](0294-erasable-syntax-only.md) | Runtime TypeScript must be erasable (erasableSyntaxOnly, strip-only import guard) | agent-decided |
-| [0300](0300-role-aware-navigation.md) | Which sidebar items each role sees | agent-decided |
-| [0301](0301-web-shell-build-and-visual-tests.md) | Web shell build, standalone server and visual test placement | agent-decided |
+| [0250](0250-adapter-contract-suite.md) | Adapter contract suite: shape, placement and normalisations | accepted (spec updated) |
+| [0260](0260-capability-matrix-shape.md) | Capability matrix shape, registry ownership, dynamic overlay | accepted (spec updated) |
+| [0261](0261-capability-matrix-vs-mapping-tables.md) | Adapter capabilities aligned to the 05-facets mapping tables | accepted (spec updated) |
+| [0280](0280-inventory-processor.md) | Inventory processor design | accepted (spec updated) |
+| [0281](0281-endpoint-connector.md) | Endpoint connector for jobs | accepted (no spec change needed) |
+| [0270](0270-events-topics-and-sse-details.md) | Event payload `ids`, topics, authorization, heartbeat, gap handling and stream bounds for SSE | accepted (spec updated) |
+| [0290](0290-runtime-image-layout.md) | Runtime image layout, production-pruned workspace, web entrypoint before the UI | accepted (spec updated) |
+| [0291](0291-helm-chart-decisions.md) | Helm chart naming, configuration merge, required values and helm:check | accepted (spec updated) |
+| [0292](0292-release-and-ci-image-jobs.md) | Release workflow and the CI image and chart jobs | accepted (spec updated) |
+| [0293](0293-secretspec-production-profile.md) | secretspec production profile and manifest in the image | accepted (spec updated) |
+| [0294](0294-erasable-syntax-only.md) | Runtime TypeScript must be erasable (erasableSyntaxOnly, strip-only import guard) | accepted (spec updated) |
+| [0300](0300-role-aware-navigation.md) | Which sidebar items each role sees | accepted (spec updated) |
+| [0301](0301-web-shell-build-and-visual-tests.md) | Web shell build, standalone server and visual test placement | accepted (no spec change needed) |
 
 New ADRs continue from 0028. Implementor decisions use `status: agent-decided` (PROC-005). T-002 uses 0065–0069.

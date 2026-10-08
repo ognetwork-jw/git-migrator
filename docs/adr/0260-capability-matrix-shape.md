@@ -1,6 +1,6 @@
 # ADR-0260: Capability matrix shape, registry ownership and the dynamic overlay
 
-- Status: agent-decided
+- Status: accepted (spec updated)
 - Date: 2026-10-08
 - Task: T-058
 - Affects: ADP-014, ADP-032, API-020 (capability-matrix), ADP-040, ARC-012

@@ -1,6 +1,6 @@
 # ADR-0292: Release workflow and the CI image and chart jobs
 
-- Status: agent-decided
+- Status: accepted (spec updated)
 - Date: 2026-10-08
 - Task: T-090
 - Affects: DEP-060, DEP-033, DEP-001, DEP-003

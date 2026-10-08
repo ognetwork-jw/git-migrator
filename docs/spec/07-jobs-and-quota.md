@@ -15,29 +15,33 @@ BullMQ runs with its PostgreSQL backend in schema `bullmq`, registered process-w
 | `maintenance` | `maintenance.prune`, `maintenance.scratch-cleanup`, `maintenance.run-reaper`, `analysis.feeder` | worker-standard (leader-scheduled) |
 
 - **JOB-011** Job payloads are Zod-validated on enqueue and on processing. A payload carries IDs only, never secrets. Dedupe uses BullMQ's `deduplication: { id }` option (for example `analysis-<migrationId>`), not custom job IDs, so later enqueues after completion are never silently dropped. Every queue sets `removeOnComplete: { age: 86400 }` and `removeOnFail: { age: 604800 }`.
-- **JOB-014** Each process creates **one** shared BullMQ PostgreSQL backend instance and passes it to every Queue, Worker and QueueEvents it constructs, so connection usage stays bounded. T-028 measures the resulting connections per process and records the exact formula in `docs/deployment.md`.
+- **JOB-014** Each process creates **one** `pg.Pool` (with `search_path` including `bullmq`) and passes it as `connection` to every Queue and Worker it constructs, because BullMQ builds its backend from that option and each backend uses the pool without owning it. QueueEvents are not used. The pool holds `workers + 4` connections (each Worker keeps one for its blocking `LISTEN`), so connection usage stays bounded. T-028 measures the resulting connections per process and records the exact formula in `docs/deployment.md`.
 - **JOB-012 Concurrency** per pod comes from config:
   - `worker.standard.concurrency.runs` (default 4)
-  - `.analysis` (default 8)
+  - `.analysis` (default 8), applied to each of the two analysis queues so that a saturated background pool never starves interactive analyses
   - `.inventory` (2)
   - `.parity` (4)
   - `worker.large.concurrency.runs` (default 1)
 
   Provider quota is the real throttle (JOB-040).
-- **JOB-013** Failed jobs use BullMQ `attempts: 3` with exponential backoff, except `run.execute`, which manages its own step retries (`attempts: 1`; LIF-042).
+- **JOB-013** Failed jobs use BullMQ `attempts: 3` with exponential backoff, except `run.execute`, which manages its own step retries (`attempts: 1`; LIF-042). The backoff starts at 5 s. A job with no registered processor, or whose payload is invalid on processing, fails without retry (ADR-0210).
 
 ## Size classes and scratch (JOB-015)
 
 - `sizeClass = large` when `sizeBytes > sizeClass.largeThresholdBytes` (default 5 GiB) or when size is unknown and the last known LFS bytes exceed the same threshold.
-- Scratch directory: `$GM_SCRATCH_DIR/<runId>` (default `/scratch`). It is removed in `finally`, and `maintenance.scratch-cleanup` removes directories older than 24 h at startup and hourly.
-- **Disk precheck before `git.prepare`:** estimated need is `sizeBytes × 2.2 + lfsBytes`. If `statfs` free space is lower, the job is delayed 10 minutes. After 6 delays the Run fails with `scratch.insufficient`, and the UI suggests the large class.
+- Scratch directory: `$GM_SCRATCH_DIR/<runId>` (default `/scratch`). It is removed in `finally`, and `maintenance.scratch-cleanup` removes directories older than 24 h at startup and hourly. The scratch volume is per pod, so every worker pod cleans on its own timer (the job name stays registered for manual use), and a job removes only its own subdirectory. Credential directories (`.gm-askpass-*`) are swept only when no session of the process owns them and they are older than 10 minutes (ADR-0211, ADR-0240).
+- **Disk precheck before `git.prepare`:** estimated need is `sizeBytes × 2.2 + lfsBytes`. The estimate is `ceil(sizeBytes × 2.2) + lfsBytes` in integer arithmetic, and space already reserved by other Runs of the same process but not yet written is subtracted from free space. If `statfs` free space is lower, the job is delayed 10 minutes. After 6 delays the Run fails with `scratch.insufficient`, and the UI suggests the large class.
 
 ## Inventory (JOB-030)
 
 - Lists all Namespaces, Repositories, Identities and Groups per Endpoint, using paged list endpoints with field filtering and the maximum page size.
 - Upserts records by `(endpointId, providerId)`. Repositories not seen during a complete pass become `presence = missing`, and their Migrations become `source_missing`.
 - Creates missing Migrations (DOM-014).
-- Marks Analyses stale when the provider timestamp (`Repository.providerUpdatedAt`, from Bitbucket `updated_on`) changed.
+- Marks Analyses stale when the provider timestamp (`Repository.providerUpdatedAt`, from Bitbucket `updated_on`) or the `fullPath` changed, and, for a Route's Migrations, when a mapping change makes a principal resolve differently.
+- One pass per Endpoint lists everything under a per-Endpoint lock, and a second pass for the same Endpoint is skipped. Endpoint Migrations are created first, so they exist even when the provider is down. A pass that is interrupted marks nothing missing.
+- `source_missing` and `source_present` are level-triggered from `Repository.presence` on every pass. While a Migration is `running`, the event is deferred and sent again by the next pass after the Run finishes.
+- A pass that lists zero Namespaces or zero Repositories while present Repositories exist upserts what it saw but marks nothing missing, and reports `suspicious`.
+- Identities and Groups are never deleted. Writes that depend on a read are conditional, so an operator decision or a started Run made meanwhile survives (ADR-0280).
 - Runs every `schedules.inventory` (default 6 h) and on demand ("Refresh" button, `POST /api/v1/inventory/refresh`).
 
 ## Analysis feeder (JOB-020, JOB-022)
@@ -69,7 +73,7 @@ The feeder never selects Migrations in `running`, `verified`, `manually_complete
 
   A request counted in two resource groups (for example `raw-files` and `repository-data`) acquires both buckets in the same transaction, taking advisory locks in ascending bucket-key order to prevent deadlock. It is granted only if both grant.
 
-  **Git commands** don't go through `ProviderHttpClient`. The `git` package pre-acquires units in the `git` bucket before each command: `ls-remote` 1, `fetch`/`clone` 3, `push` 3 per batch, and LFS 1 per 100 objects. LFS batch API calls made by `git-lfs` count here too.
+  **Git commands** don't go through `ProviderHttpClient`. The `git` package pre-acquires units in the `git` bucket before each command: `ls-remote` 1, `fetch`/`clone` 3, `push` 3 per attempt (a retry spends again), and LFS 1 per 100 objects not yet transferred. LFS batch API calls made by `git-lfs` count here too.
 - **JOB-042 Credential selection.** Among an Endpoint's credentials, pick the one whose bucket has the most free capacity for the needed pool and resource group, and use it for the whole job. A git push of one Run uses one credential throughout.
 - **JOB-043 Bitbucket limits (no headers).** User-scoped API tokens get no rate-limit headers, so buckets are tracked **only** locally, from Atlassian's documented limits. Rolling 1-hour window, per user ID:
 
@@ -96,12 +100,12 @@ The feeder never selects Migrations in `running`, `verified`, `manually_complete
     - ≤ `github.maxConcurrentRequests` (default 10) in flight per installation across all pods. This is enforced by a Postgres lease table `quota_lease(bucket_key, holder, expires_at)`: a row is inserted per in-flight request with a 60 s expiry, and the insert is refused when the count of unexpired rows reaches the cap;
     - content-creating requests (POST/PATCH/PUT/DELETE) ≤ 80 per minute and ≤ 500 per hour, as separate buckets.
   - A 403/429 with a secondary-limit message waits `retry-after`, or 60 s doubled per consecutive hit (cap 15 min).
-- **JOB-046 Pruning.** `maintenance.prune` (every 10 minutes) deletes `QuotaEvent` rows older than 2 × the longest window, and expired `quota_lease` rows. Raw responses and Snapshot and Analysis retention (DATA-020) are pruned by the same job once per hour.
+- **JOB-046 Pruning.** `maintenance.prune` (every 10 minutes) deletes `QuotaEvent` rows older than 2 × the longest window, and expired `quota_lease` rows. Raw responses and Snapshot and Analysis retention (DATA-020) are pruned by the same job once per hour in each process, in chunks of 1,000 rows. A Snapshot or Analysis that is protected (a Run, or a Migration's latest) is re-checked in the deleting statement (ADR-0211).
 - **JOB-047 Visibility.** `GET /api/v1/quota` returns, per bucket: limit, used in window, pool split, `blockedUntil`, the background backlog (pending analyses) and an ETA (`backlog × avgCallsPerAnalysis ÷ background rate`). The same values are exported as Prometheus gauges.
 
 ## Schedules (JOB-050)
 
-The leader registers BullMQ job schedulers from config:
+The leader registers BullMQ job schedulers from config. The leader holds a Postgres advisory lock through a dedicated connection; only `standard` and `all` workers take part, and `large` workers never lead. The leader re-reconciles its schedulers every 5 minutes, because endpoint Migrations are created by inventory after start-up, and removes schedulers no longer wanted (ADR-0211).
 
 | Key | Default | Job |
 |---|---|---|
@@ -117,8 +121,10 @@ The leader registers BullMQ job schedulers from config:
 
 ## Events and SSE (JOB-060)
 
-- Workers and API handlers publish domain events with `NOTIFY gm_events, '<json>'`. The payload is ≤ 7,000 bytes: `{ type, ids, at }`. Types include `migration.updated`, `run.updated`, `run.log`, `task.updated`, `inventory.progress`, `quota.updated`, `invitation.updated`.
+- Workers and API handlers publish domain events with `NOTIFY gm_events, '<json>'`. The payload is ≤ 7,000 bytes: `{ type, ids, at }`. Types include `migration.updated`, `run.updated`, `run.log`, `task.updated`, `inventory.progress`, `quota.updated`, `invitation.updated`. `ids` is an object keyed by kind (`migration`, `run`, `task`, `endpoint`, `invitation`), each value matching `^[A-Za-z0-9_-]{1,64}$`; larger payloads are refused.
 - Each web pod holds one dedicated `LISTEN gm_events` connection and fans out to SSE subscribers.
-- `GET /api/v1/events?topics=migration:<id>,run:<id>,list:migrations,quota` filters by topic. Events carry IDs only. Clients invalidate the matching TanStack Query keys and refetch through ZenStack or the API, so permissions are enforced on refetch.
-- Heartbeat comment every 15 s. Clients reconnect with backoff, and switch to **polling** every 10 s if no event or heartbeat arrives for 45 s, or if `EventSource` is unavailable. They return to SSE after a successful reconnect (Q24).
-- `run.log` events are coalesced to at most 4 per second per Run.
+- `GET /api/v1/events?topics=migration:<id>,run:<id>,list:migrations,quota` filters by topic (1 to 50). Topics are `quota`, `list:migrations`, `list:runs`, `list:tasks`, `list:repositories`, `list:invitations` and `<kind>:<id>`; a Run change also reaches `migration:<id>` when `ids.migration` is set. Events carry IDs only, so any role with `read` may subscribe. Clients invalidate the matching TanStack Query keys and refetch through ZenStack or the API, so permissions are enforced on refetch.
+- Every 15 s the server sends the comment `: heartbeat` and a named `heartbeat` event, because scripts cannot see comments; the client's 45 s watchdog resets on the named event. Clients reconnect with backoff, and switch to **polling** every 10 s if no event or heartbeat arrives for 45 s, or if `EventSource` is unavailable. They return to SSE after a successful reconnect (Q24).
+- `run.log` events are coalesced to at most 4 per second per Run: the first goes out at once, and later ones in the next 250 ms are merged into one trailing event.
+- **Gaps.** When the listener's connection is lost and re-established, and on every successful connect, the hub sends `event: resync` to every stream and clients invalidate every topic they show. While the listener is not connected, no heartbeats are sent, so clients fall back to polling. The listener checks its connection every 30 s.
+- **Bounds.** A stream queues at most 64 frames; a burst past that is replaced by one `resync`. A client that reads nothing for 60 s while frames wait is dropped. A process serves at most 2,000 streams and one Actor at most 16 (429 `too_many_streams`). A stream ends after 10 minutes ±20%, and the client reconnects with jittered backoff and is authenticated again. Disabling an Actor or revoking a key ends its streams on the handling process at once and on other pods within that lifetime (ADR-0270).

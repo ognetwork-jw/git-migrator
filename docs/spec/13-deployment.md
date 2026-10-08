@@ -6,10 +6,11 @@
 
 1. **`base`:** `node:24-slim`, plus `git`, `git-lfs`, `ca-certificates`, `tini` and a pinned `secretspec` release binary, verified by checksum.
 2. **`dev`:** `base` + pnpm. Used by Compose.
-3. **`build`:** `pnpm install --frozen-lockfile`, `pnpm generate`, `pnpm turbo run build`. Then `pnpm deploy --prod` for the worker, and the Next.js standalone output for web.
+3. **`build`:** `pnpm install --frozen-lockfile`, `pnpm generate`, `pnpm turbo run build`. Then the development dependencies are pruned (`pnpm install --frozen-lockfile --prod`) and the workspace layout is kept, with the Next.js standalone output for web. `pnpm deploy` is not used, because it copies workspace packages into `node_modules`, where Node refuses to strip types (ADR-0290). All runtime TypeScript uses erasable syntax only (no parameter properties, enums, namespaces or `import x = require()`): `tsconfig.base.json` sets `erasableSyntaxOnly`, test files are exempt, and a test imports the entrypoint module graphs in plain Node (ADR-0294).
 4. **`runtime`:** `base` + built artifacts under `/app`, plus `/app/bin/entrypoint.sh`.
    - The image creates user `gm` with UID and GID 10001 and sets `USER 10001`.
-   - `ENTRYPOINT ["tini","--","/app/bin/entrypoint.sh"]`.
+   - `ENTRYPOINT ["tini","-g","--","/app/bin/entrypoint.sh"]` (`-g` sends SIGTERM to the whole process group).
+   - `secretspec.toml` is copied to `/app`, and `/home/gm` and `/scratch` exist, owned by 10001.
    - `git config --system` sets `init.defaultBranch=main`, `core.askPass` unset (ADP-071), and `lfs.concurrenttransfers=8`.
 
 **DEP-002** `entrypoint.sh <web|worker|migrate> [args]`:
@@ -26,7 +27,7 @@ else
 fi
 ```
 
-The script is POSIX `sh` (dash in `node:24-slim`).
+The script is POSIX `sh` (dash in `node:24-slim`). A missing or unknown command exits with status 64 before anything starts (ADR-0290).
 
 - For `web`, `/app/dist/web.js` starts the Next.js standalone server.
 - `worker --role <standard|large|all>` selects the queues to consume.
@@ -90,8 +91,11 @@ Chart `deploy/helm/git-migrator`. Templates:
 - `worker-standard` mounts `/scratch` as an `emptyDir` with `sizeLimit` from values. `worker-large` uses a generic ephemeral volume (`volumes[].ephemeral.volumeClaimTemplate`) with `storageClassName` and size from values.
 - Probes:
   - web: `startupProbe` and `readinessProbe` → `/api/readyz`; `livenessProbe` → `/api/healthz`.
-  - workers: an HTTP health server on port 8081 (`/healthz`, `/readyz`, which reports ready after queue workers start).
-- `terminationGracePeriodSeconds`: web 30, worker-standard 120, worker-large 600. On SIGTERM, a worker stops taking new jobs. In-flight Runs finish their current step, release the lease and re-enqueue themselves (LIF-046). Other jobs are short and finish normally, then `worker.close()` is called.
+  - workers: an HTTP health server on port 8081 (`/healthz`, `/readyz`, which reports ready after queue workers start). It starts first: `/healthz` is 200 from the start and `/readyz` is 503 until the queue workers run. The worker then waits for the database and the `app` and `bullmq` schemas with backoff, and exits with an error after 3 minutes (never, when `NODE_ENV` is `development`). On shutdown `/readyz` turns 503 first and `/healthz` stays 200 while jobs drain.
+  - Startup probes allow 3 minutes for web and 5 minutes for workers (ADR-0213, ADR-0291).
+- `terminationGracePeriodSeconds`: web 30, worker-standard 120, worker-large 600. On SIGTERM, a worker stops taking new jobs. In-flight Runs finish their current step, release the lease and re-enqueue themselves (LIF-046). Other jobs are short and finish normally, then `worker.close()` is called. After start-up a SIGTERM only drains and the process exits 0 when the drain ends; the grace period is the only bound, and a second signal is ignored. A SIGTERM during start-up arms a 30 s timer that is cleared once start-up settles (ADR-0213).
+
+Resources are named from the release name (`fullnameOverride` replaces it): `<release>-web`, `<release>-worker-standard`, `<release>-worker-large`, `<release>-config`, ServiceAccounts `<release>` and `<release>-migrate`, and Job `<release>-migrate`. With `serviceAccount.create: false` no ServiceAccount is rendered and pods use `serviceAccount.name` (or `default`). The render fails with a message when `image.repository`, `postgres.host`, `ingress.host` (Ingress enabled), or `azure.keyVaultName` and `azure.workloadIdentityClientId` (unless `secretspec.provider` is set) are missing. `NetworkPolicy` (off by default) limits ingress only: the web port is open unless `networkPolicy.ingressFrom` lists peers, and metrics and worker health are limited to the namespace. A `PodDisruptionBudget` takes exactly one of `minAvailable` and `maxUnavailable`, or the render fails. The web container has a 5 s `preStop` sleep (ADR-0291).
 
 ### Values surface (DEP-031)
 
@@ -142,15 +146,17 @@ metrics: { enabled: true, port: 9464 }
 networkPolicy: { enabled: false }
 observability: { logLevel: info, otlpEndpoint: "", serviceName: git-migrator }
 config: {}                   # rendered verbatim into the runtime config file (DEP-040)
+fullnameOverride: ""
+# also: terminationGracePeriodSeconds per workload (30, 120, 600), worker.service.enabled, worker.large.pdb
 ```
 
 **DEP-032 Ingress defaults** for SSE: `nginx.ingress.kubernetes.io/proxy-buffering: "off"`, `proxy-read-timeout: "3600"`, `proxy-send-timeout: "3600"`, `proxy-body-size: "5m"`. Plus `cert-manager.io/cluster-issuer: {{ .Values.ingress.clusterIssuer }}` when it's set.
 
-**DEP-033** `helm lint`, `helm template` with `ci/*.yaml` value files, and `kubeconform -strict -kubernetes-version <current AKS default>` all pass in CI. A chart unit-test suite (`helm-unittest`) asserts the security context, read-only filesystem, volumes and resources for every workload.
+**DEP-033** `helm lint`, `helm template` with `ci/*.yaml` value files, and `kubeconform -strict -kubernetes-version <current AKS default>` all pass in CI. A chart unit-test suite (`helm-unittest`) asserts the security context, read-only filesystem, volumes and resources for every workload. `pnpm helm:check` runs all of these; the Kubernetes version is one constant, bumped with the AKS default. A missing `helm` or `kubeconform` is an error, and a missing helm-unittest is an error when `CI` is set (ADR-0291).
 
 ## Runtime configuration file (DEP-040)
 
-The chart renders this file into the ConfigMaps from `values.config`, **merged with** the top-level values the app needs: `postgres` (except secrets), `worker.*.concurrency`, `observability`, `metrics.port` and `secretspec.profile`. Each worker Deployment also sets `GM_WORKER_ROLE` (`standard` or `large`). The file is mounted at `/etc/git-migrator/config.yaml` (`GM_CONFIG_FILE`) and validated by the `config` package. Keys below are the `values.config` part:
+The chart renders this file into the ConfigMaps from `values.config`, **merged with** the top-level values the app needs: `postgres` (except secrets), `worker.*.concurrency`, `observability`, `metrics.port` and `secretspec.profile`. Where a setting appears in both, the top-level value wins. `publicUrl` defaults to `https://<ingress.host>`. Each worker Deployment also sets `GM_WORKER_ROLE` (`standard` or `large`). The file is mounted at `/etc/git-migrator/config.yaml` (`GM_CONFIG_FILE`) and validated by the `config` package. Keys below are the `values.config` part:
 
 ```yaml
 environment: production                  # GM_ENVIRONMENT
@@ -238,4 +244,6 @@ GitHub Actions workflows:
   - A dependency-rules check (ARC-012).
 - **`devenv.yml`:** `cachix/install-nix-action` + devenv, running `devenv test`, on pull requests that touch `devenv.*`, plus nightly.
 - **`release.yml`** (tags `v*`): build and push a multi-arch (`linux/amd64`, `linux/arm64`) image to `ghcr.io/<owner>/git-migrator`, then package and push the chart as an OCI artifact to `ghcr.io/<owner>/charts`. The chart `appVersion` equals the tag.
+  - The tag must be `v<major>.<minor>.<patch>[-prerelease]`, and the tagged commit must be an ancestor of `main`. The image is pushed as `ghcr.io/<owner>/git-migrator:<tag>` (no `latest`), and the chart version is the tag without `v`. The publishing jobs run in the `release` environment, and an existing image tag or chart version is never overwritten. The amd64 image is smoke-tested before anything is pushed.
+  - `ci.yml` also builds the `runtime` target without pushing and runs `deploy/docker/smoke.sh` through the real entrypoint (`migrate`, `web`, `worker` with a dotenv provider, SIGTERM exit 0). All actions are pinned to commit SHAs, and downloaded tool binaries to checksums (ADR-0292).
 - **Not in CI:** the live e2e test (Q65).

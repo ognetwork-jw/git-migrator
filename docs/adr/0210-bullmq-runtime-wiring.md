@@ -1,6 +1,6 @@
 # ADR-0210: BullMQ runtime wiring, shared pool and job tracing
 
-- Status: agent-decided
+- Status: accepted (spec updated)
 - Date: 2026-10-08
 - Task: T-028
 - Affects: JOB-010, JOB-011, JOB-012, JOB-013, JOB-014, DEP-050, DATA-030

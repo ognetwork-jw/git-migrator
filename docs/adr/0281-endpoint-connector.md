@@ -1,6 +1,6 @@
 # ADR-0281: Endpoint connector for jobs
 
-- Status: agent-decided
+- Status: accepted (no spec change needed)
 - Date: 2026-10-08
 - Task: T-060
 - Affects: JOB-042, ADP-010, ADP-060, ARC-012, AUTH-050

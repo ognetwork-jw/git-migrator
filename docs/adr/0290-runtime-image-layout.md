@@ -1,6 +1,6 @@
 # ADR-0290: Runtime image layout and the web entrypoint
 
-- Status: agent-decided
+- Status: accepted (spec updated)
 - Date: 2026-10-08
 - Task: T-090
 - Affects: DEP-001, DEP-002, DEP-003, DEP-010, API-001

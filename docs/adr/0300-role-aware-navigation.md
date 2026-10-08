@@ -1,6 +1,6 @@
 # ADR-0300: Which sidebar items each role sees
 
-- Status: agent-decided
+- Status: accepted (spec updated)
 - Date: 2026-10-08
 
 ## Context

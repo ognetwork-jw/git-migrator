@@ -1,6 +1,6 @@
 # ADR-0293: secretspec production profile and manifest in the image
 
-- Status: agent-decided
+- Status: accepted (spec updated)
 - Date: 2026-10-08
 - Task: T-090
 - Affects: DEP-002, DEP-020, DEV-030

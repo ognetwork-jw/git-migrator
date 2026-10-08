@@ -1,6 +1,6 @@
 # ADR-0270: Event payload shape, topics, and SSE stream details
 
-- Status: agent-decided
+- Status: accepted (spec updated)
 - Date: 2026-10-08
 - Task: T-022
 - Affects: JOB-060, API-011, AUTH-020, AUTH-021

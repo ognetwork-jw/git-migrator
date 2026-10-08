@@ -1,6 +1,6 @@
 # ADR-0200: The policy facade passes ZenStack a deep clone of its arguments
 
-- Status: agent-decided
+- Status: accepted (spec updated)
 - Date: 2026-10-08
 - Task: T-021
 - Affects: AUTH-021, API-012; amends ADR-0122 item 9

@@ -1,6 +1,6 @@
 # ADR-0280: Inventory processor design
 
-- Status: agent-decided
+- Status: accepted (spec updated)
 - Date: 2026-10-08
 - Task: T-060
 - Affects: JOB-030, DOM-014, AUTH-050, FAC-DKY-003, LIF-002

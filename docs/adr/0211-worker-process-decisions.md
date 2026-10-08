@@ -1,6 +1,6 @@
 # ADR-0211: Worker process decisions
 
-- Status: agent-decided
+- Status: accepted (spec updated)
 - Date: 2026-10-08
 - Task: T-028
 - Affects: JOB-012, JOB-015, JOB-046, JOB-050, ARC-023, DEP-002, DEP-030

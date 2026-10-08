@@ -11,7 +11,7 @@ devenv and Docker Compose are both first-class (DEV-001). Every documented devel
 - `services.postgres`: PostgreSQL 16, database `git_migrator`, user `git_migrator`, password from secretspec, `pg_trgm` available, listening on `127.0.0.1:5432`.
 - `processes`: `web` (`pnpm --filter @git-migrator/web dev`) and `worker` (`pnpm --filter @git-migrator/worker dev -- --role all`).
 - secretspec integration through devenv's built-in support (`secretspec:` in `devenv.yaml`, profile `development`, provider `keyring` by default). If the integration is unavailable in the pinned devenv version, wrap the processes with `secretspec run`.
-- `enterTest` waits (bounded) until the `git_migrator` role can log in over TCP with its password and holds CREATEDB, then runs `pnpm lint`, `pnpm typecheck` and `pnpm test` one after another, as CI does. Processes declare readiness probes (Postgres over the local socket, the web port, the worker process); `devenv test` runs `enterTest` only once every probed process is ready (ADR-0137).
+- `enterTest` waits (bounded) until the `git_migrator` role can log in over TCP with its password and holds CREATEDB, then runs `pnpm lint`, `pnpm typecheck` and `pnpm test` one after another, as CI does. Processes declare readiness probes (Postgres over the local socket, the web port, the worker's `/readyz` on port 8081); the worker command runs `pnpm db:migrate` first (retried, with `GM_POSTGRES_SSLMODE=disable` for the TLS-less dev database), and Compose `dev` sets the same; `devenv test` runs `enterTest` only once every probed process is ready (ADR-0137).
 - A `git-hooks` entry runs Biome on staged files.
 
 ## Docker Compose (DEV-020)
@@ -64,7 +64,12 @@ GM_TEST_USER_PASSWORD = { default = "test-password" }
 
 [profiles.e2e]
 # live e2e against real Bitbucket/GitHub test accounts — no defaults; see docs/e2e-setup.md
+
+[profiles.production]
+# empty: inherits `default`, so it requires the same secrets and has no values of its own (ADR-0293)
 ```
+
+secretspec rejects an undeclared profile, so `production` must be declared (ADR-0293).
 
 Notes:
 

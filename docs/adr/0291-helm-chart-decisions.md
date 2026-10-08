@@ -1,6 +1,6 @@
 # ADR-0291: Helm chart naming, configuration merge and helm:check
 
-- Status: agent-decided
+- Status: accepted (spec updated)
 - Date: 2026-10-08
 - Task: T-090
 - Affects: DEP-030, DEP-031, DEP-033, DEP-040, DEP-020

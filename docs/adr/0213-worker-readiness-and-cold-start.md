@@ -1,6 +1,6 @@
 # ADR-0213: Worker readiness probe and cold start
 
-- Status: agent-decided
+- Status: accepted (spec updated)
 - Date: 2026-10-08
 - Task: T-028
 - Affects: DEV-010, DEV-030, DEP-030, DEP-002

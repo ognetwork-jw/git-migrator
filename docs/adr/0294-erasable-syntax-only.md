@@ -1,6 +1,6 @@
 # ADR-0294: Runtime TypeScript must be erasable
 
-- Status: agent-decided
+- Status: accepted (spec updated)
 - Date: 2026-10-08
 - Task: T-090
 - Affects: DEP-001, DEP-002, ARC-012

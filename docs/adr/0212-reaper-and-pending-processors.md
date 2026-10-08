@@ -1,6 +1,6 @@
 # ADR-0212: Run reaper details and processors owned by later tasks
 
-- Status: agent-decided
+- Status: accepted (spec updated)
 - Date: 2026-10-08
 - Task: T-028
 - Affects: LIF-046, JOB-011, JOB-050

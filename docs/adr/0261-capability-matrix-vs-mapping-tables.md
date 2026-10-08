@@ -1,6 +1,6 @@
 # ADR-0261: Adapter capabilities aligned to the 05-facets mapping tables
 
-- Status: agent-decided (direction and rule decided by the orchestrator)
+- Status: accepted (spec updated)
 - Date: 2026-10-08
 - Task: T-058
 - Affects: ADP-014, API-020 (capability-matrix), FAC-BRR-002, FAC-BRR-003, FAC-ENV, FAC-WEB-001, FAC-WEB-003, FAC-SET, FAC-VAR-001, FAC-VAR-003, FAC-SEC-001, FAC-COD, FAC-MRG-002

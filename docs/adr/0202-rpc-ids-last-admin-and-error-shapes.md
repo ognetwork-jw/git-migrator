@@ -1,6 +1,6 @@
 # ADR-0202: RPC primary keys, the last-admin guard, error shapes and argument limits
 
-- Status: agent-decided
+- Status: accepted (spec updated)
 - Date: 2026-10-08
 - Task: T-021 (review round 1)
 - Affects: AUTH-022, AUTH-021, AUTH-020, API-011, API-012; amends ADR-0200 and ADR-0201

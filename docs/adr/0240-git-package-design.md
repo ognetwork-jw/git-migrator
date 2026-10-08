@@ -1,6 +1,6 @@
 # ADR-0240: Git package design
 
-- Status: agent-decided
+- Status: accepted (spec updated)
 - Date: 2026-10-08
 - Task: T-027
 - Affects: ADP-070, ADP-071, FAC-GIT-001, FAC-GIT-004, FAC-GIT-005, LIF-040, LIF-042, LIF-044, JOB-015, JOB-041

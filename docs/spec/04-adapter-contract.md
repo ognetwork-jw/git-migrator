@@ -141,6 +141,8 @@ export type FieldSupport =
   | { kind: 'constrained'; constraint: string };  // e.g. "max 6 approvals"
 ```
 
+The `registry` derives the capability matrix (API-020) from these static declarations. An undeclared field is `supported`. Per field: `unsupported` on either side, or a `readOnly` target, gives `unsupported`; an `unreadable` source gives `unreadable`; a `constrained` side gives `lossy`; otherwise `exact`. A cell is its worst field (`exact < translated < lossy < unreadable < unsupported`), and `write` is reported beside fidelity, not folded into it. `translated` is never derived, because `translate` chooses it (ADP-040). The matrix is a static ceiling: every row that [05-facets](05-facets.md) marks lossy for a pair is `constrained` on the target-side field it affects, whether or not the loss depends on the data. Rows decided only at read time stay dynamic, through `FacetRead.capabilities` or `unreadable`. A per-repository analysis overlays read-time capabilities monotonically: it keeps the worse of the static and dynamic entry per path, so a read can add a limit but never lift one (ADR-0260, ADR-0261).
+
 ## Facet definition (ADP-030)
 
 ```ts
@@ -258,4 +260,4 @@ export interface GitAccess {
 }
 ```
 
-The `git` package injects credentials through `GIT_ASKPASS` pointing to a script that reads them from a per-process file in scratch with mode `0600`. Credentials MUST NOT appear in argv, in remote URLs written to `.git/config`, or in logs (ADP-071).
+The `git` package injects credentials through `GIT_ASKPASS` pointing to a script that reads them from a per-process file in scratch with mode `0600`. Credentials MUST NOT appear in argv, in remote URLs written to `.git/config`, or in logs (ADP-071). The script answers only a prompt that names the origin of the URL the command was started for. Credentials containing line breaks, or too short for the log scrubbers to remove, are refused. The `git` package pins the LFS endpoint of every LFS command to the remote's own `/info/lfs`, so a `.lfsconfig` in a repository cannot redirect transfers, and it refuses an LFS push that would leave objects missing (ADR-0240).

@@ -19,7 +19,7 @@
   - **Configuration:** Naming rules, Webhook allowlist, Overlays, Capability matrix.
   - **Admin:** Actors and API keys, Audit log.
 - The header shows the signed-in Actor, their role and a sign-out button.
-- Items the Actor's role can't use are hidden. Their routes still enforce permissions server-side.
+- Items the Actor's role can't use are hidden. Their routes still enforce permissions server-side. "Can use" means the capability the page exists for (AUTH-020), not read access: Migration items and the Capability matrix need `read` (every role); Identity mapping and Team mapping need the mapping-decision capability, Invitations the invitation capability (operator and admin); Naming rules, Webhook allowlist and Overlays need the rules capability, and Actors and API keys the Actor capability (admin); Audit log is for every role. Empty sections are hidden. A page outside the sidebar needs `read`. Opening a page without its capability redirects to `/denied?required=<role>` (ADR-0300).
 
 ## Pages (UI-020 … UI-036)
 

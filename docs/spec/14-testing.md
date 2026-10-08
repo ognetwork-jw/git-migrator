@@ -50,6 +50,10 @@
 
 Each adapter has a contract suite: read every Facet, apply it, then read back to the same canonical document. It runs against the fakes in the integration tier. The suite is parameterized by a connection factory, so the same suite could run live later (not in v1 CI).
 
+- It lives in `testing/integration/src/adapter-contract/` and runs under `pnpm test` until the integration tier exists (T-075).
+- A Facet is writable exactly when its driver has `apply`. For a writable Facet, applying `desired` and reading back returns `desired`; applying again, with the read-back or with no `current`, yields no records. The first apply yields at least one valid `MutationRecord` (ADP-012). A read-only adapter (every Facet `write: false`) owes a valid read that two reads repeat.
+- Equality is not loosened. A scenario may declare only these normalisations, each counted per adapter: a webhook secret that cannot be read back (FAC-WEB-003); a force-push bypass the provider refuses (`exemptionsDropped`); target-only items that stay for Facets that do not delete them (ADR-0231); and fields the capability matrix declares unsupported or constrained (ADP-014) (ADR-0250).
+
 ## Phase-1 scenario (TST-020)
 
 Integration tier, `testing/integration/phase1.test.ts`. It mirrors the human's live e2e (Q5):

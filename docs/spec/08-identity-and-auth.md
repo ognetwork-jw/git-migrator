@@ -50,8 +50,12 @@ Every request resolves to an Actor (session or API key) or is rejected with 401.
 | Actors, service Actors, API keys | | | ✓ |
 | Audit log | ✓ | ✓ | ✓ |
 
-- **AUTH-021** Policies are expressed in ZModel (`@@allow` / `@@deny`, plus field-level `@deny` for lifecycle fields: DOM-011). Custom `/api/v1` handlers check the same rules via a shared `can(actor, capability)` helper in `packages/auth`, and run privileged writes through the server-only client. The policy-enforcing client handed to the RPC mount is an allow-list facade: model delegates, `$transaction` (callback, or an array of operations that same facade issued) and a read-only `$schema`, and nothing else. It accepts only plain-data arguments and returns errors without SQL text or parameters (ADR-0122).
+- **AUTH-021** Policies are expressed in ZModel (`@@allow` / `@@deny`, plus field-level `@deny` for lifecycle fields: DOM-011). Custom `/api/v1` handlers check the same rules via a shared `can(actor, capability)` helper in `packages/auth`, and run privileged writes through the server-only client. The policy-enforcing client handed to the RPC mount is an allow-list facade: model delegates, `$transaction` (callback, or an array of operations that same facade issued) and a read-only `$schema`, and nothing else. It accepts only plain-data arguments and returns errors without SQL text or parameters (ADR-0122). Only a validated deep clone of the arguments reaches the data layer, so a caller cannot change them after the call. Proxies, accessors, class instances, cycles, objects reached twice, depth over 64, more than 10,000 values, more than 1,000,000 string characters and any `$expr` key are refused as `invalid-input`. `orderBy`, `by`, aggregates and sub-queries may not use a read-denied field. An error that is not a wrapped database error but carries SQL or driver fields is rethrown as the generic database error (ADR-0200, ADR-0202).
 - **AUTH-022 Audit.** Every mutation by an Actor produces an `AuditEvent`, whether through RPC or a custom endpoint, with action, subject and a redacted diff. RPC mutations are captured by a ZenStack client plugin (query hook) on audited models. Custom endpoints write audit events explicitly. Reads are not audited.
+  - An RPC mutation and its events commit or roll back together. One event is written per affected row, with `actorId` the mutating Actor, `action` `rpc.<model>.<create|update|delete>`, and a diff of changed fields only. A mutation without an Actor id fails.
+  - The diff redacts values of fields and JSON keys whose names suggest secrets (secret, token, password, credential, authorization, api key, hash), and omits strings or JSON longer than 2,000 characters.
+  - `AuditEvent` may be created only with `actorId` equal to the acting Actor, a narrow exception to DOM-005. It has no update or delete, and RPC callers cannot reach it.
+  - Deleting a Wave records the Migrations it unassigned in the event (ADR-0201, ADR-0202).
 
 ## Identity mapping (AUTH-050)
 
@@ -65,6 +69,8 @@ Identity Mappings are per Route: source Identity → target Identity.
    4. Otherwise `unmapped`. If an email is known, the Identity is an invitation candidate.
 
    Suggestions always need an operator to confirm them.
+
+   A step that finds more than one candidate (two Identities with the same email or display name) is ambiguous and falls through to the next step. When several sources would be confirmed to one target by email, or the target is already confirmed to another source, they are `suggested` instead. Each source Identity has one mapping per Route (bots and non-members included), created `unmapped` when nothing matches; an automatic email confirmation sets `decidedAt` and leaves `decidedById` null. A Group member that is not a known Identity is left out of the Group's `memberIds`, and inventory never deletes Identities or Groups (ADR-0280).
 3. **CSV import:** header `source,target,action`.
    - `source` is a Bitbucket `account_id` or nickname.
    - `target` is a GitHub login or an email.

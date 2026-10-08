@@ -1,6 +1,6 @@
 # ADR-0201: How RPC mutations are audited
 
-- Status: agent-decided
+- Status: accepted (spec updated)
 - Date: 2026-10-08
 - Task: T-021
 - Affects: AUTH-022, DOM-005, API-012, AUTH-021

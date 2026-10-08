@@ -1,6 +1,6 @@
 # ADR-0250: Adapter contract suite: shape, placement and normalisations
 
-- Status: agent-decided
+- Status: accepted (spec updated)
 - Date: 2026-10-08
 - Task: T-034
 - Affects: TST-015, TST-006, ADP-011, ADP-012, ADP-014, FAC-WEB-003, FAC-BRR-002
