@@ -9,7 +9,7 @@ The orchestrator maintains this table (see [workflow](workflow.md)). Integration
 | T-003 | in_review | task/T-003-agent-tooling-ci | [#4](https://github.com/ognetwork-jw/git-migrator/pull/4) | 2 | r1: BLOCKER (gitleaks org license + 3 leaks) + 5 MAJOR in fix pass |
 | T-004 | in_progress | task/T-004-config-observability | | | |
 | T-010 | todo |  | | | |
-| T-011 | in_progress | task/T-011-core-primitives | | | |
+| T-011 | in_review | task/T-011-core-primitives | [#6](https://github.com/ognetwork-jw/git-migrator/pull/6) | 1 | |
 | T-012 | todo |  | | | |
 | T-013 | todo |  | | | |
 | T-014 | todo |  | | | |
@@ -27,7 +27,7 @@ The orchestrator maintains this table (see [workflow](workflow.md)). Integration
 | T-033 | todo |  | | | |
 | T-034 | todo |  | | | |
 | T-040 | in_progress | task/T-040-fake-git-server | | | |
-| T-041 | in_review | task/T-041-fake-bitbucket | [#5](https://github.com/ognetwork-jw/git-migrator/pull/5) | 1 | |
+| T-041 | in_review | task/T-041-fake-bitbucket | [#5](https://github.com/ognetwork-jw/git-migrator/pull/5) | 2 | r1: 3 MAJOR; fix pass queued (implementor cap) |
 | T-042 | todo |  | | | |
 | T-043 | todo |  | | | |
 | T-050 | todo |  | | | |
