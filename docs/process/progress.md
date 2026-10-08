@@ -11,7 +11,7 @@ The orchestrator maintains this table (see [workflow](workflow.md)). Integration
 | T-010 | todo |  | | | |
 | T-011 | merged | task/T-011-core-primitives | [#6](https://github.com/ognetwork-jw/git-migrator/pull/6) | 2 | merged to ai-main 1c654ab; ADR-0058 folded into LIF-002; 0055-0057, 0059 accepted |
 | T-012 | merged | task/T-012-facet-engine | [#10](https://github.com/ognetwork-jw/git-migrator/pull/10) | 2 | merged to ai-main 6182a5a; ADR-0080..0082 accepted |
-| T-013 | in_review | task/T-013-naming | [#13](https://github.com/ognetwork-jw/git-migrator/pull/13) | 2 | r1 fixed (45fb576); round-2 review; new code target.owned-by-other-migration |
+| T-013 | in_review | task/T-013-naming | [#13](https://github.com/ognetwork-jw/git-migrator/pull/13) | 3 | r2: adversarial MAJOR (ReDoS static check incomplete → re2js decision); fix pass queued (implementor cap) |
 | T-014 | in_review | task/T-014-guidance | [#14](https://github.com/ognetwork-jw/git-migrator/pull/14) | 2 | r1: 3 MAJOR (next-intl ICU, keygen path from provider data, translation.unsupported); in fix pass |
 | T-015 | merged | task/T-015-canonical-schemas | [#11](https://github.com/ognetwork-jw/git-migrator/pull/11) | 3 | merged to ai-main 9965a55; ADR-0085..0088 folded into spec |
 | T-020 | todo |  | | | |
