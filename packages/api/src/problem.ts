@@ -23,6 +23,7 @@ export const PROBLEMS = {
   validation_failed: { status: 422, title: 'Validation failed' },
   too_many_streams: { status: 429, title: 'Too many open event streams' },
   not_ready: { status: 503, title: 'Not ready' },
+  busy: { status: 503, title: 'Busy, try again shortly' },
   internal_error: { status: 500, title: 'Internal server error' },
 } as const;
 

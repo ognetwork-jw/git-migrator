@@ -12,6 +12,28 @@ import type { Context } from 'hono';
 import { createBatch1 } from './batch1.ts';
 import type { EventHub } from './events.ts';
 import { eventsHandler, eventsRoute } from './events-route.ts';
+import {
+  decideGroupMappingRoute,
+  decideIdentityMappingRoute,
+  importIdentityMappingsRoute,
+  listGroupMappingsRoute,
+  listIdentityMappingsRoute,
+  listRoutesRoute,
+  listTargetIdentitiesRoute,
+} from './mapping/routes.ts';
+import {
+  applyCsv,
+  confirmGroupMapping,
+  confirmIdentityMapping,
+  dryRunCsv,
+  excludeIdentityMapping,
+  listGroupMappings,
+  listIdentityMappings,
+  listRoutes,
+  listTargetIdentities,
+  renameGroupMapping,
+  unmapIdentityMapping,
+} from './mapping/service.ts';
 import type { Principal } from './principal.ts';
 import { ProblemError, ProblemSchema } from './problem.ts';
 import type { ApiServices } from './services.ts';
@@ -317,6 +339,73 @@ export function createV1(deps: V1Deps) {
       // The Actor's open event streams may belong to the revoked key: end them, clients reconnect.
       if (key) deps.events.closeOwner(key.actorId);
       return c.body(null, 204);
+    })
+    .openapi(listRoutesRoute, async (c) => {
+      requireCapability(c, 'read');
+      return c.json({ items: await listRoutes(privileged) }, 200);
+    })
+    .openapi(listIdentityMappingsRoute, async (c) => {
+      requireCapability(c, 'read');
+      const { id } = c.req.valid('param');
+      const query = c.req.valid('query');
+      const { rows, hasMore } = await listIdentityMappings(privileged, id, {
+        ...(query.status ? { status: query.status } : {}),
+        ...(query.q ? { query: query.q } : {}),
+        ...(query.cursor ? { cursor: query.cursor } : {}),
+        limit: query.limit,
+      });
+      const last = rows[rows.length - 1];
+      return c.json({ items: rows, nextCursor: hasMore && last ? last.id : null }, 200);
+    })
+    .openapi(listTargetIdentitiesRoute, async (c) => {
+      requireCapability(c, 'read');
+      const { id } = c.req.valid('param');
+      const { q, limit } = c.req.valid('query');
+      return c.json({ items: await listTargetIdentities(privileged, id, q, limit) }, 200);
+    })
+    .openapi(decideIdentityMappingRoute, async (c) => {
+      requireCapability(c, 'decideMappings');
+      const { id, mappingId, action } = c.req.valid('param');
+      const body = c.req.valid('json') ?? {};
+      const by = { actorId: c.get('principal').actor.id };
+      const view =
+        action === 'confirm'
+          ? await confirmIdentityMapping(deps.db, id, mappingId, body, by)
+          : action === 'exclude'
+            ? await excludeIdentityMapping(deps.db, id, mappingId, body.reason ?? '', by)
+            : await unmapIdentityMapping(deps.db, id, mappingId, by);
+      return c.json(view, 200);
+    })
+    .openapi(importIdentityMappingsRoute, async (c) => {
+      requireCapability(c, 'decideMappings');
+      const { id } = c.req.valid('param');
+      const { dryRun } = c.req.valid('query');
+      const type = (c.req.header('content-type') ?? '').toLowerCase();
+      if (!type.startsWith('text/csv') && !type.startsWith('text/plain')) {
+        throw new ProblemError('unsupported_media_type', { detail: 'send the CSV as text/csv' });
+      }
+      const text = await c.req.text();
+      const report =
+        dryRun === 'true'
+          ? await dryRunCsv(privileged, id, text)
+          : await applyCsv(deps.db, id, text, { actorId: c.get('principal').actor.id });
+      return c.json(report, 200);
+    })
+    .openapi(listGroupMappingsRoute, async (c) => {
+      requireCapability(c, 'read');
+      const { id } = c.req.valid('param');
+      return c.json({ items: await listGroupMappings(privileged, id) }, 200);
+    })
+    .openapi(decideGroupMappingRoute, async (c) => {
+      requireCapability(c, 'decideMappings');
+      const { id, mappingId, action } = c.req.valid('param');
+      const body = c.req.valid('json') ?? {};
+      const by = { actorId: c.get('principal').actor.id };
+      const view =
+        action === 'confirm'
+          ? await confirmGroupMapping(deps.db, id, mappingId, body, by)
+          : await renameGroupMapping(deps.db, id, mappingId, body.plannedSlug ?? '', by);
+      return c.json(view, 200);
     })
     .route(
       '/',

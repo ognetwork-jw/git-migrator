@@ -148,5 +148,7 @@
 | [0330](0330-command-endpoints-and-services.md) | Command endpoints (inventory refresh, analyze) and the services `createApiApp` receives | agent-decided |
 | [0331](0331-diff-and-naming-preview.md) | The diff view and its redaction, the naming preview | agent-decided |
 | [0332](0332-dashboard-and-quota-views.md) | Dashboard and quota views, backlog and ETA | agent-decided |
+| [0320](0320-identity-mapping-api-csv-and-exclusions.md) | Identity and Group mapping endpoints, CSV rules, exclusions, staleness and events | agent-decided |
+| [0321](0321-server-side-page-authorization.md) | Server-side capability check for data pages | agent-decided |
 
 New ADRs continue from 0028. Implementor decisions use `status: agent-decided` (PROC-005). T-002 uses 0065–0069.

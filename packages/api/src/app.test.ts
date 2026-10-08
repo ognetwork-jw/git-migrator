@@ -630,7 +630,14 @@ describe('[API-001] OpenAPI document and typed client', () => {
       '/migrations/{id}/analyze',
       '/migrations/{id}/diff',
       '/quota',
+      '/routes',
+      '/routes/{id}/group-mappings',
+      '/routes/{id}/group-mappings/{mappingId}/{action}',
+      '/routes/{id}/identity-mappings',
+      '/routes/{id}/identity-mappings/import',
+      '/routes/{id}/identity-mappings/{mappingId}/{action}',
       '/routes/{id}/naming/preview',
+      '/routes/{id}/target-identities',
     ]);
     expect(Object.keys(doc.components.securitySchemes)).toEqual(['bearerAuth', 'sessionCookie']);
     expect(doc.components.schemas.Problem).toBeDefined();

@@ -111,6 +111,18 @@ export function isUnavailable(error: unknown): boolean {
   return false;
 }
 
+/** PostgreSQL lock_not_available (55P03) and query_canceled by statement_timeout (57014). */
+export function isTimeout(error: unknown): boolean {
+  const codes = new Set(['55P03', '57014']);
+  let current: unknown = error;
+  for (let depth = 0; depth < 6 && typeof current === 'object' && current !== null; depth++) {
+    const e = current as Record<string, unknown>;
+    if (codes.has(String(e.dbErrorCode)) || codes.has(String(e.code))) return true;
+    current = e.cause;
+  }
+  return false;
+}
+
 export const API_TITLE = 'git-migrator API';
 
 /**
@@ -278,6 +290,8 @@ export function createApiApp(deps: ApiDeps) {
     if (error instanceof HTTPException) {
       return problemResponse(problemCodeForStatus(error.status));
     }
+    // A lock or statement timeout means another writer holds the Route: retry shortly.
+    if (isTimeout(error)) return problemResponse('busy', { headers: { 'retry-after': '5' } });
     // A serialization failure or deadlock that reaches here is a conflict the caller can retry.
     if (isRetryableConflict(error)) return problemResponse('conflict');
     // A database that cannot be reached is a 503 the caller can retry, not a server fault.
