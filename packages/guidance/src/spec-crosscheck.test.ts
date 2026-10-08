@@ -84,7 +84,10 @@ const AGENT_DECIDED_CODES: Readonly<Record<string, string>> = {};
  * Policy keys decided by an implementor (agent-decided ADR) and not yet folded into the spec. They
  * stay out of the list above. Remove an entry once the spec names it.
  */
-const AGENT_DECIDED_POLICY_KEYS: readonly string[] = [];
+const AGENT_DECIDED_POLICY_KEYS: readonly string[] = [
+  'branch-rules.patterns-merged', // ADR-0110
+  'branch-rules.overlap-unresolved', // ADR-0113
+];
 
 /**
  * Dotted names in backticks that are neither finding codes nor policy keys: pipeline YAML and

@@ -142,6 +142,9 @@ export const GUIDANCE: Readonly<Record<FindingCode, Guidance>> = {
     'branch-rules.pending-invitation',
     VERIFICATION.principals,
   ),
+  'branch-rules.team-missing': plain('branch-rules.team-missing', [
+    step('branch-rules.team-missing', 1),
+  ]),
 
   // webhooks
   'webhooks.recreate-manually': plain(

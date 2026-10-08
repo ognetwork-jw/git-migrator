@@ -142,6 +142,13 @@ export const FINDING_SPECS = [
     verifiable: true,
     ref: 'FAC-006',
   },
+  {
+    code: 'branch-rules.team-missing',
+    facet: 'branch-rules',
+    severity: 'blocker',
+    verifiable: false,
+    ref: 'FAC-006',
+  },
   // webhooks
   {
     code: 'webhooks.recreate-manually',
