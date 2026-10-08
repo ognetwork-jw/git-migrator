@@ -1,6 +1,6 @@
 # ADR-0067: Docker image stages and secretspec installation
 
-- Status: agent-decided
+- Status: accepted (spec updated)
 - Date: 2026-10-08
 
 ## Context

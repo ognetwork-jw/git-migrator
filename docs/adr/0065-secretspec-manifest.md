@@ -1,6 +1,6 @@
 # ADR-0065: secretspec 0.21.1 manifest syntax and profile inheritance
 
-- Status: agent-decided
+- Status: accepted (no spec change needed)
 - Date: 2026-10-08
 
 ## Context

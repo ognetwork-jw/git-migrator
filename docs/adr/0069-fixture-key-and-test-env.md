@@ -1,6 +1,6 @@
 # ADR-0069: Committed fake GitHub App key and `.env.test`
 
-- Status: agent-decided
+- Status: accepted (no spec change needed)
 - Date: 2026-10-08
 
 ## Context

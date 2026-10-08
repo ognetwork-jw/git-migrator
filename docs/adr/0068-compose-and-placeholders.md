@@ -1,6 +1,6 @@
 # ADR-0068: Compose services, install origin and placeholder processes
 
-- Status: agent-decided
+- Status: accepted (spec updated)
 - Date: 2026-10-08
 
 ## Context

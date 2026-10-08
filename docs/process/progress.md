@@ -5,7 +5,7 @@ The orchestrator maintains this table (see [workflow](workflow.md)). Integration
 | Task | Status | Branch | PR | Review rounds | Notes |
 |---|---|---|---|---|---|
 | T-001 | merged | task/T-001-bootstrap | [#1](https://github.com/ognetwork-jw/git-migrator/pull/1) | 5 | merged to ai-main 26d7246; ADR-0028..0030 folded into spec |
-| T-002 | in_review | task/T-002-dev-environment | [#9](https://github.com/ognetwork-jw/git-migrator/pull/9) | 5 | review cap reached (r5 MAJOR turbo dev env → followups.md); rebase + merge pending |
+| T-002 | merged | task/T-002-dev-environment | [#9](https://github.com/ognetwork-jw/git-migrator/pull/9) | 5 | merged to ai-main 822c914 at the review cap (open findings in followups.md); ADR-0066..0068 folded into DEV-020, 0065/0069 accepted |
 | T-003 | merged | task/T-003-agent-tooling-ci | [#4](https://github.com/ognetwork-jw/git-migrator/pull/4) | 5 | 5-round cap; merged to ai-main d46ecc4; open findings in docs/followups.md; ADR-0046..0049 accepted |
 | T-004 | merged | task/T-004-config-observability | [#7](https://github.com/ognetwork-jw/git-migrator/pull/7) | 5 | merged to ai-main e8054ea at the review cap (r5 findings in followups.md); ADR-0050..0054 folded into DEP-040/DEP-050 |
 | T-010 | in_progress | task/T-010-database | | 0 | implementing (ADR range 0120-0129) |
@@ -30,9 +30,9 @@ The orchestrator maintains this table (see [workflow](workflow.md)). Integration
 | T-041 | merged | task/T-041-fake-bitbucket | [#5](https://github.com/ognetwork-jw/git-migrator/pull/5) | 2 | merged to ai-main 69844e8; ADR-0060/0061 accepted |
 | T-042 | merged | task/T-042-fake-github | [#12](https://github.com/ognetwork-jw/git-migrator/pull/12) | 5 | merged to ai-main ec3f28a; ADR-0075..0077 accepted (fake internals, no spec change) |
 | T-043 | in_progress | task/T-043-fixture-world | | 0 | implementing (ADR range 0130-0134) |
-| T-050 | in_progress | task/T-050-facets-git-settings | | 0 | guidance coverage test moved to testing/integration (ARC-012) before review |
-| T-051 | in_review | task/T-051-facets-access-codeowners | [#15](https://github.com/ognetwork-jw/git-migrator/pull/15) | 1 | round-1 review (spec ACCEPTABLE) |
-| T-052 | in_progress | task/T-052-facets-branch-rules | | 0 | implementing (ADR range 0110-0114) |
+| T-050 | in_review | task/T-050-facets-git-settings | [#16](https://github.com/ognetwork-jw/git-migrator/pull/16) | 1 | r1 ACCEPTABLE (MINORs → followups.md); merge pending |
+| T-051 | in_review | task/T-051-facets-access-codeowners | [#15](https://github.com/ognetwork-jw/git-migrator/pull/15) | 2 | r1: 2 MAJOR fixed (a40bac0); round-2 review |
+| T-052 | in_review | task/T-052-facets-branch-rules | [#17](https://github.com/ognetwork-jw/git-migrator/pull/17) | 1 | round-1 review (spec ACCEPTABLE) |
 | T-053 | todo |  | | | |
 | T-054 | todo |  | | | |
 | T-055 | todo |  | | | |
@@ -60,7 +60,7 @@ The orchestrator maintains this table (see [workflow](workflow.md)). Integration
 | T-089 | todo |  | | | |
 | T-090 | todo |  | | | |
 | T-091 | todo |  | | | |
-| T-093 | todo |  | | | |
+| T-093 | in_progress | task/T-093-devenv-ci | | 0 | implementing (ADR range 0135-0139) |
 | T-095 | todo |  | | | |
 | T-096 | todo |  | | | |
 | T-097 | todo |  | | | |

@@ -21,8 +21,13 @@ devenv and Docker Compose are both first-class (DEV-001). Every documented devel
 | Service | Image | Notes |
 |---|---|---|
 | `postgres` | `postgres:16` | Same DB, user and port as devenv. Named volume. Healthcheck. |
-| `dev` | built from `deploy/docker/Dockerfile` target `dev` (Node 24, pnpm, git, git-lfs, secretspec) | Source bind-mounted. Runs `pnpm install` then `pnpm dev` (web and worker via Turborepo). Port 3000. |
+| `install` | same `dev` image | One-shot `pnpm install --frozen-lockfile` into the bind-mounted checkout as the host UID/GID (pnpm store in a named volume). `dev` and `fakes` start after it completes. |
+| `dev` | built from `deploy/docker/Dockerfile` target `dev` (Node 24, pnpm, git, git-lfs, secretspec) | Source bind-mounted. Runs `pnpm dev` only (web and worker via Turborepo); it never installs. Port 3000, published on 127.0.0.1. |
 | `fakes` | same `dev` image | `pnpm --filter @git-migrator/provider-fakes start`: fake Bitbucket on 4010, fake GitHub on 4020, git http-backend on 4030. Profile `test` only. |
+
+- App services run as the host user (`${UID}:${GID}`). A checkout is installed either by the host (devenv) or by Compose, never both: each install records its origin in `node_modules/.gm-install-origin`, and a mismatch refuses with the cleanup command (ADR-0068).
+- Base images are pinned by digest; the secretspec CLI is built with `cargo install --locked` until a checksum-verified release binary is reachable (ADR-0067).
+- devenv's PostgreSQL uses scram-sha-256 over TCP and trust on the local socket; the role password is set at run time from secretspec, never stored in Nix (ADR-0066).
 
 `compose.yaml` passes secrets with `secretspec run --profile development -- docker compose up`, or through a `.env` file that `secretspec` writes for the dotenv provider. Both are documented in `docs/README.md`.
 

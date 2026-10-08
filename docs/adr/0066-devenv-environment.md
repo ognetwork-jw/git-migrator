@@ -1,6 +1,6 @@
 # ADR-0066: devenv environment
 
-- Status: agent-decided
+- Status: accepted (spec updated)
 - Date: 2026-10-08
 
 ## Context
