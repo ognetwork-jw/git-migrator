@@ -225,6 +225,12 @@ export const GUIDANCE: Readonly<Record<FindingCode, Guidance>> = {
     VERIFICATION.codeowners,
   ),
   'code-ownership.accept-lossy': acceptLossy('code-ownership.accept-lossy'),
+  'code-ownership.team-missing': plain('code-ownership.team-missing', [
+    step('code-ownership.team-missing', 1),
+  ]),
+  'code-ownership.team-membership-unknown': plain('code-ownership.team-membership-unknown', [
+    step('code-ownership.team-membership-unknown', 1),
+  ]),
   'code-ownership.unmapped-principal': unmapped('code-ownership.unmapped-principal'),
   'code-ownership.pending-invitation': pending(
     'code-ownership.pending-invitation',

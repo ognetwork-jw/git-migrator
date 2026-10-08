@@ -261,6 +261,20 @@ export const FINDING_SPECS = [
     verifiable: true,
     ref: 'FAC-006',
   },
+  {
+    code: 'code-ownership.team-missing',
+    facet: 'code-ownership',
+    severity: 'blocker',
+    verifiable: false,
+    ref: 'FAC-006',
+  },
+  {
+    code: 'code-ownership.team-membership-unknown',
+    facet: 'code-ownership',
+    severity: 'warning',
+    verifiable: false,
+    ref: 'ADR-0106',
+  },
   // change-requests
   {
     code: 'change-requests.open',
