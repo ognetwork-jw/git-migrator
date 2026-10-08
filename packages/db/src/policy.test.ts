@@ -874,3 +874,19 @@ describe('[DOM-012] Snapshots and Analyses are immutable once written', () => {
     }
   }
 });
+
+describe('[AUTH-050] the link of an exclusion is written only by the privileged client', () => {
+  for (const role of ['operator', 'admin'] as const) {
+    it(`[AUTH-050] ${role} cannot update ExpectedDifference.identityMappingId`, async () => {
+      const where = world.where.ExpectedDifference as { id: string };
+      const before = (await row('ExpectedDifference', where)) as Record<string, unknown>;
+      await expectDenied(
+        clients[role].expectedDifference.update({
+          where,
+          data: { identityMappingId: (world.where.IdentityMapping as { id: string }).id } as never,
+        }),
+      );
+      expect(await row('ExpectedDifference', where)).toEqual(before);
+    });
+  }
+});

@@ -1978,6 +1978,15 @@ export class SchemaType implements SchemaDef {
                         "createdBy"
                     ] as readonly string[]
                 },
+                identityMappingId: {
+                    name: "identityMappingId",
+                    type: "String",
+                    optional: true,
+                    attributes: [{ name: "@deny", args: [{ name: "operation", value: ExpressionUtils.literal("update") }, { name: "condition", value: ExpressionUtils.literal(true) }] }, { name: "@map", args: [{ name: "name", value: ExpressionUtils.literal("identity_mapping_id") }] }] as readonly AttributeApplication[],
+                    foreignKeyFor: [
+                        "identityMapping"
+                    ] as readonly string[]
+                },
                 createdAt: {
                     name: "createdAt",
                     type: "DateTime",
@@ -1995,6 +2004,13 @@ export class SchemaType implements SchemaDef {
                     type: "DateTime",
                     optional: true,
                     attributes: [{ name: "@map", args: [{ name: "name", value: ExpressionUtils.literal("revoked_at") }] }, { name: "@db.Timestamptz", args: [{ name: "x", value: ExpressionUtils.literal(3) }] }] as readonly AttributeApplication[]
+                },
+                identityMapping: {
+                    name: "identityMapping",
+                    type: "IdentityMapping",
+                    optional: true,
+                    attributes: [{ name: "@relation", args: [{ name: "fields", value: ExpressionUtils.array("String", [ExpressionUtils.field("identityMappingId")]) }, { name: "references", value: ExpressionUtils.array("String", [ExpressionUtils.field("id")]) }, { name: "onDelete", value: ExpressionUtils.literal("Restrict") }] }] as readonly AttributeApplication[],
+                    relation: { opposite: "expectedDifferences", fields: ["identityMappingId"], references: ["id"], onDelete: "Restrict" }
                 },
                 route: {
                     name: "route",
@@ -2018,6 +2034,7 @@ export class SchemaType implements SchemaDef {
                 }
             },
             attributes: [
+                { name: "@@index", args: [{ name: "fields", value: ExpressionUtils.array("String", [ExpressionUtils.field("identityMappingId")]) }] },
                 { name: "@@map", args: [{ name: "name", value: ExpressionUtils.literal("expected_difference") }] },
                 { name: "@@schema", args: [{ name: "map", value: ExpressionUtils.literal("app") }] },
                 { name: "@@allow", args: [{ name: "operation", value: ExpressionUtils.literal("read") }, { name: "condition", value: ExpressionUtils.binary(ExpressionUtils.binary(ExpressionUtils.call("auth"), "!=", ExpressionUtils._null()), "&&", ExpressionUtils.binary(ExpressionUtils.member(ExpressionUtils.call("auth"), ["disabled"]), "==", ExpressionUtils.literal(false))) }] }
@@ -2384,6 +2401,12 @@ export class SchemaType implements SchemaDef {
                     optional: true,
                     attributes: [{ name: "@relation", args: [{ name: "name", value: ExpressionUtils.literal("IdentityMappingDecidedBy") }, { name: "fields", value: ExpressionUtils.array("String", [ExpressionUtils.field("decidedById")]) }, { name: "references", value: ExpressionUtils.array("String", [ExpressionUtils.field("id")]) }, { name: "onDelete", value: ExpressionUtils.literal("Restrict") }] }] as readonly AttributeApplication[],
                     relation: { opposite: "decidedIdentityMappings", name: "IdentityMappingDecidedBy", fields: ["decidedById"], references: ["id"], onDelete: "Restrict" }
+                },
+                expectedDifferences: {
+                    name: "expectedDifferences",
+                    type: "ExpectedDifference",
+                    array: true,
+                    relation: { opposite: "identityMapping" }
                 }
             },
             attributes: [

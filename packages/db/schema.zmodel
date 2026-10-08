@@ -626,14 +626,17 @@ model ExpectedDifference {
     reason      ExpectedDifferenceReason
     note        String?
     createdById String?                  @map("created_by_id") // null when created by the system
+    identityMappingId String?            @deny('update', true) @map("identity_mapping_id") // set by an identity_excluded exclusion (AUTH-050); nullable
     createdAt   DateTime                 @default(now()) @map("created_at") @db.Timestamptz(3)
     updatedAt   DateTime                 @updatedAt @map("updated_at") @db.Timestamptz(3)
     revokedAt   DateTime?                @map("revoked_at") @db.Timestamptz(3)
 
+    identityMapping IdentityMapping?     @relation(fields: [identityMappingId], references: [id], onDelete: Restrict)
     route       Route                    @relation(fields: [routeId], references: [id], onDelete: Restrict)
     migration   Migration?               @relation(fields: [migrationId], references: [id], onDelete: Restrict)
     createdBy   Actor?                   @relation('ExpectedDifferenceCreatedBy', fields: [createdById], references: [id], onDelete: Restrict)
 
+    @@index([identityMappingId])
     @@map("expected_difference")
     @@schema('app')
     @@allow('read', auth() != null && auth().disabled == false)
@@ -731,6 +734,7 @@ model IdentityMapping {
     sourceIdentity   Identity      @relation('IdentityMappingSource', fields: [sourceIdentityId], references: [id], onDelete: Restrict)
     targetIdentity   Identity?     @relation('IdentityMappingTarget', fields: [targetIdentityId], references: [id], onDelete: Restrict)
     decidedBy        Actor?        @relation('IdentityMappingDecidedBy', fields: [decidedById], references: [id], onDelete: Restrict)
+    expectedDifferences ExpectedDifference[]
 
     @@unique([routeId, sourceIdentityId])
     @@map("identity_mapping")
