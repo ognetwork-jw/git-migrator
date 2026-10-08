@@ -6,6 +6,7 @@ export const PACKAGE_NAME = '@git-migrator/canonical';
 
 export * from './common.ts';
 export * from './facets/access-control.ts';
+export * from './facets/branch-rule-order.ts';
 export * from './facets/branch-rules.ts';
 export * from './facets/change-requests.ts';
 export * from './facets/code-ownership.ts';

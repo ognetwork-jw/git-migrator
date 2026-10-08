@@ -3,6 +3,7 @@ export const PACKAGE_NAME = '@git-migrator/facets';
 
 export * from './access-control/index.ts';
 export * from './access-control/principals.ts';
+export * from './branch-rules/index.ts';
 export * from './change-requests/index.ts';
 export * from './code-ownership/index.ts';
 export * from './deploy-keys/index.ts';

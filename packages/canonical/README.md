@@ -46,6 +46,11 @@ const doc = normalizeDocument(r.data, getCanonicalFacet('branch-rules').document
 Conventions: `null` and `[]` differ (`restrictPushes: null` = unrestricted, `[]` = nobody). Lists of
 principals are `{ principal: { kind, id } }[]` (ADR-0085). Webhook URLs, deploy keys and variable names have extra rules (ADR-0088). Secret values are never part of a schema.
 
+Branch rules are stored sorted by pattern, but the order a target writer creates them in matters:
+`branchRuleApplyOrder(rules)` gives that order, a topological sort that puts every rule before the
+rules covering it (`branchPatternCovers`), with `compareBranchRuleApplyOrder` as the tie-break
+(`src/facets/branch-rule-order.ts`, ADR-0113).
+
 ## Adding a facet
 
 1. Add the key to `FACET_KEYS` in `src/common.ts`.

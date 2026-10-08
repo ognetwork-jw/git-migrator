@@ -37,3 +37,7 @@ Declared internal dependencies (ARC-012, checked by `pnpm lint`): @git-migrator/
 - `src/access-control/principals.ts` holds the FAC-006 helpers (`resolvePrincipal`, `principalPath`, `principalIsGranted`) that any principal-bearing facet can reuse.
 - Tests build their resolvers with `src/test-support.ts`. Guidance coverage (FAC-002) is asserted from `testing/integration` (ADR-0107).
 - Decisions: ADR-0105, ADR-0106.
+
+## branch-rules
+
+`src/branch-rules/` implements the branch-rules Facet (FAC-BRR): `normalize`, `translate` (findings, policy keys, FAC-006 principal codes), `compare` and `isTaskSatisfied`. Rules are created in `branchRuleApplyOrder` (from `@git-migrator/canonical`), and a wildcard rule folded under another wildcard rule raises `branch-rules.overlap-unresolved` because the target applies the older wildcard rule. Decisions: ADR-0110 to ADR-0113.
