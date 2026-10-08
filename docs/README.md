@@ -14,7 +14,7 @@
 
 ## Commands
 
-The root [README](../README.md) lists the commands; the ones added by T-001 are `pnpm lint` (Biome plus the ARC-012 dependency check), `pnpm typecheck` (`tsc -b`), `pnpm test` (Vitest with the TST-005 coverage thresholds), `pnpm check:packages` (the same checks through Turborepo), `pnpm spec:coverage` (requirement IDs without tests; add `-- --strict` to gate) and `pnpm spec:must-test` (regenerate `must-test.txt`). Commands owned by later tasks currently print "not yet implemented (T-xxx)". T-002 extends the getting-started section below.
+The root [README](../README.md) lists the commands; the ones added by T-001 are `pnpm lint` (Biome plus the ARC-012 dependency check), `pnpm typecheck` (`tsc -b`), `pnpm test` (Vitest with the TST-005 coverage thresholds), `pnpm check:packages` (the same checks through Turborepo), `pnpm spec:coverage` (requirement IDs without tests; add `-- --strict` to gate) and `pnpm spec:must-test` (regenerate `must-test.txt`). `pnpm --filter @git-migrator/provider-fakes start` starts the provider fakes (fake Bitbucket on 4010; see `testing/provider-fakes/README.md`). Commands owned by later tasks currently print "not yet implemented (T-xxx)". T-002 extends the getting-started section below.
 
 ## Getting started
 
