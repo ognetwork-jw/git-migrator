@@ -91,6 +91,150 @@ describe('development environment files', () => {
     expect(devStageEnv().get('HOST')).toBe('0.0.0.0');
     expect(devStageEnv().get('PORT')).toBe('3000');
   });
+
+  it('[DEV-040] the turbo dev task declares HOST and PORT so strict env mode passes them to the web server', () => {
+    const turbo = JSON.parse(read('turbo.json')) as {
+      tasks: Record<string, { env?: string[]; persistent?: boolean }>;
+    };
+    expect(turbo.tasks.dev?.env).toEqual(['HOST', 'PORT']);
+    expect(turbo.tasks.dev?.persistent).toBe(true);
+  });
+
+  it('[DEV-040] the turbo dev task passes every secretspec.toml secret through strict env mode', () => {
+    const turbo = JSON.parse(read('turbo.json')) as {
+      tasks: Record<string, { passThroughEnv?: string[] }>;
+    };
+    const declared = Object.keys(manifest().profiles.default ?? {}).sort();
+    expect([...(turbo.tasks.dev?.passThroughEnv ?? [])].sort()).toEqual(declared);
+    expect(declared).toEqual([...DEV_030_SECRETS].sort());
+  });
+
+  it('[DEV-001] every devenv process that devenv test waits on has a readiness probe that can succeed (ADR-0137)', () => {
+    const nix = read('devenv.nix');
+    // Postgres: the probe uses the trusted Unix socket, because PGHOST is 127.0.0.1 and TCP is scram.
+    const postgres = nix.slice(
+      nix.indexOf('postgres.ready = {'),
+      nix.indexOf('postgres-password = {'),
+    );
+    expect(postgres).toContain('lib.mkForce');
+    expect(postgres).toContain('-h "$DEVENV_RUNTIME/postgres"');
+    expect(postgres).toContain('.devenv_initialized');
+    expect(postgres).not.toContain('127.0.0.1');
+    expect(postgres).toMatch(/timeout = \d+;/);
+    // web: HTTP GET on the placeholder port. worker: a process check. Both bounded.
+    const web = nix.slice(nix.indexOf('    web = {'), nix.indexOf('    worker = {'));
+    expect(web).toContain('http.get = {');
+    expect(web).toContain('host = "127.0.0.1";');
+    expect(web).toContain('port = 3000;');
+    expect(web).toMatch(/timeout = \d+;/);
+    const worker = nix.slice(nix.indexOf('    worker = {'), nix.indexOf('enterTest = '));
+    expect(worker).toContain('pgrep -f');
+    expect(worker).toMatch(/timeout = \d+;/);
+    // The one-shot has no readiness probe and never restarts, so devenv does not wait on it.
+    const oneShot = nix.slice(nix.indexOf('    postgres-password = {'), nix.indexOf('    web = {'));
+    expect(oneShot).toContain('restart.on = "never";');
+    expect(oneShot).not.toContain('ready');
+  });
+
+  it('[DEV-001] enterTest waits, bounded, for the git_migrator password login with CREATEDB, then the web placeholder, then the checks (ADR-0137)', () => {
+    const nix = read('devenv.nix');
+    const enterTest = nix.slice(nix.indexOf('enterTest = '), nix.indexOf('pnpm lint\n'));
+    expect(enterTest).toContain('secretspec run -- bash -c');
+    expect(enterTest).toContain('PGPASSWORD="$POSTGRES_PASSWORD"');
+    expect(enterTest).toContain('-h 127.0.0.1');
+    expect(enterTest).toContain('rolcreatedb');
+    expect(enterTest).toMatch(/seq 1 150/);
+    expect(enterTest).toContain('http://127.0.0.1:3000/');
+    expect(enterTest).toContain("-w '%{http_code}'");
+    expect(enterTest).toContain('!= 200');
+  });
+
+  it('[DEV-010] the git_migrator role gets CREATEDB for the database tests (ADR-0123, ADR-0137)', () => {
+    const nix = read('devenv.nix');
+    expect(nix).toContain('ALTER ROLE git_migrator WITH LOGIN CREATEDB PASSWORD');
+  });
+
+  it('[DEP-060] devenv.yml runs devenv test on devenv.* changes, its own change and nightly, with read-only permissions', () => {
+    const workflow = parseYaml(read('.github/workflows/devenv.yml')) as {
+      on: { pull_request: { paths: string[] }; schedule: { cron: string }[] };
+      permissions: Record<string, string>;
+      jobs: Record<
+        string,
+        { steps: { name?: string; run?: string; uses?: string; 'timeout-minutes'?: number }[] }
+      >;
+    };
+    expect(workflow.on.pull_request.paths).toEqual(['devenv.*', '.github/workflows/devenv.yml']);
+    expect(workflow.on.schedule).toHaveLength(1);
+    expect(workflow.permissions).toEqual({ contents: 'read' });
+    const steps = Object.values(workflow.jobs).flatMap((job) => job.steps);
+    expect(steps.some((step) => step.uses?.startsWith('cachix/install-nix-action@'))).toBe(true);
+    // The exact headless command line (ADR-0135): no other `devenv test` form is accepted.
+    const lines = steps.flatMap((step) => (step.run ?? '').split('\n').map((line) => line.trim()));
+    expect(lines).toContain(
+      'devenv test --no-tui --secretspec-provider file:./testing/fixtures --secretspec-profile test',
+    );
+    // The step has its own bound: the job-level timeout did not stop a hung step (ADR-0137).
+    const testStep = steps.find((step) => step.name === 'Run devenv test');
+    expect(testStep?.['timeout-minutes']).toBeGreaterThan(0);
+    expect(testStep?.['timeout-minutes']).toBeLessThanOrEqual(30);
+    // No value is exported to the job environment (ADR-0135).
+    expect(read('.github/workflows/devenv.yml')).not.toContain('GITHUB_ENV');
+  });
+
+  it('[DEP-060] devenv.yml pins the devenv CLI to a tag or 40-hex revision and checks its version', () => {
+    const text = read('.github/workflows/devenv.yml');
+    const install = text.split('\n').find((line) => line.includes('nix profile install'));
+    expect(install).toBeDefined();
+    expect(install).toMatch(/github:cachix\/devenv\/(v\d+\.\d+\.\d+|[0-9a-f]{40})\s*$/);
+    expect(install).not.toContain('nixpkgs#devenv');
+    expect(install).toContain('--accept-flake-config');
+    // Accepts the release line and the `+<commit>` build suffix; 2.4.01 and 2.4.1 do not match.
+    expect(text).toContain('"devenv 2.4.0 "*|"devenv 2.4.0+"*)');
+  });
+
+  it('[DEP-060] devenv.yml uses the devenv binary cache with the key from the tagged flake, and frees disk first', () => {
+    const text = read('.github/workflows/devenv.yml');
+    expect(text).toContain(
+      'extra-substituters = https://devenv.cachix.org https://cachix.cachix.org',
+    );
+    expect(text).toContain(
+      'extra-trusted-public-keys = devenv.cachix.org-1:w1cLUi8dv3hnoSPGAuibQv+f9TZLr6cv/Hm9XgU50cw= cachix.cachix.org-1:eWNHQldwUO7G2VkjpnjDbWwy4KQ/HNxht7H4SSoMckM=',
+    );
+    const freeDisk = text.indexOf('Free runner disk');
+    const installNix = text.indexOf('cachix/install-nix-action@');
+    expect(freeDisk).toBeGreaterThan(-1);
+    expect(freeDisk).toBeLessThan(installNix);
+    for (const path of [
+      '/usr/share/dotnet',
+      '/usr/local/lib/android',
+      '/opt/ghc',
+      '/opt/hostedtoolcache/CodeQL',
+    ]) {
+      expect(text).toContain(path);
+    }
+  });
+
+  it('[DEP-060] the workflow checks the test profile before devenv test and prints logs on failure', () => {
+    const text = read('.github/workflows/devenv.yml');
+    const check = text.indexOf('secretspec check');
+    const run = text.indexOf('devenv test --no-tui');
+    expect(check).toBeGreaterThan(-1);
+    expect(check).toBeLessThan(run);
+    expect(text).toContain(
+      'secretspec check --provider file:./testing/fixtures --profile test --no-prompt',
+    );
+    expect(text).toContain('if: failure()');
+  });
+
+  it('[DEP-060] every action in devenv.yml is pinned by a full commit SHA with a version comment', () => {
+    const uses = read('.github/workflows/devenv.yml')
+      .split('\n')
+      .filter((line) => line.includes('uses:'));
+    expect(uses.length).toBeGreaterThan(0);
+    for (const line of uses) {
+      expect(line, line).toMatch(/uses: [\w.-]+\/[\w.-]+@[0-9a-f]{40} # v\d+/);
+    }
+  });
   it('[DEV-020] postgres, dev and fakes match the Compose table', () => {
     const c = compose();
     const pg = c.services.postgres as Service;
@@ -195,10 +339,12 @@ describe('development environment files', () => {
       'user = "git_migrator";',
       'postgres-password = {',
       'restart.on = "never";',
-      'web.exec =',
-      'worker.exec =',
+      'web = {',
+      'worker = {',
+      'pnpm --filter @git-migrator/web dev',
+      'pnpm --filter @git-migrator/worker dev',
       "enterTest = ''",
-      'pnpm turbo run lint typecheck test',
+      'pnpm lint\n    pnpm typecheck\n    pnpm test\n',
       'git-hooks.hooks.biome = {',
     ];
     for (const fragment of must) expect(nix, fragment).toContain(fragment);
@@ -208,7 +354,7 @@ describe('development environment files', () => {
   it('[DEV-010] devenv.nix keeps the Postgres password out of Nix evaluation', () => {
     const nix = read('devenv.nix');
     expect(nix).not.toMatch(/\bpass\s*=/);
-    expect(nix).toContain('ALTER ROLE git_migrator WITH LOGIN PASSWORD');
+    expect(nix).toContain('ALTER ROLE git_migrator WITH LOGIN CREATEDB PASSWORD');
     expect(nix).toContain('printf "ALTER ROLE');
   });
 

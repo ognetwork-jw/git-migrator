@@ -1,6 +1,7 @@
 # devenv (DEV-010). `devenv shell`, `devenv up` (Postgres, web, worker) and `devenv test` (ADR-0066).
 # Secrets: secretspec profile `development` through the keyring provider. Override on the command
 # line with `devenv --secretspec-provider dotenv shell`; the defaults in secretspec.toml need no store.
+# CI runs `devenv test --secretspec-provider file:./testing/fixtures --secretspec-profile test` (ADR-0135).
 inputs:
   nixpkgs:
     url: github:cachix/devenv-nixpkgs/rolling

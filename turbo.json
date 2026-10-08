@@ -14,7 +14,18 @@
     "lint": {},
     "dev": {
       "persistent": true,
-      "cache": false
+      "cache": false,
+      "env": ["HOST", "PORT"],
+      "passThroughEnv": [
+        "POSTGRES_PASSWORD",
+        "BETTER_AUTH_SECRET",
+        "ENTRA_CLIENT_ID",
+        "ENTRA_CLIENT_SECRET",
+        "BITBUCKET_CREDENTIALS",
+        "GITHUB_APP_PRIVATE_KEY",
+        "ATLASSIAN_ADMIN_API_KEY",
+        "GM_TEST_USER_PASSWORD"
+      ]
     },
     "test": {
       "dependsOn": ["^build"]

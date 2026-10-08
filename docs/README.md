@@ -34,7 +34,7 @@ Install the CLI once with `nix profile install nixpkgs#secretspec` (0.21.1, the 
 1. Install [Nix](https://nixos.org/download) with flakes enabled, and [devenv](https://devenv.sh/getting-started/) 2.x.
 2. `devenv shell` loads the development profile and provides Node 24, pnpm, git, git-lfs, secretspec, the PostgreSQL 16 client tools, Helm and kubeconform.
 3. `devenv up` starts PostgreSQL. A one-shot `postgres-password` process then sets the `git_migrator` password from `POSTGRES_PASSWORD` (through `secretspec run`, never written into Nix). `web` and `worker` start through `secretspec run`.
-4. `devenv test` runs `pnpm turbo run lint typecheck test`.
+4. `devenv test` runs `pnpm lint`, `pnpm typecheck` and `pnpm test`, in that order, as CI does.
 
 devenv installs a `pre-commit` hook into the repository's shared hooks directory, which every worktree uses, and writes `.pre-commit-config.yaml` into the checkout. In a shared checkout, pass `--option git-hooks.enable:bool false` to every devenv command so no hook is installed. If one was installed, remove it (`rm "$(git rev-parse --git-common-dir)/hooks/pre-commit" .pre-commit-config.yaml`). Neither is committed. See ADR-0066.
 
