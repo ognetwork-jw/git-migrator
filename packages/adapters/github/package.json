@@ -17,6 +17,10 @@
     "@git-migrator/adapter-sdk": "workspace:*",
     "@git-migrator/canonical": "workspace:*",
     "@git-migrator/core": "workspace:*",
-    "yaml": "2.9.1"
+    "yaml": "2.9.1",
+    "zod": "4.6.5"
+  },
+  "devDependencies": {
+    "@git-migrator/provider-fakes": "workspace:*"
   }
 }
