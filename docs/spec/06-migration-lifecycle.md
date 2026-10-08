@@ -162,6 +162,7 @@ type NamingStep =
 - **LIF-045 Mutation ledger.** Every write on either side records a Mutation, through `apply`, `target.ensure-repository`, `target.lift-protection`, `source.read-only` or Change Request creation. A Mutation stores `paths` (the canonical field paths it touched).
   - **Source-side filtering:** before translation and parity, resources created by active (not undone) source-side Mutations are removed from the source canonical document, matched by `resourceRef`. For example, the read-only `push` restriction on `*` is never translated to the target. Description prefixes are stripped by `normalize` (FAC-SET-003).
   - **Target-side:** Mutations on target resources that are not part of the desired document create `framework_mutation` Expected Differences for their paths. Examples are `git-migrator/*` branches and Change Requests.
+  - **Adopted and no-op records:** a record for state that already existed (`resourceRef.adopted`) or for a write that changed nothing (`resourceRef.noop`) has `before` equal to `after`. Undo never reverts it, so undo never removes or rewrites state the Run did not change (ADR-0222, ADR-0231).
 - **LIF-046 Concurrency guard and leases.**
   - DOM-010, plus a lease on the Run row: `leaseOwner` (worker ID) and `leaseExpiresAt` (renewed every 30 s, valid 2 min). A worker processes a Run only while holding the lease.
   - `maintenance.run-reaper` (every minute) re-enqueues `run.execute` for Runs whose lease expired while `running`. Steps are idempotent, so the Run resumes from the first non-succeeded step. After 3 reaper resumptions of the same Run, it is marked `failed` with error `run.abandoned`.
@@ -174,7 +175,7 @@ type NamingStep =
 
   Ordering (step 9 before step 10), together with step 3a on resync, guarantees that branch protection never blocks the framework's own pushes. The GitHub App is never added to protection allowances.
 
-  This is idempotent: an existing open Change Request for the same purpose is updated, not duplicated. A merged one is not reopened.
+  This is idempotent: an existing open Change Request for the same purpose is updated, not duplicated. A merged one is not reopened. An existing `git-migrator/<purpose>` branch is reused only when every commit it adds to the default branch has the framework author; otherwise the writer fails with `conflict` and writes nothing (ADR-0231).
 - **LIF-048 Overlays.** An Overlay's partial canonical document is merged onto the desired target document, with overlay values winning. The merged paths get `overlay` Expected Differences, so parity ignores them.
 
 ### Endpoint migration Run order (LIF-081)

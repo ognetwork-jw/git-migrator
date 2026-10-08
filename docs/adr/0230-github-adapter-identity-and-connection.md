@@ -1,6 +1,6 @@
 # ADR-0230: GitHub adapter: identifiers, configuration, authentication and quota
 
-- Status: agent-decided
+- Status: accepted (no spec change needed)
 - Date: 2026-10-08
 - Task: T-033
 - Affects: ADP-010, ADP-011, ADP-014, ADP-060, JOB-040, JOB-043, JOB-045, AUTH-060, FAC-ACL-002, FAC-BRR-002, FAC-WEB-002, LIF-047, LIF-077

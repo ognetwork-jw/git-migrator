@@ -15,16 +15,16 @@ The orchestrator maintains this table (see [workflow](workflow.md)). Integration
 | T-014 | merged | task/T-014-guidance | [#14](https://github.com/ognetwork-jw/git-migrator/pull/14) | 4 | merged to ai-main a8ec5fa; ADR-0090..0094 folded into UI-040 and 05-facets; AGENTS.md messages rule amended |
 | T-015 | merged | task/T-015-canonical-schemas | [#11](https://github.com/ognetwork-jw/git-migrator/pull/11) | 3 | merged to ai-main 9965a55; ADR-0085..0088 folded into spec |
 | T-020 | merged | task/T-020-auth | [#27](https://github.com/ognetwork-jw/git-migrator/pull/27) | 4 | merged to ai-main (r4 ACCEPTABLE; MINORs → followups.md; implementor escalated to opus at r4); ADR-0170/0171 folded into AUTH-002/004/005 |
-| T-021 | in_review | task/T-021-api | [#30](https://github.com/ognetwork-jw/git-migrator/pull/30) | 2 | r2: spec ACCEPTABLE; adversarial r2 pending |
+| T-021 | in_review | task/T-021-api | [#30](https://github.com/ognetwork-jw/git-migrator/pull/30) | 3 | r3 ACCEPTABLE (MINORs → followups.md); rebasing for merge |
 | T-022 | todo |  | | | |
 | T-025 | merged | task/T-025-quota | [#26](https://github.com/ognetwork-jw/git-migrator/pull/26) | 3 | merged to ai-main (r3 ACCEPTABLE; MINORs → followups.md); ADR-0180 folded into JOB-041/043/045 |
 | T-026 | merged | task/T-026-adapter-sdk | [#28](https://github.com/ognetwork-jw/git-migrator/pull/28) | 3 | merged to ai-main f73e0b9 (r3 ACCEPTABLE; MINORs → followups.md); ADR-0190 folded into ADP-060 |
-| T-027 | in_review | task/T-027-git | [#33](https://github.com/ognetwork-jw/git-migrator/pull/33) | 2 | r1: BLOCKER (.lfsconfig redirects LFS endpoint) + MAJORs (push rejections retried, no stall timeout, JOB-015 estimate); fix pass |
-| T-028 | in_review | task/T-028-jobs-runtime | [#29](https://github.com/ognetwork-jw/git-migrator/pull/29) | 2 | r2 fixes at 3043c18; spec ACCEPTABLE; adversarial r2 pending |
+| T-027 | in_review | task/T-027-git | [#33](https://github.com/ognetwork-jw/git-migrator/pull/33) | 2 | r2 fixes at 147169f; spec ACCEPTABLE; adversarial r2 pending |
+| T-028 | in_review | task/T-028-jobs-runtime | [#29](https://github.com/ognetwork-jw/git-migrator/pull/29) | 3 | r2: BLOCKER (draining Worker takes jobs) + 2 MAJOR fixed at 17f4ba6; round-3 review |
 | T-030 | merged | task/T-030-bitbucket-api-verification | [#2](https://github.com/ognetwork-jw/git-migrator/pull/2) | 2 | ADR-0035, 0036 folded into spec; r2 adversarial MAJOR downgraded to MINOR (pre-existing text) |
 | T-031 | merged | task/T-031-github-api-verification | [#3](https://github.com/ognetwork-jw/git-migrator/pull/3) | 2 | merged to ai-main 033bd88; ADR-0040, 0041 folded into spec |
 | T-032 | merged | task/T-032-bitbucket-adapter | [#31](https://github.com/ognetwork-jw/git-migrator/pull/31) | 3 | merged to ai-main (r3 ACCEPTABLE; MINORs → followups.md); ADR-0221/0222 folded into FAC-BRR-001 and LIF-070 |
-| T-033 | in_review | task/T-033-github-adapter | [#32](https://github.com/ognetwork-jw/git-migrator/pull/32) | 3 | r2: spec ACCEPTABLE; adversarial 3 MAJOR (invite-cap regex, CR partial mutations via driver, foreign branch adoption); fix pass |
+| T-033 | merged | task/T-033-github-adapter | [#32](https://github.com/ognetwork-jw/git-migrator/pull/32) | 3 | merged to ai-main (r3 ACCEPTABLE; MINORs → followups.md); ADR-0231 folded into ADP-011, LIF-045, LIF-047 |
 | T-034 | todo |  | | | |
 | T-040 | merged | task/T-040-fake-git-server | [#8](https://github.com/ognetwork-jw/git-migrator/pull/8) | 2 | merged to ai-main 7875b6a; ADR-0070..0072 accepted |
 | T-041 | merged | task/T-041-fake-bitbucket | [#5](https://github.com/ognetwork-jw/git-migrator/pull/5) | 2 | merged to ai-main 69844e8; ADR-0060/0061 accepted |

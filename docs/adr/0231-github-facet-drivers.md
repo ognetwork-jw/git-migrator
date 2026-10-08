@@ -1,6 +1,6 @@
 # ADR-0231: GitHub facet drivers: reads, apply semantics and delivery
 
-- Status: agent-decided
+- Status: accepted (spec updated)
 - Date: 2026-10-08
 - Task: T-033
 - Affects: ADP-011, ADP-012, ADP-013, ADP-014, FAC-ACL-002, FAC-BRR-002, FAC-BRR-003, FAC-COD, FAC-DKY-002, FAC-PIP-001, FAC-SET-002, FAC-WEB, LIF-047, LIF-045

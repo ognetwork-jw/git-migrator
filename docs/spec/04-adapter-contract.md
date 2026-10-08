@@ -110,6 +110,7 @@ export interface FacetRead<T> {
   unreadable: FieldPath[];         // e.g. secret values
   warnings: AdapterWarning[];
   rawResponseIds: string[];
+  capabilities?: Record<FieldPath, FieldSupport>;  // facts known only at read time; merged over ProviderCapabilities (ADR-0231)
 }
 
 export type FacetTarget =
@@ -117,7 +118,8 @@ export type FacetTarget =
   | { scope: 'endpoint'; namespace: NamespaceRef };
 ```
 
-- `apply` MUST be idempotent. It changes only what differs between `desired` and `current`, and yields one `MutationRecord` per provider-side change, which feeds the Mutation ledger (ADP-012).
+- `apply` MUST be idempotent. It changes only what differs between `desired` and `current`, and yields one `MutationRecord` per provider-side change, which feeds the Mutation ledger (ADP-012). It deletes target-only items only where the Facet is framework-managed per key (branch rules, which step 3a lifts by applying a desired document without them); everywhere else target-only items stay (ADR-0231).
+- When `apply` fails after some provider-side changes, the records for those changes still reach the ledger: the driver yields them before rethrowing. A create whose response was lost is read back and recorded when the resource exists (ADR-0222, ADR-0231).
 - A driver without `apply` makes the Facet read-only for that Provider (`write: false`).
 - Drivers MUST NOT throw on unknown provider fields. They ignore them and report a warning if the field is semantically relevant (ADP-013).
 
