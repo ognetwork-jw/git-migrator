@@ -7,7 +7,7 @@ The orchestrator maintains this table (see [workflow](workflow.md)). Integration
 | T-001 | merged | task/T-001-bootstrap | [#1](https://github.com/ognetwork-jw/git-migrator/pull/1) | 5 | merged to ai-main 26d7246; ADR-0028..0030 folded into spec |
 | T-002 | in_review | task/T-002-dev-environment | [#9](https://github.com/ognetwork-jw/git-migrator/pull/9) | 2 | r1: 6 MAJOR in fix pass |
 | T-003 | in_review | task/T-003-agent-tooling-ci | [#4](https://github.com/ognetwork-jw/git-migrator/pull/4) | 4 | r3: adversarial 2 MAJOR (GIT_* false block, $var silent allow) in fix pass |
-| T-004 | in_review | task/T-004-config-observability | [#7](https://github.com/ognetwork-jw/git-migrator/pull/7) | 4 | r3: BLOCKER (decode-before-delimit leak) + MAJOR; escalated implementor haiku→sonnet (PROC-008); fix pass queued |
+| T-004 | in_review | task/T-004-config-observability | [#7](https://github.com/ognetwork-jw/git-migrator/pull/7) | 4 | r3: BLOCKER (decode-before-delimit leak) + MAJOR; escalated implementor haiku→sonnet (PROC-008); fix pass running |
 | T-010 | todo |  | | | |
 | T-011 | merged | task/T-011-core-primitives | [#6](https://github.com/ognetwork-jw/git-migrator/pull/6) | 2 | merged to ai-main 1c654ab; ADR-0058 folded into LIF-002; 0055-0057, 0059 accepted |
 | T-012 | in_review | task/T-012-facet-engine | [#10](https://github.com/ognetwork-jw/git-migrator/pull/10) | 1 | |
@@ -28,7 +28,7 @@ The orchestrator maintains this table (see [workflow](workflow.md)). Integration
 | T-034 | todo |  | | | |
 | T-040 | merged | task/T-040-fake-git-server | [#8](https://github.com/ognetwork-jw/git-migrator/pull/8) | 2 | merged to ai-main 7875b6a; ADR-0070..0072 accepted |
 | T-041 | merged | task/T-041-fake-bitbucket | [#5](https://github.com/ognetwork-jw/git-migrator/pull/5) | 2 | merged to ai-main 69844e8; ADR-0060/0061 accepted |
-| T-042 | in_progress | task/T-042-fake-github | | | |
+| T-042 | in_review | task/T-042-fake-github | [#12](https://github.com/ognetwork-jw/git-migrator/pull/12) | 1 | |
 | T-043 | todo |  | | | |
 | T-050 | todo |  | | | |
 | T-051 | todo |  | | | |
