@@ -5,3 +5,5 @@ packages:
   - testing/*
 minimumReleaseAgeExclude:
   - '@hono/node-server@2.1.4'
+allowBuilds:
+  protobufjs: false

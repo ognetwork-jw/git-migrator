@@ -29,6 +29,20 @@ The spec says "latest stable" for most dependencies (ARC-001) and requires exact
 | `re2js` | `2.8.6` | Added by T-013 to `packages/core` only (not the root). Pure-JavaScript RE2 port: linear-time regex for naming `replace` steps (ADR-0095). |
 | `@types/node` | `24.19.1` | Deliberately the `24.x` line, to match the Node 24 runtime. `latest` is 26.6.4, which would describe APIs Node 24 lacks. |
 
+### Installed by T-004 (exact pins in `packages/observability/package.json`)
+
+Packages that the intended-pins table below did not name, needed for DEP-050 tracing. Their versions are the ones that `@opentelemetry/sdk-node@0.223.0` and `@opentelemetry/instrumentation-pg@0.75.0` declare as compatible (`@opentelemetry/instrumentation` `0.223.0`, `@opentelemetry/api` `1.9.1`).
+
+| Package | Version | Notes |
+|---|---|---|
+| `@opentelemetry/exporter-trace-otlp-http` | `0.223.0` | OTLP/HTTP trace exporter, used only when `observability.otlpEndpoint` is set (ADR-0054). Same release line as `sdk-node`. |
+| `@opentelemetry/instrumentation-http` | `0.223.0` | HTTP server and outgoing HTTP instrumentation (DEP-050). Same release line as `sdk-node`. |
+| `@opentelemetry/instrumentation-pg` | `0.75.0` | PostgreSQL instrumentation (DEP-050). Its own version line; it depends on `@opentelemetry/instrumentation` `^0.223.0`. |
+
+The OTLP log exporter in `@opentelemetry/sdk-node` depends on `protobufjs`, whose install script pnpm 12 ignores by default. `pnpm-workspace.yaml` records `allowBuilds: { protobufjs: false }`, so `pnpm install --frozen-lockfile` passes. This tree exports traces over OTLP/HTTP JSON only and never uses protobuf, so the script is not needed. The `false` is deliberate: do not change it to `true` (see ADR-0054).
+
+BullMQ instrumentation is not installed here. DEP-050 names it, but the BullMQ tracing package is an optional peer of `bullmq` and belongs with the job runtime (T-028), see ADR-0054.
+
 ### Intended pins for later tasks
 
 Each later task adds these to the `package.json` that needs them, with exactly these versions (no `^`/`~`), unless it records a new ADR.

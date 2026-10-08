@@ -12,5 +12,14 @@
     "typecheck": "tsc -b",
     "lint": "biome check .",
     "test": "vitest run --root ../.. --project unit packages/observability"
+  },
+  "dependencies": {
+    "@opentelemetry/api": "1.9.1",
+    "@opentelemetry/exporter-trace-otlp-http": "0.223.0",
+    "@opentelemetry/instrumentation-http": "0.223.0",
+    "@opentelemetry/instrumentation-pg": "0.75.0",
+    "@opentelemetry/sdk-node": "0.223.0",
+    "pino": "10.4.0",
+    "prom-client": "15.1.3"
   }
 }
