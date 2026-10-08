@@ -58,6 +58,11 @@
 | [0086](0086-scoped-collection-key.md) | `variables` and `secrets` carry a derived `key` field | accepted (spec updated) |
 | [0087](0087-org-facet-schemas-and-strictness.md) | Endpoint-level secrets/variables/webhooks schemas; strict objects | accepted (spec updated) |
 | [0088](0088-parse-validation-and-webhook-keys.md) | Parse-time key validation, webhook keys, URL and text rules, schema versions | accepted (spec updated) |
+| [0090](0090-finding-code-source-list.md) | One source list of Finding codes, with the FAC-006 generic codes | agent-decided |
+| [0091](0091-spec-cross-check-method.md) | How the finding-code list is cross-checked against the facets spec | agent-decided |
+| [0092](0092-guidance-template-syntax.md) | Guidance template syntax, typed parameters and escaping | agent-decided |
+| [0093](0093-guidance-messages-and-i18n.md) | Where guidance messages live, and how next-intl renders them | agent-decided |
+| [0094](0094-guidance-severity-links-and-unverified-urls.md) | Guidance severity model, and links that could not be verified | agent-decided |
 | [0095](0095-naming-semantics.md) | Naming pipeline semantics, validation and collision keys | accepted (spec updated) |
 
 New ADRs continue from 0028. Implementor decisions use `status: agent-decided` (PROC-005).
