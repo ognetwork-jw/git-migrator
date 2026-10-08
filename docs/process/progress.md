@@ -6,7 +6,7 @@ The orchestrator maintains this table (see [workflow](workflow.md)). Integration
 |---|---|---|---|---|---|
 | T-001 | merged | task/T-001-bootstrap | [#1](https://github.com/ognetwork-jw/git-migrator/pull/1) | 5 | merged to ai-main 26d7246; ADR-0028..0030 folded into spec |
 | T-002 | in_progress | task/T-002-dev-environment | | | |
-| T-003 | in_review | task/T-003-agent-tooling-ci | [#4](https://github.com/ognetwork-jw/git-migrator/pull/4) | 2 | r1 fixed (26e9f42); round-2 review |
+| T-003 | in_review | task/T-003-agent-tooling-ci | [#4](https://github.com/ognetwork-jw/git-migrator/pull/4) | 3 | r2: 1 BLOCKER + 3 MAJOR (guard bypasses); fix pass queued (implementor cap); CI green on 26e9f42 |
 | T-004 | in_review | task/T-004-config-observability | [#7](https://github.com/ognetwork-jw/git-migrator/pull/7) | 2 | r1: 3 BLOCKER (log redaction) + 4 MAJOR in fix pass |
 | T-010 | todo |  | | | |
 | T-011 | merged | task/T-011-core-primitives | [#6](https://github.com/ognetwork-jw/git-migrator/pull/6) | 2 | merged to ai-main 1c654ab; ADR-0058 folded into LIF-002; 0055-0057, 0059 accepted |
