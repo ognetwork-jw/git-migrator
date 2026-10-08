@@ -81,8 +81,8 @@
 | [0101](0101-merge-settings-facet.md) | merge-settings facet semantics | accepted (spec updated) |
 | [0102](0102-repository-settings-facet.md) | repository-settings facet semantics | accepted (spec updated) |
 | [0103](0103-facets-guidance-test-edge.md) | Guidance coverage test for the git/settings facets lives in testing/integration | accepted (no spec change needed) |
-| [0105](0105-access-control-facet.md) | access-control facet: role merging, principal outcomes, finding paths, pending-invitation verification | agent-decided |
-| [0106](0106-code-ownership-facet.md) | code-ownership facet: lossy keys, access check, empty entries, Change Request task | agent-decided |
-| [0107](0107-facet-guidance-coverage-test-location.md) | Facet guidance coverage is asserted from `testing/integration` | agent-decided |
+| [0105](0105-access-control-facet.md) | access-control facet: role merging, principal outcomes, finding paths, pending-invitation verification | accepted (spec updated) |
+| [0106](0106-code-ownership-facet.md) | code-ownership facet: lossy keys, access check, empty entries, Change Request task | accepted (spec updated) |
+| [0107](0107-facet-guidance-coverage-test-location.md) | Facet guidance coverage is asserted from `testing/integration` | accepted (no spec change needed) |
 
 New ADRs continue from 0028. Implementor decisions use `status: agent-decided` (PROC-005). T-002 uses 0065–0069.

@@ -1,6 +1,6 @@
 # ADR-0106: code-ownership facet decisions
 
-- Status: agent-decided
+- Status: accepted (spec updated)
 - Date: 2026-10-08
 
 ## Context

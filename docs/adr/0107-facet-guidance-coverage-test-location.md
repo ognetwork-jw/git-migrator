@@ -1,6 +1,6 @@
 # ADR-0107: Facet guidance coverage is asserted from `testing/integration`
 
-- Status: agent-decided
+- Status: accepted (no spec change needed)
 - Date: 2026-10-08
 
 ## Context

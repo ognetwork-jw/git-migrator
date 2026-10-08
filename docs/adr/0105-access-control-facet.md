@@ -1,6 +1,6 @@
 # ADR-0105: access-control facet decisions
 
-- Status: agent-decided
+- Status: accepted (spec updated)
 - Date: 2026-10-08
 
 ## Context

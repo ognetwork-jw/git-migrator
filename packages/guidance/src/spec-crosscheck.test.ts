@@ -122,6 +122,7 @@ const NON_CODE_NAMES: readonly string[] = [
   '<facet>.accept-lossy',
   '<facet>.unmapped-principal',
   '<facet>.pending-invitation',
+  '<facet>.team-missing',
   'translation.unsupported',
 ];
 
@@ -202,8 +203,8 @@ describe('finding code list matches the facets spec (FAC-002)', () => {
   it('[FAC-002] the spec names every facet code in codes.ts, except the FAC-006 generic ones', () => {
     const mentioned = new Set(specNames().map((n) => n.name));
     const generic = /\.(unmapped-principal|pending-invitation|team-missing)$/;
-    // Agent-decided codes the orchestrator has not folded into the spec yet (ADR-0106).
-    const agentDecided = ['code-ownership.team-membership-unknown'];
+    // Agent-decided codes the orchestrator has not folded into the spec yet.
+    const agentDecided: string[] = [];
     for (const spec of FINDING_SPECS) {
       if (spec.facet === 'lifecycle' || generic.test(spec.code)) continue;
       if (agentDecided.includes(spec.code)) continue;

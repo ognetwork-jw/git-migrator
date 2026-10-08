@@ -54,7 +54,9 @@ Default `acceptLossy`: `["branch-rules.advisory-enforced", "environments.categor
 | `excluded` | omitted; an `identity_excluded` ED exists (AUTH-050) | — |
 | `pending_invite` | omitted | post task `<facet>.pending-invitation` (completion `parity`) |
 | `suggested` or `unmapped` | omitted | pre task `<facet>.unmapped-principal` (completion `resolution`), e.g. `access-control.unmapped-principal`, `branch-rules.unmapped-principal` |
-| group without a created team | omitted | blocker `access-control.team-missing` |
+| group without a created team | omitted | blocker `<facet>.team-missing`, e.g. `access-control.team-missing`, `code-ownership.team-missing` |
+
+Every decision is recorded at the source principal's path, so mapped and unmapped principals never share a decision path. Group ids compare case-insensitively; identities compare exactly (ADR-0105, ADR-0106).
 
 Only principals that appear in the repository's own documents are resolved. Workspace members referenced nowhere in the repository never affect its readiness.
 
@@ -346,9 +348,9 @@ type CodeOwnership = { owners: { pattern: string; principals: PrincipalEntry[] }
 - Source: Bitbucket effective default reviewers, which become one entry with pattern `*`. Default reviewers per branch condition don't exist in Bitbucket Cloud.
 - Target: `CODEOWNERS` in `.github/` on the default branch.
 - Translation emits a `CODEOWNERS` file through a Change Request on branch `git-migrator/codeowners` (LIF-047), with post task `code-ownership.review-and-merge` (v once merged).
-- GitHub requires owners to have write access. Principals with less access in `access-control` raise lossy `code-ownership.owner-insufficient-access` (they are omitted).
+- GitHub requires owners to have write access. Principals with less access in `access-control` raise lossy `code-ownership.owner-insufficient-access` (they are omitted). An identity has sufficient access through a direct write grant or through membership of a team (facet `teams`) that holds write. When that membership cannot be known (team document missing, or members skipped without explanation), the owner is kept and warning `code-ownership.team-membership-unknown` is raised (ADR-0106).
 - Semantics differ: Bitbucket adds reviewers, while GitHub requests and optionally requires them. The mapping is lossy with policy key `code-ownership.default-reviewers-as-codeowners`.
-- **Findings:** `code-ownership.review-and-merge` post (v) · `code-ownership.accept-lossy` pre.
+- **Findings:** `code-ownership.review-and-merge` post (v) · `code-ownership.accept-lossy` pre · `code-ownership.team-membership-unknown` W.
 
 ## change-requests (FAC-CRQ)
 
