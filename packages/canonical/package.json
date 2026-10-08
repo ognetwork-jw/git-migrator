@@ -14,6 +14,7 @@
     "test": "vitest run --root ../.. --project unit packages/canonical"
   },
   "dependencies": {
-    "@git-migrator/core": "workspace:*"
+    "@git-migrator/core": "workspace:*",
+    "zod": "4.6.5"
   }
 }

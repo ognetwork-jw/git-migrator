@@ -50,5 +50,9 @@
 | [0080](0080-facet-engine-contract.md) | Facet engine contract in `core`: structural types, registry validation, enforced purity | accepted (no spec change needed) |
 | [0081](0081-expected-differences-in-the-engine.md) | Expected Difference generation and subtraction (LIF-063 masking, `unreadable_defaulted`, migration-scoped accepts) | accepted (no spec change needed) |
 | [0082](0082-plan-aggregation.md) | Plan aggregation: identity, deterministic order, step templates | accepted (no spec change needed) |
+| [0085](0085-principal-entries.md) | Principal lists are keyed collections of `{ principal }` | agent-decided |
+| [0086](0086-scoped-collection-key.md) | `variables` and `secrets` carry a derived `key` field | agent-decided |
+| [0087](0087-org-facet-schemas-and-strictness.md) | Endpoint-level secrets/variables/webhooks schemas; strict objects | agent-decided |
+| [0088](0088-parse-validation-and-webhook-keys.md) | Parse-time key validation, webhook keys, URL and text rules, schema versions | agent-decided |
 
 New ADRs continue from 0028. Implementor decisions use `status: agent-decided` (PROC-005).
