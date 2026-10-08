@@ -5,7 +5,7 @@ The orchestrator maintains this table (see [workflow](workflow.md)). Integration
 | Task | Status | Branch | PR | Review rounds | Notes |
 |---|---|---|---|---|---|
 | T-001 | merged | task/T-001-bootstrap | [#1](https://github.com/ognetwork-jw/git-migrator/pull/1) | 5 | merged to ai-main 26d7246; ADR-0028..0030 folded into spec |
-| T-002 | todo |  | | | |
+| T-002 | in_progress | task/T-002-dev-environment | | | |
 | T-003 | in_review | task/T-003-agent-tooling-ci | [#4](https://github.com/ognetwork-jw/git-migrator/pull/4) | 1 | first real CI run on PR |
 | T-004 | in_progress | task/T-004-config-observability | | | |
 | T-010 | todo |  | | | |
