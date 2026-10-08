@@ -1,6 +1,6 @@
 # ADR-0082: Plan aggregation
 
-- Status: agent-decided
+- Status: accepted (no spec change needed)
 - Date: 2026-10-08
 
 ## Context

@@ -1,6 +1,6 @@
 # ADR-0081: Expected Difference generation and subtraction
 
-- Status: agent-decided
+- Status: accepted (no spec change needed)
 - Date: 2026-10-08
 
 ## Context

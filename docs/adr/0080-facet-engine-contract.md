@@ -1,6 +1,6 @@
 # ADR-0080: Facet engine contract in `core`
 
-- Status: agent-decided
+- Status: accepted (no spec change needed)
 - Date: 2026-10-08
 
 ## Context
