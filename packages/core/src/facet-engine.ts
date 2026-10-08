@@ -44,6 +44,7 @@ import { FIDELITIES } from './types.ts';
 
 export type FacetEngineErrorCode =
   | 'invalid_source'
+  | 'invalid_context'
   | 'invalid_actual'
   | 'invalid_result'
   | 'invalid_decision'
@@ -162,9 +163,19 @@ function isObject(v: unknown): v is Record<string, unknown> {
   return typeof v === 'object' && v !== null;
 }
 
+/**
+ * Only plain JSON is cloned. A Map, Set, Date or class instance would silently become `{}` through
+ * `Object.entries`, losing data a Facet relies on (for example `routeIndex`), so it throws instead.
+ */
 function deepClone<V>(value: V): V {
   if (Array.isArray(value)) return value.map(deepClone) as V;
   if (isObject(value)) {
+    const proto = Object.getPrototypeOf(value);
+    if (proto !== Object.prototype && proto !== null) {
+      throw new TypeError(
+        `only plain JSON objects and arrays can be passed to a Facet (got ${proto.constructor?.name ?? 'an object with a custom prototype'})`,
+      );
+    }
     return Object.fromEntries(Object.entries(value).map(([k, v]) => [k, deepClone(v)])) as V;
   }
   return value;
@@ -448,21 +459,43 @@ export function translateFacet(
 
   const deps: Record<string, { source: unknown; desired: unknown }> = {};
   for (const [k, v] of Object.entries(input.deps ?? {})) {
-    if (def.dependsOn.includes(k) && v !== undefined) deps[k] = frozenCopy(v);
+    if (def.dependsOn.includes(k) && v !== undefined) {
+      try {
+        deps[k] = frozenCopy(v);
+      } catch (e) {
+        throw new FacetEngineError(
+          'invalid_context',
+          facetKey,
+          `dependency ${k} must be plain JSON: ${(e as Error).message}`,
+          e,
+        );
+      }
+    }
   }
   // Everything the harness reads after `translate` is snapshotted here, and the facet only gets
   // frozen copies, so it cannot grant itself acceptance by mutating the context.
-  const policies = frozenCopy(input.env.policies);
-  const ctx: TranslateContext = {
-    identities: input.env.identities,
-    groups: input.env.groups,
-    policies,
-    route: frozenCopy(input.env.route),
-    routeIndex: frozenCopy(input.env.routeIndex),
-    sourceCaps: frozenCopy(input.sourceCaps ?? NO_CAPABILITY),
-    targetCaps: frozenCopy(input.targetCaps ?? NO_CAPABILITY),
-    deps: Object.freeze(deps),
-  };
+  let policies: TranslateContext['policies'];
+  let ctx: TranslateContext;
+  try {
+    policies = frozenCopy(input.env.policies);
+    ctx = {
+      identities: input.env.identities,
+      groups: input.env.groups,
+      policies,
+      route: frozenCopy(input.env.route),
+      routeIndex: frozenCopy(input.env.routeIndex),
+      sourceCaps: frozenCopy(input.sourceCaps ?? NO_CAPABILITY),
+      targetCaps: frozenCopy(input.targetCaps ?? NO_CAPABILITY),
+      deps: Object.freeze(deps),
+    };
+  } catch (e) {
+    throw new FacetEngineError(
+      'invalid_context',
+      facetKey,
+      `the translate context must be plain JSON: ${(e as Error).message}`,
+      e,
+    );
+  }
 
   let raw: TranslationResult<unknown>;
   try {
@@ -694,7 +727,16 @@ export function compareFacet(
     const path = canonicalPathOf(facetKey, 'invalid_diff', diff.path, true);
     if (byPath.has(path))
       throw new FacetEngineError('invalid_diff', facetKey, `two diffs for ${path}`);
-    byPath.set(path, { path, desired: deepClone(diff.desired), actual: deepClone(diff.actual) });
+    try {
+      byPath.set(path, { path, desired: deepClone(diff.desired), actual: deepClone(diff.actual) });
+    } catch (e) {
+      throw new FacetEngineError(
+        'invalid_diff',
+        facetKey,
+        `the values of the diff at ${path} must be plain JSON: ${(e as Error).message}`,
+        e,
+      );
+    }
   }
   const sorted = [...byPath.values()].sort((x, y) => compareCodeUnits(x.path, y.path));
 
@@ -782,7 +824,17 @@ export function satisfiedTasks<K extends FacetTaskRef>(
   const predicate = def.isTaskSatisfied;
   if (predicate === undefined) return [];
   const doc = frozenCopy(normalizeFacetDocument(def, target, 'invalid_actual'));
-  const diffs = frozenCopy([...parity]);
+  let diffs: FieldDiff[];
+  try {
+    diffs = frozenCopy([...parity]);
+  } catch (e) {
+    throw new FacetEngineError(
+      'invalid_diff',
+      facetKey,
+      `the parity diffs must be plain JSON: ${(e as Error).message}`,
+      e,
+    );
+  }
   return tasks.filter(
     (t) =>
       def.findingCodes[t.code]?.completion === 'parity' &&

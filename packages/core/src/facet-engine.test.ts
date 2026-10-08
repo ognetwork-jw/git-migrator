@@ -1269,3 +1269,92 @@ describe('[FAC-005] review round 1 hardening', () => {
     expect(Date.now() - started).toBeLessThan(10_000);
   });
 });
+
+describe('[ADP-031] the translate context carries plain JSON only (T-012 follow-up)', () => {
+  const withIndex = (routeIndex: Record<string, unknown>): TranslateEnvironment => ({
+    ...env(),
+    routeIndex,
+  });
+  const translateWith = (e: TranslateEnvironment) =>
+    translateFacet(new FacetRegistry().register(widget), 'widget', baseWidget(), { env: e });
+
+  it('[ADP-031] nested plain routeIndex data reaches the facet intact', () => {
+    let seen: unknown;
+    const reg = new FacetRegistry().register({
+      ...widget,
+      translate: (s, ctx) => {
+        seen = ctx.routeIndex;
+        return emptyResult(s);
+      },
+    });
+    translateFacet(reg, 'widget', baseWidget(), {
+      env: withIndex({ usage: { 'ssh-ed25519 AAAA': 2 }, list: [1, 2] }),
+    });
+    expect(seen).toEqual({ usage: { 'ssh-ed25519 AAAA': 2 }, list: [1, 2] });
+  });
+
+  it.each([
+    ['a Map', () => new Map([['k', 1]])],
+    ['a Set', () => new Set([1])],
+    ['a Date', () => new Date(0)],
+  ])('[ADP-031] %s in routeIndex fails loudly instead of becoming {}', (_label, make) => {
+    let error: unknown;
+    try {
+      translateWith(withIndex({ usage: make() }));
+    } catch (e) {
+      error = e;
+    }
+    expect(error).toBeInstanceOf(FacetEngineError);
+    expect((error as FacetEngineError).code).toBe('invalid_context');
+  });
+
+  it('[ADP-031] a class instance in route fails loudly', () => {
+    class Box {
+      x = 1;
+    }
+    expect(() => translateWith({ ...env(), route: { box: new Box() } })).toThrow(/plain JSON/);
+  });
+});
+
+describe('[ADP-031] non-JSON values elsewhere are FacetEngineErrors too', () => {
+  it('[ADP-031] a Date in a compare diff value is invalid_diff', () => {
+    const reg = new FacetRegistry().register({
+      ...widget,
+      compare: () => [{ path: '/size', desired: new Date(0), actual: 1 }],
+    });
+    const w = baseWidget();
+    let error: unknown;
+    try {
+      compareFacet(reg, 'widget', w, w);
+    } catch (e) {
+      error = e;
+    }
+    expect((error as FacetEngineError).code).toBe('invalid_diff');
+  });
+
+  it('[ADP-031] a Map in the parity diffs given to satisfiedTasks is invalid_diff', () => {
+    const reg = new FacetRegistry().register({ ...widget, isTaskSatisfied: () => true });
+    const parity = [{ path: '/size', desired: new Map(), actual: 1 }];
+    let error: unknown;
+    try {
+      satisfiedTasks(reg, 'widget', [], baseWidget(), parity);
+    } catch (e) {
+      error = e;
+    }
+    expect((error as FacetEngineError).code).toBe('invalid_diff');
+  });
+
+  it('[ADP-031] a Set in a dependency result is invalid_context', () => {
+    const reg = new FacetRegistry().register(gadget).register({ ...widget, dependsOn: ['gadget'] });
+    let error: unknown;
+    try {
+      translateFacet(reg, 'widget', baseWidget(), {
+        env: env(),
+        deps: { gadget: { source: new Set([1]), desired: {} } },
+      });
+    } catch (e) {
+      error = e;
+    }
+    expect((error as FacetEngineError).code).toBe('invalid_context');
+  });
+});
