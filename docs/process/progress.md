@@ -14,11 +14,11 @@ The orchestrator maintains this table (see [workflow](workflow.md)). Integration
 | T-013 | merged | task/T-013-naming | [#13](https://github.com/ognetwork-jw/git-migrator/pull/13) | 4 | merged 1df40cb; ADR-0095 folded into spec 06 |
 | T-014 | merged | task/T-014-guidance | [#14](https://github.com/ognetwork-jw/git-migrator/pull/14) | 4 | merged to ai-main a8ec5fa; ADR-0090..0094 folded into UI-040 and 05-facets; AGENTS.md messages rule amended |
 | T-015 | merged | task/T-015-canonical-schemas | [#11](https://github.com/ognetwork-jw/git-migrator/pull/11) | 3 | merged to ai-main 9965a55; ADR-0085..0088 folded into spec |
-| T-020 | in_review | task/T-020-auth | [#27](https://github.com/ognetwork-jw/git-migrator/pull/27) | 3 | r2: MAJOR (logger drops error objects) + MINORs; fix pass |
+| T-020 | in_review | task/T-020-auth | [#27](https://github.com/ognetwork-jw/git-migrator/pull/27) | 4 | r3: BLOCKER (suite timeouts) + MAJOR (quadratic email scrub); implementor escalated to opus (PROC-008); fix pass |
 | T-021 | todo |  | | | |
 | T-022 | todo |  | | | |
 | T-025 | merged | task/T-025-quota | [#26](https://github.com/ognetwork-jw/git-migrator/pull/26) | 3 | merged to ai-main (r3 ACCEPTABLE; MINORs → followups.md); ADR-0180 folded into JOB-041/043/045 |
-| T-026 | in_progress | task/T-026-adapter-sdk | | 0 | implementing (ADR range 0190-0199) |
+| T-026 | in_review | task/T-026-adapter-sdk | [#28](https://github.com/ognetwork-jw/git-migrator/pull/28) | 2 | r1 fixed (9299050: scrubber, size cap, URL confinement); round-2 review |
 | T-027 | todo |  | | | |
 | T-028 | todo |  | | | |
 | T-030 | merged | task/T-030-bitbucket-api-verification | [#2](https://github.com/ognetwork-jw/git-migrator/pull/2) | 2 | ADR-0035, 0036 folded into spec; r2 adversarial MAJOR downgraded to MINOR (pre-existing text) |
@@ -60,7 +60,7 @@ The orchestrator maintains this table (see [workflow](workflow.md)). Integration
 | T-089 | todo |  | | | |
 | T-090 | todo |  | | | |
 | T-091 | todo |  | | | |
-| T-093 | in_review | task/T-093-devenv-ci | [#18](https://github.com/ognetwork-jw/git-migrator/pull/18) | 2 | CI devenv test failed (secretspec ref rename under env provider); fixed to the file provider (2329633); awaiting CI |
+| T-093 | in_review | task/T-093-devenv-ci | [#18](https://github.com/ognetwork-jw/git-migrator/pull/18) | 2 | devenv test hang fixed (postgres probe over scram TCP; ADR-0137; d77cc24); awaiting CI, then round-2 review |
 | T-095 | todo |  | | | |
 | T-096 | todo |  | | | |
 | T-097 | todo |  | | | |
