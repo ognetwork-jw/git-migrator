@@ -149,6 +149,7 @@ Acceptance:
 - BullMQ on the PG backend.
 - Queue definitions, payload validation, worker roles, leader election (two processes, one leader), job schedulers from config, health server, scratch cleanup.
 - `migrate` entrypoint runs all DATA-030 steps.
+- BullMQ jobs are traced with OpenTelemetry (DEP-050; deferred from T-004, ADR-0054).
 
 ## M4 — Provider fakes
 

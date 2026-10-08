@@ -7,7 +7,7 @@ The orchestrator maintains this table (see [workflow](workflow.md)). Integration
 | T-001 | merged | task/T-001-bootstrap | [#1](https://github.com/ognetwork-jw/git-migrator/pull/1) | 5 | merged to ai-main 26d7246; ADR-0028..0030 folded into spec |
 | T-002 | in_progress | task/T-002-dev-environment | | | |
 | T-003 | in_review | task/T-003-agent-tooling-ci | [#4](https://github.com/ognetwork-jw/git-migrator/pull/4) | 2 | r1: BLOCKER (gitleaks org license + 3 leaks) + 5 MAJOR in fix pass |
-| T-004 | in_review | task/T-004-config-observability | [#7](https://github.com/ognetwork-jw/git-migrator/pull/7) | 1 | |
+| T-004 | in_review | task/T-004-config-observability | [#7](https://github.com/ognetwork-jw/git-migrator/pull/7) | 2 | r1: 3 BLOCKER (log redaction) + 4 MAJOR; fix pass queued (implementor cap) |
 | T-010 | todo |  | | | |
 | T-011 | in_review | task/T-011-core-primitives | [#6](https://github.com/ognetwork-jw/git-migrator/pull/6) | 2 | r1: 2 MAJOR; fix pass queued (implementor cap) |
 | T-012 | todo |  | | | |
