@@ -34,6 +34,8 @@ new ProviderHttpClient({
 - Telemetry goes to `ProviderTelemetry` (`gm_provider_requests_total`, `gm_provider_request_duration_seconds`, spans).
 - With `GM_ENVIRONMENT=test` it refuses every host except loopback, `GM_TEST_ALLOWED_HOSTS` and `testAllowedHosts` (TST-006).
 
+The SDK also re-exports `bucketKey`, `BucketSpec`, `QuotaFeedback` and `QuotaPool` from `quota`, so adapters can write classifiers without importing `quota` (ADR-0223).
+
 ## Pagination (`pagination.ts`)
 
 `parseLinkHeader`, `paginateLinks` (link-based), `paginateCursor` (cursor-based), `flattenPages`, `collect`. Loops and runaway paging are errors.
