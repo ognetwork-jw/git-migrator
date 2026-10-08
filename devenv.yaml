@@ -1,0 +1,15 @@
+# devenv (DEV-010). `devenv shell`, `devenv up` (Postgres, web, worker) and `devenv test` (ADR-0066).
+# Secrets: secretspec profile `development` through the keyring provider. Override on the command
+# line with `devenv --secretspec-provider dotenv shell`; the defaults in secretspec.toml need no store.
+inputs:
+  nixpkgs:
+    url: github:cachix/devenv-nixpkgs/rolling
+  git-hooks:
+    url: github:cachix/git-hooks.nix
+    inputs:
+      nixpkgs:
+        follows: nixpkgs
+secretspec:
+  enable: true
+  provider: keyring
+  profile: development
