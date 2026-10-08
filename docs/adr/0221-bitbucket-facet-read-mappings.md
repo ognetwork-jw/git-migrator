@@ -1,6 +1,6 @@
 # ADR-0221: Bitbucket Facet read mappings the spec leaves open
 
-- Status: agent-decided
+- Status: accepted (spec updated)
 - Date: 2026-10-08
 - Task: T-032
 - Affects: FAC-ACL-001, FAC-BRR-001, FAC-WEB-001, FAC-DKY-001, FAC-MRG-002, FAC-EXT-001, FAC-VAR-001, FAC-PIP-001, ADP-013

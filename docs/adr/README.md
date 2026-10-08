@@ -113,9 +113,9 @@
 | [0135](0135-headless-secrets-in-devenv-ci.md) | Headless secretspec route for the devenv CI job (env provider, test profile) | accepted (spec updated) |
 | [0136](0136-devenv-ci-cli-and-lock.md) | devenv CI pins the CLI to the v2.4.0 tag and uses the devenv cache; devenv.lock not committed yet | accepted (no spec change needed) |
 | [0137](0137-devenv-test-readiness.md) | devenv test waits on readiness probes; Postgres probed over the socket; CREATEDB for the app role | accepted (spec updated) |
-| [0220](0220-bitbucket-adapter-connection-and-inventory.md) | Bitbucket adapter config and credential shape, ids, bucket-key sanitising, inventory | agent-decided |
-| [0221](0221-bitbucket-facet-read-mappings.md) | Bitbucket Facet read mappings the spec leaves open (grants, enforcement, webhooks, failure policy) | agent-decided |
-| [0222](0222-bitbucket-source-lock.md) | Source read-only apply and undo, partial results | agent-decided |
-| [0223](0223-adapter-http-ban-and-sdk-quota-exports.md) | check-deps rule banning direct HTTP in adapters; SDK quota re-exports | agent-decided |
+| [0220](0220-bitbucket-adapter-connection-and-inventory.md) | Bitbucket adapter config and credential shape, ids, bucket-key sanitising, inventory | accepted (no spec change needed) |
+| [0221](0221-bitbucket-facet-read-mappings.md) | Bitbucket Facet read mappings the spec leaves open (grants, enforcement, webhooks, failure policy) | accepted (spec updated) |
+| [0222](0222-bitbucket-source-lock.md) | Source read-only apply and undo, partial results | accepted (spec updated) |
+| [0223](0223-adapter-http-ban-and-sdk-quota-exports.md) | check-deps rule banning direct HTTP in adapters; SDK quota re-exports | accepted (no spec change needed) |
 
 New ADRs continue from 0028. Implementor decisions use `status: agent-decided` (PROC-005). T-002 uses 0065–0069.

@@ -1,6 +1,6 @@
 # ADR-0220: Bitbucket adapter connection, identifiers and inventory
 
-- Status: agent-decided
+- Status: accepted (no spec change needed)
 - Date: 2026-10-08
 - Task: T-032
 - Affects: ADP-010, ADP-070, JOB-030, JOB-040, JOB-042, JOB-043, AUTH-050

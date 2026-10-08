@@ -1,6 +1,6 @@
 # ADR-0223: Ban direct HTTP in adapters; adapter-sdk re-exports quota vocabulary
 
-- Status: agent-decided
+- Status: accepted (no spec change needed)
 - Date: 2026-10-08
 - Task: T-032
 - Affects: ADP-060, ARC-012, TST-006

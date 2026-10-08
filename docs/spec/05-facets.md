@@ -186,7 +186,7 @@ type BranchRules = { rules: BranchRule[] };
     - `require_tasks_to_be_completed` → `requireTasksResolved`
     - `require_commits_behind` → `requireUpToDate`
     - `require_passing_builds_to_merge` → `minPassingBuilds`
-  - `enforcement` is `enforced` only if the workspace enforces merge checks (Premium). On Standard every merge-check-derived rule is `advisory`.
+  - `enforcement` is `enforced` only if merge checks are enforced for the rule's pattern (Premium: an `enforce_merge_checks` restriction matching the pattern). On Standard every merge-check-derived rule is `advisory` (ADR-0221; to be confirmed by live e2e).
   - Kinds that don't map are reported as warning `branch-rules.unknown-kind`.
 - **FAC-BRR-002 GitHub write: classic branch protection rules**, one per pattern. They are read and written through GraphQL (`branchProtectionRules`, `create/update/deleteBranchProtectionRule`), because REST protection endpoints accept only literal branch names. Rulesets are not used in v1 because ruleset bypass lists cannot name individual users (ADR-0014). GraphQL calls use the `graphql` quota resource (JOB-045). In the table below, field names are the REST names; the adapter uses their GraphQL equivalents: `requiresApprovingReviews`, `requiredApprovingReviewCount`, `dismissesStaleReviews`, `requiresCodeOwnerReviews`, `requiresConversationResolution`, `requiresStatusChecks`, `requiresStrictStatusChecks`, `restrictsPushes` + `pushAllowances`, `allowsForcePushes`, `allowsDeletions`, `isAdminEnforced`.
 

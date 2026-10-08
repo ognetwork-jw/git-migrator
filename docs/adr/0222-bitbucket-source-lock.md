@@ -1,6 +1,6 @@
 # ADR-0222: Bitbucket source read-only apply and undo
 
-- Status: agent-decided
+- Status: accepted (spec updated)
 - Date: 2026-10-08
 - Task: T-032
 - Affects: LIF-070, LIF-045, LIF-042, ADP-012
