@@ -14,3 +14,10 @@ test-results/
 .DS_Store
 *.log
 .claude/settings.local.json
+
+# devenv and Nix
+.devenv/
+.direnv/
+
+# devenv git-hooks output (generated at shell entry; never committed)
+.pre-commit-config.yaml
