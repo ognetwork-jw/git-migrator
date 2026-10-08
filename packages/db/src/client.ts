@@ -1,9 +1,10 @@
+import { types } from 'node:util';
 import {
   type AuthType,
   type ClientContract,
   ORMError,
   ORMErrorReason,
-  type TransactionIsolationLevel,
+  TransactionIsolationLevel,
   ZenStackClient,
 } from '@zenstackhq/orm';
 import { PolicyPlugin } from '@zenstackhq/plugin-policy';
@@ -123,20 +124,82 @@ const MAX_ARG_DEPTH = 64;
 
 const refusal = (message: string): ORMError => new ORMError(ORMErrorReason.INVALID_INPUT, message);
 
+const DECIMAL_OWN_KEYS: ReadonlySet<PropertyKey> = new Set(['constructor', 's', 'e', 'd']);
+const ISOLATION_LEVELS: ReadonlySet<unknown> = new Set(Object.values(TransactionIsolationLevel));
+
 /**
- * Walks the arguments of a delegate call before any query is built (AUTH-021). Only data is
- * allowed: plain objects and arrays, primitives, Date, Decimal and Uint8Array. A function (above
- * all the callback of a `where.$expr`, which hands the caller the SQL expression builder and with
- * it raw SQL beneath the policy plugin) or any other object is refused at any depth, and so is a
- * key named `$expr`, a symbol key, an accessor property, a cycle and nesting deeper than 64 levels.
+ * Reads one own data property. The value is read from the descriptor, once, so a getter (refused
+ * earlier) or a lying `get` trap cannot return different values to the walk and to ZenStack.
  */
-function assertPlainData(value: unknown, ancestors: Set<object> = new Set()): void {
-  if (value === null || value === undefined) return;
+function dataValue(obj: object, key: string): unknown {
+  const descriptor = Object.getOwnPropertyDescriptor(obj, key) as PropertyDescriptor;
+  if (!('value' in descriptor)) throw refusal('arguments must not have accessor properties');
+  return descriptor.value;
+}
+
+/** A Date, Decimal or Uint8Array leaf rebuilt from its internal value, or `undefined` if `obj` is none. */
+function cloneLeaf(obj: object): unknown {
+  const proto = Object.getPrototypeOf(obj);
+  if (types.isDate(obj) || proto === Date.prototype) {
+    // Exact type: the prototype is Date.prototype, the brand is a real Date, and there are no own
+    // keys (an own `$expr` or a shadowed method would survive a naive copy).
+    if (proto !== Date.prototype || !types.isDate(obj) || Reflect.ownKeys(obj).length > 0) {
+      throw refusal('arguments may only hold plain Date values');
+    }
+    return new Date(Date.prototype.getTime.call(obj));
+  }
+  if (proto === Decimal.prototype || obj instanceof Decimal) {
+    const keys = Reflect.ownKeys(obj);
+    if (
+      proto !== Decimal.prototype ||
+      !keys.every((k) => DECIMAL_OWN_KEYS.has(k)) ||
+      !(['s', 'e', 'd'] as const).every((k) => keys.includes(k)) ||
+      dataValue(obj, 'constructor') !== Decimal
+    ) {
+      throw refusal('arguments may only hold plain Decimal values');
+    }
+    for (const key of ['s', 'e', 'd']) dataValue(obj, key);
+    try {
+      return new Decimal(Decimal.prototype.toString.call(obj));
+    } catch {
+      throw refusal('arguments may only hold plain Decimal values');
+    }
+  }
+  if (types.isUint8Array(obj) || proto === Uint8Array.prototype) {
+    const exact = proto === Uint8Array.prototype || proto === Buffer.prototype;
+    if (!exact || !types.isUint8Array(obj) || Reflect.ownKeys(obj).length !== obj.length) {
+      throw refusal('arguments may only hold plain Uint8Array values');
+    }
+    const copy = new Uint8Array(obj.length);
+    copy.set(obj);
+    return copy;
+  }
+  return undefined;
+}
+
+/**
+ * Validates and copies the arguments of a delegate call before any query is built (AUTH-021,
+ * ADR-0200). Only data is allowed: plain objects and arrays, primitives, and exact Date, Decimal
+ * and Uint8Array values. The result is a fresh plain-data deep clone, and only the clone reaches
+ * ZenStack. That closes four holes of an inspect-then-pass walk: a Date, Decimal or Uint8Array
+ * carrying an own `$expr`; a forged prototype (`Object.create(Date.prototype)`); a Proxy whose
+ * traps answer the walk differently from ZenStack's later reads; and arguments the caller changes
+ * after the call, which ZenStack reads lazily. A function (above all the callback of a
+ * `where.$expr`, which hands the caller the SQL expression builder and with it raw SQL beneath the
+ * policy plugin) or any other object is refused at any depth, and so is a Proxy, a key named
+ * `$expr` or `__proto__`, a symbol key, an accessor property, a cycle and nesting deeper than 64.
+ */
+function cloneData(value: unknown, ancestors: Set<object> = new Set()): unknown {
+  if (value === null || value === undefined) return value;
   const type = typeof value;
-  if (type === 'string' || type === 'number' || type === 'boolean' || type === 'bigint') return;
+  if (type === 'string' || type === 'number' || type === 'boolean' || type === 'bigint') {
+    return value;
+  }
   if (type !== 'object') throw refusal(`arguments may only hold data, found a ${type}`);
   const obj = value as object;
-  if (obj instanceof Date || obj instanceof Decimal || obj instanceof Uint8Array) return;
+  if (types.isProxy(obj)) throw refusal('arguments must not contain a Proxy');
+  const leaf = cloneLeaf(obj);
+  if (leaf !== undefined) return leaf;
   if (ancestors.has(obj)) throw refusal('arguments must not contain a cycle');
   if (ancestors.size >= MAX_ARG_DEPTH) throw refusal('arguments are nested too deeply');
   const proto = Object.getPrototypeOf(obj);
@@ -145,15 +208,39 @@ function assertPlainData(value: unknown, ancestors: Set<object> = new Set()): vo
     throw refusal('arguments may only hold plain objects and arrays');
   }
   ancestors.add(obj);
+  const clone: unknown[] | Record<string, unknown> = isArray ? new Array(obj.length) : {};
   for (const key of Reflect.ownKeys(obj)) {
     if (typeof key === 'symbol') throw refusal('arguments must not have symbol keys');
     if (key === '$expr') throw refusal('$expr is not allowed');
-    const descriptor = Object.getOwnPropertyDescriptor(obj, key) as PropertyDescriptor;
-    if (!('value' in descriptor)) throw refusal('arguments must not have accessor properties');
+    if (key === '__proto__') throw refusal('arguments must not have a __proto__ key');
     if (isArray && key === 'length') continue;
-    assertPlainData(descriptor.value, ancestors);
+    // defineProperty, so no key can run a setter or change the clone's prototype.
+    Object.defineProperty(clone, key, {
+      value: cloneData(dataValue(obj, key), ancestors),
+      enumerable: true,
+      writable: true,
+      configurable: true,
+    });
   }
   ancestors.delete(obj);
+  return clone;
+}
+
+/** Transaction options are plain data too: a known isolation level or nothing. */
+function cloneTransactionOptions(options: unknown): TransactionOptions | undefined {
+  if (options === undefined) return undefined;
+  const clone = cloneData(options) as Record<string, unknown> | null;
+  if (clone === null || typeof clone !== 'object' || Array.isArray(clone)) {
+    throw refusal('transaction options must be an object');
+  }
+  for (const key of Object.keys(clone)) {
+    if (key !== 'isolationLevel') throw refusal(`unknown transaction option ${key}`);
+  }
+  const level = clone.isolationLevel;
+  if (level !== undefined && !ISOLATION_LEVELS.has(level)) {
+    throw refusal('unknown transaction isolation level');
+  }
+  return clone as TransactionOptions;
 }
 
 /**
@@ -161,7 +248,9 @@ function assertPlainData(value: unknown, ancestors: Set<object> = new Set()): vo
  * parameters (possibly secrets) into any log that prints the error. The facade rethrows a fresh
  * ORMError with the reason, the model, the policy reason code, the database error code and a
  * generic message. The RPC handler classifies by `reason`, so its status codes are unchanged.
- * Input errors keep their message (it describes the caller's own input). Other errors pass through.
+ * Input errors keep their message (it describes the caller's own input). Any other error that carries
+ * `sql`, `sqlParams` or node-postgres fields (on itself or in its `cause` chain) becomes a generic
+ * database error. Other errors pass through.
  */
 const GENERIC: Record<string, string> = {
   [ORMErrorReason.NOT_FOUND]: 'record not found',
@@ -169,8 +258,45 @@ const GENERIC: Record<string, string> = {
   [ORMErrorReason.DB_QUERY_ERROR]: 'database query failed',
 };
 
+/** Properties of a query error (Kysely, ZenStack) or a node-postgres `DatabaseError`. */
+const DB_DETAIL_KEYS = [
+  'sql',
+  'sqlParams',
+  'parameters',
+  'dbErrorMessage',
+  'severity',
+  'detail',
+  'hint',
+  'schema',
+  'table',
+  'column',
+  'dataType',
+  'constraint',
+  'internalQuery',
+  'routine',
+  'position',
+] as const;
+
+/** True when an error, or something in its `cause` chain, carries SQL text, parameters or pg fields. */
+function carriesDbDetail(error: unknown, depth = 0): boolean {
+  if (typeof error !== 'object' || error === null || depth > 5) return false;
+  if (DB_DETAIL_KEYS.some((key) => key in error)) return true;
+  return carriesDbDetail((error as { cause?: unknown }).cause, depth + 1);
+}
+
 function sanitizeError(error: unknown): unknown {
-  if (!(error instanceof ORMError)) return error;
+  if (!(error instanceof ORMError)) {
+    // An error thrown by a callback, or a driver error ZenStack did not wrap, may carry the query
+    // and its parameters (possibly secrets). It becomes the same generic error as a wrapped one.
+    if (!carriesDbDetail(error)) return error;
+    const code = (error as { code?: unknown }).code;
+    const clean = new ORMError(
+      ORMErrorReason.DB_QUERY_ERROR,
+      GENERIC[ORMErrorReason.DB_QUERY_ERROR],
+    );
+    if (typeof code === 'string' && /^[0-9A-Z]{5}$/.test(code)) clean.dbErrorCode = code;
+    return clean;
+  }
   const message =
     error.reason === ORMErrorReason.INVALID_INPUT
       ? error.message
@@ -239,18 +365,26 @@ function policyFacade(client: Db): PolicyDb {
     const copy: Record<string, AnyFn> = Object.create(null);
     for (const name of Object.keys(delegate)) {
       copy[name] = (...args) => {
+        let safe: unknown[];
         try {
-          assertPlainData(args);
+          // Only the clone reaches ZenStack, which reads its arguments lazily (ADR-0200).
+          safe = cloneData(args) as unknown[];
         } catch (error) {
-          return opaque(undefined, client, error as ORMError);
+          return opaque(undefined, client, sanitizeError(error) as ORMError);
         }
-        return opaque((delegate[name] as AnyFn).apply(delegate, args) as never, client);
+        return opaque((delegate[name] as AnyFn).apply(delegate, safe) as never, client);
       };
     }
     facade[key] = Object.freeze(copy);
   }
   facade.$schema = FROZEN_SCHEMA;
-  facade.$transaction = (arg: unknown, options?: TransactionOptions): unknown => {
+  facade.$transaction = (arg: unknown, rawOptions?: unknown): unknown => {
+    let options: TransactionOptions | undefined;
+    try {
+      options = cloneTransactionOptions(rawOptions);
+    } catch (error) {
+      return Promise.reject(error);
+    }
     if (typeof arg === 'function') {
       return Promise.resolve(
         (client.$transaction as AnyFn).call(

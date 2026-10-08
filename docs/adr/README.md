@@ -117,6 +117,9 @@
 | [0221](0221-bitbucket-facet-read-mappings.md) | Bitbucket Facet read mappings the spec leaves open (grants, enforcement, webhooks, failure policy) | accepted (spec updated) |
 | [0222](0222-bitbucket-source-lock.md) | Source read-only apply and undo, partial results | accepted (spec updated) |
 | [0223](0223-adapter-http-ban-and-sdk-quota-exports.md) | check-deps rule banning direct HTTP in adapters; SDK quota re-exports | accepted (no spec change needed) |
+| [0200](0200-facade-argument-clone.md) | The policy facade passes ZenStack a deep clone of its arguments (amends ADR-0122 item 9) | agent-decided |
+| [0201](0201-rpc-audit-plugin.md) | How RPC mutations are audited: entity-mutation hook in the mutation's transaction, redacted diff, narrow AuditEvent create rule | agent-decided |
+| [0202](0202-rpc-ids-last-admin-and-error-shapes.md) | RPC primary keys are immutable, the last-admin guard, problem+json for every /api/v1 error, argument limits | agent-decided |
 | [0230](0230-github-adapter-identity-and-connection.md) | GitHub adapter: identifiers, configuration, App token cache, quota buckets, error mapping | accepted (no spec change needed) |
 | [0231](0231-github-facet-drivers.md) | GitHub facet drivers: apply semantics, dynamic capabilities, branch rules, Change Requests | accepted (spec updated) |
 
