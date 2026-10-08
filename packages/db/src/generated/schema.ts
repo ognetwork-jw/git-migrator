@@ -2645,7 +2645,7 @@ export class SchemaType implements SchemaDef {
                     name: "id",
                     type: "String",
                     id: true,
-                    attributes: [{ name: "@id" }, { name: "@default", args: [{ name: "value", value: ExpressionUtils.call("uuid", [ExpressionUtils.literal(7)]) }] }] as readonly AttributeApplication[],
+                    attributes: [{ name: "@id" }, { name: "@default", args: [{ name: "value", value: ExpressionUtils.call("uuid", [ExpressionUtils.literal(7)]) }] }, { name: "@deny", args: [{ name: "operation", value: ExpressionUtils.literal("update") }, { name: "condition", value: ExpressionUtils.literal(true) }] }] as readonly AttributeApplication[],
                     default: ExpressionUtils.call("uuid", [ExpressionUtils.literal(7)]) as FieldDefault
                 },
                 name: {
@@ -2703,7 +2703,7 @@ export class SchemaType implements SchemaDef {
                     name: "id",
                     type: "String",
                     id: true,
-                    attributes: [{ name: "@id" }, { name: "@default", args: [{ name: "value", value: ExpressionUtils.call("uuid", [ExpressionUtils.literal(7)]) }] }] as readonly AttributeApplication[],
+                    attributes: [{ name: "@id" }, { name: "@default", args: [{ name: "value", value: ExpressionUtils.call("uuid", [ExpressionUtils.literal(7)]) }] }, { name: "@deny", args: [{ name: "operation", value: ExpressionUtils.literal("update") }, { name: "condition", value: ExpressionUtils.literal(true) }] }] as readonly AttributeApplication[],
                     default: ExpressionUtils.call("uuid", [ExpressionUtils.literal(7)]) as FieldDefault
                 },
                 routeId: {
@@ -2771,7 +2771,7 @@ export class SchemaType implements SchemaDef {
                     name: "id",
                     type: "String",
                     id: true,
-                    attributes: [{ name: "@id" }, { name: "@default", args: [{ name: "value", value: ExpressionUtils.call("uuid", [ExpressionUtils.literal(7)]) }] }] as readonly AttributeApplication[],
+                    attributes: [{ name: "@id" }, { name: "@default", args: [{ name: "value", value: ExpressionUtils.call("uuid", [ExpressionUtils.literal(7)]) }] }, { name: "@deny", args: [{ name: "operation", value: ExpressionUtils.literal("update") }, { name: "condition", value: ExpressionUtils.literal(true) }] }] as readonly AttributeApplication[],
                     default: ExpressionUtils.call("uuid", [ExpressionUtils.literal(7)]) as FieldDefault
                 },
                 routeId: {
@@ -2828,7 +2828,7 @@ export class SchemaType implements SchemaDef {
                     name: "id",
                     type: "String",
                     id: true,
-                    attributes: [{ name: "@id" }, { name: "@default", args: [{ name: "value", value: ExpressionUtils.call("uuid", [ExpressionUtils.literal(7)]) }] }] as readonly AttributeApplication[],
+                    attributes: [{ name: "@id" }, { name: "@default", args: [{ name: "value", value: ExpressionUtils.call("uuid", [ExpressionUtils.literal(7)]) }] }, { name: "@deny", args: [{ name: "operation", value: ExpressionUtils.literal("update") }, { name: "condition", value: ExpressionUtils.literal(true) }] }] as readonly AttributeApplication[],
                     default: ExpressionUtils.call("uuid", [ExpressionUtils.literal(7)]) as FieldDefault
                 },
                 routeId: {
@@ -2941,7 +2941,8 @@ export class SchemaType implements SchemaDef {
                 { name: "@@index", args: [{ name: "fields", value: ExpressionUtils.array("String", [ExpressionUtils.field("subjectType"), ExpressionUtils.field("subjectId")]) }] },
                 { name: "@@map", args: [{ name: "name", value: ExpressionUtils.literal("audit_event") }] },
                 { name: "@@schema", args: [{ name: "map", value: ExpressionUtils.literal("app") }] },
-                { name: "@@allow", args: [{ name: "operation", value: ExpressionUtils.literal("read") }, { name: "condition", value: ExpressionUtils.binary(ExpressionUtils.binary(ExpressionUtils.call("auth"), "!=", ExpressionUtils._null()), "&&", ExpressionUtils.binary(ExpressionUtils.member(ExpressionUtils.call("auth"), ["disabled"]), "==", ExpressionUtils.literal(false))) }] }
+                { name: "@@allow", args: [{ name: "operation", value: ExpressionUtils.literal("read") }, { name: "condition", value: ExpressionUtils.binary(ExpressionUtils.binary(ExpressionUtils.call("auth"), "!=", ExpressionUtils._null()), "&&", ExpressionUtils.binary(ExpressionUtils.member(ExpressionUtils.call("auth"), ["disabled"]), "==", ExpressionUtils.literal(false))) }] },
+                { name: "@@allow", args: [{ name: "operation", value: ExpressionUtils.literal("create") }, { name: "condition", value: ExpressionUtils.binary(ExpressionUtils.binary(ExpressionUtils.binary(ExpressionUtils.call("auth"), "!=", ExpressionUtils._null()), "&&", ExpressionUtils.binary(ExpressionUtils.member(ExpressionUtils.call("auth"), ["disabled"]), "==", ExpressionUtils.literal(false))), "&&", ExpressionUtils.binary(ExpressionUtils.field("actorId"), "==", ExpressionUtils.member(ExpressionUtils.call("auth"), ["id"]))) }] }
             ] as readonly AttributeApplication[],
             idFields: ["id"],
             uniqueFields: {

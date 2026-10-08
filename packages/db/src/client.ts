@@ -11,6 +11,7 @@ import { PolicyPlugin } from '@zenstackhq/plugin-policy';
 import Decimal from 'decimal.js';
 import { PostgresDialect } from 'kysely';
 import pg from 'pg';
+import { createAuditPlugin } from './audit.ts';
 import { type SchemaType, schema } from './generated/schema.ts';
 
 /** A ZenStack client over the `app` schema. */
@@ -48,6 +49,12 @@ export interface CreateDbOptions {
   readonly connectionString: string;
   /** Pool size for this process (`postgres.pool.app`, default 10). */
   readonly poolMax?: number;
+  /**
+   * Called with the raw error of a failed facade call (not for policy rejections, missing rows or
+   * invalid input), before it is sanitized. For logging only: reduce it to safe fields first, it can
+   * carry SQL text and parameters.
+   */
+  readonly onError?: (error: unknown) => void;
   /** Reuse an existing pool instead of creating one. The caller then owns closing it. */
   readonly pool?: pg.Pool;
 }
@@ -90,10 +97,12 @@ export function createDb(options: CreateDbOptions): DbHandle {
   const privileged = new ZenStackClient(schema, {
     dialect: new PostgresDialect({ pool }),
   }) as unknown as Db;
-  const policed = privileged.$use(new PolicyPlugin()) as unknown as Db;
+  // The audit plugin exists on the policed client only: it records what Actors do through RPC
+  // (AUTH-022). Jobs and custom endpoints use `privileged` and write their own events.
+  const policed = privileged.$use(new PolicyPlugin()).$use(createAuditPlugin()) as unknown as Db;
   return {
     privileged,
-    forActor: (actor) => policyFacade(policed.$setAuth(actor) as Db),
+    forActor: (actor) => policyFacade(policed.$setAuth(actor) as Db, options.onError),
     pool,
     close: async () => {
       if (ownsPool) await pool.end();
@@ -106,6 +115,68 @@ const MODEL_KEYS: readonly string[] = Object.keys(schema.models).map(
 );
 
 type AnyFn = (...args: unknown[]) => unknown;
+
+/** Fields that no role may read (`@deny('read', true)`): they must not leak through ordering either. */
+const READ_DENIED_FIELDS: Readonly<Record<string, readonly string[]>> = { ApiKey: ['hash'] };
+const AGGREGATE_KEYS: ReadonlySet<string> = new Set(['_min', '_max', '_count', '_sum', '_avg']);
+
+type FieldDef = { type: string; relation?: unknown };
+const fieldsOf = (model: string): Record<string, FieldDef> | undefined =>
+  (schema.models as unknown as Record<string, { fields: Record<string, FieldDef> }>)[model]?.fields;
+
+const isRecord = (v: unknown): v is Record<string, unknown> =>
+  typeof v === 'object' && v !== null && !Array.isArray(v);
+
+/**
+ * Refuses ordering, grouping and aggregating by a read-denied field, at any depth of `orderBy`,
+ * `include` and `select`. A denied field reads as null, but sorting by it would still reveal the
+ * order of the stored hashes (a bytewise oracle). `args` is already a plain-data clone.
+ */
+function assertNoDeniedFieldUse(model: string, args: unknown): void {
+  if (!isRecord(args)) return;
+  const denied = READ_DENIED_FIELDS[model] ?? [];
+  const fields = fieldsOf(model) ?? {};
+  const refuseOrder = (value: unknown, current: string): void => {
+    for (const entry of Array.isArray(value) ? value : [value]) {
+      if (!isRecord(entry)) continue;
+      for (const [name, sub] of Object.entries(entry)) {
+        const def = fieldsOf(current)?.[name];
+        if (def?.relation) refuseOrder(sub, def.type);
+        else if (READ_DENIED_FIELDS[current]?.includes(name)) {
+          throw refusal(`ordering by ${current}.${name} is not allowed`);
+        }
+      }
+    }
+  };
+  if ('orderBy' in args) refuseOrder(args.orderBy, model);
+  if (Array.isArray(args.by) && args.by.some((f) => denied.includes(String(f)))) {
+    throw refusal('grouping by a denied field is not allowed');
+  }
+  for (const [key, value] of Object.entries(args)) {
+    if (AGGREGATE_KEYS.has(key) && isRecord(value) && denied.some((f) => f in value)) {
+      throw refusal('aggregating a denied field is not allowed');
+    }
+    if (key === 'include' || key === 'select') {
+      for (const [name, sub] of Object.entries(isRecord(value) ? value : {})) {
+        const def = fields[name];
+        if (def?.relation) assertNoDeniedFieldUse(def.type, sub);
+      }
+    }
+  }
+}
+
+/** Delegate operations that read (ZenStack names). */
+const READ_OPERATIONS: ReadonlySet<string> = new Set([
+  'findUnique',
+  'findUniqueOrThrow',
+  'findFirst',
+  'findFirstOrThrow',
+  'findMany',
+  'count',
+  'aggregate',
+  'groupBy',
+  'exists',
+]);
 
 function deepFreezeCopy<T>(value: T): T {
   if (Array.isArray(value)) return Object.freeze(value.map(deepFreezeCopy)) as T;
@@ -121,6 +192,19 @@ function deepFreezeCopy<T>(value: T): T {
 const FROZEN_SCHEMA = deepFreezeCopy(schema);
 
 const MAX_ARG_DEPTH = 64;
+/** Most values (objects, arrays and leaves) one call may hold; a DAG of shared references is refused anyway. */
+const MAX_ARG_NODES = 10_000;
+/** Most string characters (values and keys) one call may hold. */
+const MAX_ARG_STRING_CHARS = 1_000_000;
+
+interface Walk {
+  readonly ancestors: Set<object>;
+  readonly seen: WeakSet<object>;
+  nodes: number;
+  chars: number;
+}
+
+const newWalk = (): Walk => ({ ancestors: new Set(), seen: new WeakSet(), nodes: 0, chars: 0 });
 
 const refusal = (message: string): ORMError => new ORMError(ORMErrorReason.INVALID_INPUT, message);
 
@@ -187,42 +271,52 @@ function cloneLeaf(obj: object): unknown {
  * after the call, which ZenStack reads lazily. A function (above all the callback of a
  * `where.$expr`, which hands the caller the SQL expression builder and with it raw SQL beneath the
  * policy plugin) or any other object is refused at any depth, and so is a Proxy, a key named
- * `$expr` or `__proto__`, a symbol key, an accessor property, a cycle and nesting deeper than 64.
+ * `$expr` or `__proto__`, a symbol key, an accessor property, a cycle, a value reached twice (shared reference), nesting deeper than 64, more than
+ * 10,000 values and more than 1,000,000 string characters.
  */
-function cloneData(value: unknown, ancestors: Set<object> = new Set()): unknown {
+function cloneData(value: unknown, walk: Walk = newWalk()): unknown {
+  if (++walk.nodes > MAX_ARG_NODES) throw refusal('arguments are too large');
   if (value === null || value === undefined) return value;
   const type = typeof value;
-  if (type === 'string' || type === 'number' || type === 'boolean' || type === 'bigint') {
+  if (type === 'string') {
+    walk.chars += (value as string).length;
+    if (walk.chars > MAX_ARG_STRING_CHARS) throw refusal('arguments are too large');
     return value;
   }
+  if (type === 'number' || type === 'boolean' || type === 'bigint') return value;
   if (type !== 'object') throw refusal(`arguments may only hold data, found a ${type}`);
   const obj = value as object;
   if (types.isProxy(obj)) throw refusal('arguments must not contain a Proxy');
   const leaf = cloneLeaf(obj);
   if (leaf !== undefined) return leaf;
-  if (ancestors.has(obj)) throw refusal('arguments must not contain a cycle');
-  if (ancestors.size >= MAX_ARG_DEPTH) throw refusal('arguments are nested too deeply');
+  if (walk.ancestors.has(obj)) throw refusal('arguments must not contain a cycle');
+  // A value reached twice is a shared reference. JSON cannot express one, but SuperJSON
+  // `referentialEqualities` can, and a DAG copied once per path takes exponential time.
+  if (walk.seen.has(obj)) throw refusal('arguments must not contain shared references');
+  walk.seen.add(obj);
+  if (walk.ancestors.size >= MAX_ARG_DEPTH) throw refusal('arguments are nested too deeply');
   const proto = Object.getPrototypeOf(obj);
   const isArray = Array.isArray(obj);
   if (isArray ? proto !== Array.prototype : proto !== Object.prototype && proto !== null) {
     throw refusal('arguments may only hold plain objects and arrays');
   }
-  ancestors.add(obj);
+  walk.ancestors.add(obj);
   const clone: unknown[] | Record<string, unknown> = isArray ? new Array(obj.length) : {};
   for (const key of Reflect.ownKeys(obj)) {
     if (typeof key === 'symbol') throw refusal('arguments must not have symbol keys');
     if (key === '$expr') throw refusal('$expr is not allowed');
     if (key === '__proto__') throw refusal('arguments must not have a __proto__ key');
     if (isArray && key === 'length') continue;
+    walk.chars += key.length;
     // defineProperty, so no key can run a setter or change the clone's prototype.
     Object.defineProperty(clone, key, {
-      value: cloneData(dataValue(obj, key), ancestors),
+      value: cloneData(dataValue(obj, key), walk),
       enumerable: true,
       writable: true,
       configurable: true,
     });
   }
-  ancestors.delete(obj);
+  walk.ancestors.delete(obj);
   return clone;
 }
 
@@ -310,9 +404,31 @@ function sanitizeError(error: unknown): unknown {
   return clean;
 }
 
-const rethrow = (error: unknown): never => {
-  throw sanitizeError(error);
-};
+/** Error reasons that are the caller's own doing and not worth an operator's attention. */
+const EXPECTED_REASONS: ReadonlySet<string> = new Set([
+  ORMErrorReason.NOT_FOUND,
+  ORMErrorReason.REJECTED_BY_POLICY,
+  ORMErrorReason.INVALID_INPUT,
+]);
+
+type ErrorObserver = (error: unknown) => void;
+
+/**
+ * Hands the raw error to the observer (for logging, with its own scrubbing) and rethrows the
+ * sanitized one. Policy rejections, missing rows and invalid input are not reported.
+ */
+const makeRethrow =
+  (observe: ErrorObserver | undefined) =>
+  (error: unknown): never => {
+    if (observe && !(error instanceof ORMError && EXPECTED_REASONS.has(error.reason))) {
+      try {
+        observe(error);
+      } catch {
+        // An observer must never change the outcome of a database call.
+      }
+    }
+    throw sanitizeError(error);
+  };
 
 interface Issued {
   op: PromiseLike<unknown> | undefined;
@@ -329,6 +445,7 @@ interface Issued {
 const ISSUED = new WeakMap<object, Issued>();
 
 function opaque(
+  rethrow: (error: unknown) => never,
   op: PromiseLike<unknown> | undefined,
   owner: object,
   refused?: ORMError,
@@ -355,24 +472,29 @@ function opaque(
 }
 
 /** Builds the `PolicyDb` facade over a policy-enforcing client (AUTH-021). */
-function policyFacade(client: Db): PolicyDb {
+function policyFacade(client: Db, observe?: ErrorObserver): PolicyDb {
+  const rethrow = makeRethrow(observe);
   const facade: Record<string, unknown> = Object.create(null);
   for (const key of MODEL_KEYS) {
+    const modelName = key.charAt(0).toUpperCase() + key.slice(1);
     const delegate = (client as unknown as Record<string, Record<string, AnyFn>>)[key] as Record<
       string,
       AnyFn
     >;
     const copy: Record<string, AnyFn> = Object.create(null);
     for (const name of Object.keys(delegate)) {
+      // The audit plugin writes AuditEvent as the Actor (ADR-0201); no RPC caller may.
+      if (key === 'auditEvent' && !READ_OPERATIONS.has(name)) continue;
       copy[name] = (...args) => {
         let safe: unknown[];
         try {
           // Only the clone reaches ZenStack, which reads its arguments lazily (ADR-0200).
           safe = cloneData(args) as unknown[];
+          assertNoDeniedFieldUse(modelName, safe[0]);
         } catch (error) {
-          return opaque(undefined, client, sanitizeError(error) as ORMError);
+          return opaque(rethrow, undefined, client, sanitizeError(error) as ORMError);
         }
-        return opaque((delegate[name] as AnyFn).apply(delegate, safe) as never, client);
+        return opaque(rethrow, (delegate[name] as AnyFn).apply(delegate, safe) as never, client);
       };
     }
     facade[key] = Object.freeze(copy);
@@ -389,7 +511,7 @@ function policyFacade(client: Db): PolicyDb {
       return Promise.resolve(
         (client.$transaction as AnyFn).call(
           client,
-          (tx: Db) => (arg as (tx: PolicyDb) => unknown)(policyFacade(tx)),
+          (tx: Db) => (arg as (tx: PolicyDb) => unknown)(policyFacade(tx, observe)),
           options,
         ),
       ).then((v) => v, rethrow);

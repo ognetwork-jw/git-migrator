@@ -141,6 +141,7 @@ describe('[DOM-005] policy declarations', () => {
       if (ops.length) grants[name] = ops;
     }
     expect(grants).toEqual({
+      AuditEvent: ['create'],
       Migration: ['update'],
       ManualTask: ['update'],
       Wave: ['create,update,delete'],

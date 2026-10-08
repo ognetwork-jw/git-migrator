@@ -34,3 +34,11 @@ Never hand `privileged` to the RPC handler. The value `forActor` returns is not 
 The tests need PostgreSQL 16 and create databases named `gm_t010_<random>` or `gm_test_<random>`, dropping them afterwards. The admin connection is `GM_TEST_DATABASE_URL` (default `postgresql://git_migrator:git_migrator@127.0.0.1:5432/postgres`; the role needs `CREATEDB`). Other packages use `createTestDatabase` from `@git-migrator/db/testing`.
 
 `src/policy.test.ts` drives every model through every role: reads, plus create, update and delete, expecting a denial for everything outside API-012. The Azure Flexible Server needs `pg_trgm` in `azure.extensions` for step 1.
+
+Arguments are also refused when an object is reached twice (shared references, as SuperJSON `referentialEqualities` can produce), when they hold more than 10,000 values or 1,000,000 string characters, or when `orderBy`, `by` or an aggregate uses a read-denied field such as `ApiKey.hash` (ADR-0202). `id` is immutable through RPC on every RPC-writable model. `createDb({ onError })` receives the raw error of a failed call for logging (reduce it to safe fields first).
+
+## Audit of RPC mutations (AUTH-022)
+
+`forActor` clients carry an audit plugin (`src/audit.ts`, ADR-0201). Every create, update or delete made through them writes one `AuditEvent` per row (`rpc.<model>.<action>`, a redacted field diff) in the same transaction. The `privileged` client is not audited; custom endpoints and jobs write their own events. The facade exposes no write operation of `auditEvent`.
+
+A `rpc.wave.delete` event lists `clearedMigrationIds`, the Migrations whose `waveId` the delete cleared. A mutation without an Actor id throws and rolls back, so nothing commits unaudited (ADR-0202).

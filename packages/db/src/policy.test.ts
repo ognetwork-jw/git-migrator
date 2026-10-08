@@ -92,7 +92,8 @@ describe('[AUTH-020] read access', () => {
 });
 
 describe('[DOM-005] default-deny writes; [API-012] only the allow-listed RPC writes', () => {
-  for (const model of MODELS) {
+  // AuditEvent has no write operations on the facade at all (ADR-0201); audit.test.ts covers it.
+  for (const model of MODELS.filter((m) => m !== 'AuditEvent')) {
     for (const role of ROLES) {
       it(`[DOM-005] ${role} create ${model}: ${mayWrite(model, role) ? 'allowed' : 'denied'}`, async () => {
         const attempt = delegateOf(clients[role], model).create({ data: world.createData(model) });

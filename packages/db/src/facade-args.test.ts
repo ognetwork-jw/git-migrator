@@ -150,6 +150,55 @@ for (const mode of ['a top-level facade', 'a callback facade'] as const) {
       });
     });
 
+    it('[AUTH-021] a shared reference (a DAG) is refused quickly instead of being copied per path', async () => {
+      await run(async (db) => {
+        // 25 levels of AND: [x, x] would be 2^25 paths when copied once per path.
+        let node: Record<string, unknown> = { name: 'x' };
+        for (let i = 0; i < 25; i++) node = { AND: [node, node] };
+        const started = Date.now();
+        await expectRefused(find(db)({ where: node }), /shared references/);
+        expect(Date.now() - started).toBeLessThan(1000);
+        const shared = { name: 'y' };
+        await expectRefused(find(db)({ where: { OR: [shared, shared] } }), /shared references/);
+        // Equal but separate objects are fine; only a repeated object is refused.
+        await expect(
+          find(db)({ where: { OR: [{ name: 'y' }, { name: 'y' }] } }),
+        ).resolves.toBeDefined();
+      });
+    });
+
+    it('[AUTH-021] the number of values and string characters in one call is capped', async () => {
+      await run(async (db) => {
+        const many = Array.from({ length: 10_001 }, (_, i) => ({ name: `n${i}` }));
+        await expectRefused(find(db)({ where: { OR: many } }), /too large/);
+        await expectRefused(find(db)({ where: { name: 'x'.repeat(1_000_001) } }), /too large/);
+      });
+    });
+
+    it('[AUTH-021] ordering, grouping or aggregating by a read-denied field is refused', async () => {
+      await run(async (db) => {
+        const key = db.apiKey.findMany as unknown as Find;
+        await expectRefused(key({ orderBy: { hash: 'asc' } }), /ordering by ApiKey.hash/);
+        await expectRefused(key({ orderBy: [{ prefix: 'asc' }, { hash: 'desc' }] }));
+        await expectRefused(key({ where: {}, by: ['hash'] }));
+        await expectRefused(key({ _max: { hash: true } }));
+        const actor = db.actor.findMany as unknown as Find;
+        await expectRefused(actor({ include: { apiKeys: { orderBy: { hash: 'asc' } } } }));
+        await expectRefused(actor({ select: { apiKeys: { orderBy: { hash: 'asc' } } } }));
+        await expectRefused(
+          (db.migration.findMany as unknown as Find)({
+            orderBy: { route: { id: 'asc' } },
+            include: { latestAnalysis: true },
+          }).then(() => {
+            throw new ORMError(ORMErrorReason.INVALID_INPUT, 'allowed');
+          }),
+          /allowed/,
+        );
+        // Ordering by a readable field is untouched.
+        await expect(key({ orderBy: { prefix: 'asc' } })).resolves.toBeDefined();
+      });
+    });
+
     it('[AUTH-021] a __proto__ key is refused', async () => {
       await run(async (db) => {
         const body = JSON.parse('{"where":{"__proto__":{"$expr":1}}}');

@@ -819,7 +819,7 @@ model Invitation {
 
 // Operators manage Waves through RPC (API-012). Deleting a Wave unsets Migration.waveId (DOM-013).
 model Wave {
-    id          String      @id @default(uuid(7))
+    id          String      @id @default(uuid(7)) @deny('update', true)
     name        String      @unique
     targetDate  DateTime?   @map("target_date") @db.Timestamptz(3)
     description String?
@@ -836,7 +836,7 @@ model Wave {
 
 // LIF-030. Admin-managed through RPC (API-012).
 model NamingRule {
-    id        String   @id @default(uuid(7))
+    id        String   @id @default(uuid(7)) @deny('update', true)
     routeId   String   @map("route_id")
     scope     String // namespace | repository (the route default lives in config only)
     scopeRef  String   @map("scope_ref") // Namespace.id or Repository.id
@@ -856,7 +856,7 @@ model NamingRule {
 
 // Admin-managed through RPC (API-012).
 model WebhookAllowlistEntry {
-    id        String   @id @default(uuid(7))
+    id        String   @id @default(uuid(7)) @deny('update', true)
     routeId   String   @map("route_id")
     pattern   String // URL glob, see FAC-WEB-002
     note      String?
@@ -873,7 +873,7 @@ model WebhookAllowlistEntry {
 
 // Admin-managed through RPC (API-012).
 model Overlay {
-    id        String   @id @default(uuid(7))
+    id        String   @id @default(uuid(7)) @deny('update', true)
     routeId   String   @map("route_id")
     facetKey  String   @map("facet_key")
     data      Json // partial canonical document for the facet
@@ -906,6 +906,11 @@ model AuditEvent {
     @@map("audit_event")
     @@schema('app')
     @@allow('read', auth() != null && auth().disabled == false)
+    // Written by the RPC audit plugin (AUTH-022) inside the mutation's own transaction, where the
+    // plugin chain cannot be switched, so the write runs as the Actor. An Actor may therefore
+    // create an event about itself only, and the forActor facade exposes no AuditEvent write
+    // (ADR-0201). Never updated or deleted.
+    @@allow('create', auth() != null && auth().disabled == false && actorId == auth().id)
 }
 
 // Sliding-window ledger (JOB-041). Append-only: only its own timestamp.
