@@ -352,6 +352,21 @@ describe('branch-rules mapper (FAC-BRR-001, FAC-BRR-003)', () => {
     });
   });
 
+  it('[FAC-BRR-001] a default branching model that nothing uses and no production branch raises no warning', () => {
+    const out = mapBranchRules([], {
+      branch_types: [{ kind: 'feature', prefix: 'feature/' }],
+      development: { name: 'main' },
+    });
+    expect(out.warnings).toEqual([]);
+  });
+
+  it('[FAC-BRR-001] a development branch other than the main branch is reported', () => {
+    const out = mapBranchRules([], {
+      development: { name: 'develop', use_mainbranch: false },
+    });
+    expect(out.warnings.map((w) => w.code)).toEqual(['branch-rules.branching-model']);
+  });
+
   it('[FAC-BRR-001] restrictions that land on one canonical pattern combine strictest-first', () => {
     const out = mapBranchRules(
       [

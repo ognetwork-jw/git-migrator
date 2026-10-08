@@ -220,7 +220,10 @@ export type Restriction = z.infer<typeof restriction>;
 
 export const branchingModel = obj({
   branch_types: z.array(obj({ kind: z.string(), prefix: z.string().optional() })).optional(),
-  development: obj({ name: z.string().nullish() }).optional(),
+  development: obj({
+    name: z.string().nullish(),
+    use_mainbranch: z.boolean().optional(),
+  }).optional(),
   production: obj({ name: z.string().nullish() }).optional(),
 });
 export type BranchingModel = z.infer<typeof branchingModel>;
@@ -388,7 +391,10 @@ export function mapBranchRules(
       changeRequest: a.cr,
     }));
   const prefixes = (model.branch_types ?? []).map((t) => t.prefix).filter((p) => p !== undefined);
-  if (usedModel || prefixes.length > 0 || model.production?.name) {
+  // Only a model that matters is reported (ADR-0313): a restriction uses it, or a production
+  // branch is configured. A default model whose prefixes nothing refers to has nothing to tell.
+  const ownDevelopment = model.development?.use_mainbranch === false && !!model.development.name;
+  if (usedModel || model.production?.name || ownDevelopment) {
     warnings.push({
       code: 'branch-rules.branching-model',
       paths: [],
