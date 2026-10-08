@@ -52,6 +52,7 @@ All paths are relative to `https://api.bitbucket.org`. Every list uses `pagelen=
 | Repository | `GET /2.0/repositories/{ws}/{slug}` | settings, size, `mainbranch`, `updated_on` |
 | Repository update | `PUT /2.0/repositories/{ws}/{slug}` (description) | source read-only |
 | Members | `GET /2.0/workspaces/{ws}/members` | identities, `members` |
+| Workspace permissions | `GET /2.0/workspaces/{ws}/permissions` (`read:workspace:bitbucket`; `permission` is `owner`, `collaborator` or `member`) | `members` role, owners excluded from `access-control` (ADR-0221); a 403/404 leaves roles unknown |
 | Groups | `GET /1.0/groups/{ws}` (includes members, default permission) **Not in the published API reference.** The OpenAPI document contains no `/1.0/` paths and no workspace-group list or membership endpoint, so availability is **unverified — validate during live e2e** (ADR-0036). The adapter MUST try it once per workspace and use the fallback on 404/410. Fallback (also the default if the probe fails): group names from repository and project `permissions-config/groups`, with membership unreadable. The `teams` facet then marks `members` `unreadable`, and raises post task `teams.set-membership`. | `teams`, ACL inheritance |
 | Repo user / group permissions | `GET /2.0/repositories/{ws}/{slug}/permissions-config/users`, `/groups` | `access-control` |
 | Project user / group permissions | `GET /2.0/workspaces/{ws}/projects/{key}/permissions-config/users`, `/groups` | `access-control` |
