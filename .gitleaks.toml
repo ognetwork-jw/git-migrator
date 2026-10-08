@@ -12,3 +12,13 @@ paths = ['''^testing/provider-fakes/specs/github\.openapi\.json$''']
 [[allowlists]]
 description = "Test-only fake GitHub App private key (T-002)"
 paths = ['''^testing/fixtures/fake-github-app\.pem$''']
+
+[[allowlists]]
+description = "Log-redaction tests feed fake `curl -u user:secret` shapes to the redactor (T-004)"
+targetRules = ["curl-auth-user"]
+paths = ['''^packages/observability/src/(logger|logger\.sweep|redact)\.test\.ts$''']
+
+[[allowlists]]
+description = "Fake GitHub's fixed public key for secrets encryption (base64 of a placeholder string, T-042)"
+targetRules = ["generic-api-key"]
+paths = ['''^testing/provider-fakes/src/github/routes/scopes\.ts$''']
