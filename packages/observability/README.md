@@ -64,14 +64,13 @@ import { startTracing } from '@git-migrator/observability';
 const tracing = startTracing({
   serviceName: config.observability.serviceName,
   otlpEndpoint: config.observability.otlpEndpoint,
-  instrumentations: [bullmqInstrumentation], // optional: the job runtime adds its own (T-028)
 });
 // on shutdown:
 await tracing.shutdown();
 ```
 
 - Call `startTracing` once, before servers and queues start, so the HTTP and PostgreSQL instrumentations can patch their modules.
-- HTTP server and outgoing HTTP and PostgreSQL are instrumented. BullMQ job instrumentation is passed in through `instrumentations` by the job runtime (T-028, ADR-0054).
+- HTTP server and outgoing HTTP and PostgreSQL are instrumented. BullMQ jobs are traced by `bullmq-otel`, which the job runtime passes to each Queue and Worker as `telemetry` (T-028, ADR-0210), so no extra instrumentation is needed here.
 - Spans are exported over OTLP/HTTP to `<otlpEndpoint>/v1/traces` only when `otlpEndpoint` is set. Without it, spans are created in memory (so logs still carry `traceId`) and discarded.
 - Metrics and logs are never sent through OpenTelemetry. `OTEL_*` exporter variables are not read.
 

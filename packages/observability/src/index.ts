@@ -2,7 +2,12 @@
 export const PACKAGE_NAME = '@git-migrator/observability';
 
 export { createLogger, type Logger, type LoggerOptions, type LogSink } from './logger.ts';
-export { createMetrics, type GmMetrics, type MetricsRegistry } from './metrics.ts';
+export {
+  createMetrics,
+  type GmMetrics,
+  type MetricRecorders,
+  type MetricsRegistry,
+} from './metrics.ts';
 export {
   type MetricsServer,
   type MetricsServerOptions,
