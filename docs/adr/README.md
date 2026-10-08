@@ -31,5 +31,6 @@
 | [0027](0027-model-tiers.md) | Cheapest appropriate model per subagent | accepted |
 | [0035](0035-merge-settings-from-main-branch.md) | Bitbucket merge settings are read from the main branch (FAC-MRG-002) | accepted (spec updated) |
 | [0036](0036-unverified-bitbucket-items.md) | Bitbucket facts the published docs cannot settle | accepted (spec updated) |
+| [0045](0045-ai-main-integration-branch.md) | Agents integrate into `ai-main`; the human merges into `main` | accepted (user decision) |
 
 New ADRs continue from 0028. Implementor decisions use `status: agent-decided` (PROC-005).
