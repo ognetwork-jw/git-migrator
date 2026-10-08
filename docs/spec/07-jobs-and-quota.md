@@ -62,7 +62,7 @@ The feeder never selects Migrations in `running`, `verified`, `manually_complete
   - The adapter classifies each request into a resource group.
 - **JOB-041 Sliding-window ledger.** Every request records a `QuotaEvent(bucketKey, pool, at)`. To acquire, a transaction:
   1. takes `pg_advisory_xact_lock(hash(bucketKey))`;
-  2. counts events in `[now − window, now]`;
+  2. counts events in `[now − window, now]`, where `now` is the database clock read after the lock is held, so clock skew between pods cannot over-grant (ADR-0180);
   3. grants if `count < effectiveLimit`, where `effectiveLimit = floor(limit × safetyFactor)`, with `quota.safetyFactor` defaulting to 0.95.
 
   `count` is **all** events in the window, background and interactive together. A **background** request is granted only while `count < floor(effectiveLimit × quota.backgroundShare)` (default 0.9). An **interactive** request is granted while `count < effectiveLimit`. Interactive work therefore always has at least 10% headroom.
@@ -81,7 +81,7 @@ The feeder never selects Migrations in `running`, `verified`, `manually_complete
   | `app-properties` | `/properties/**` | 2,000 |
   | `git` | each git smart-HTTP request (ls-remote, fetch, push = one each) | 60,000 |
 
-  Values come from config (`endpoints[].quota.overrides`), so updated Atlassian numbers need no code change. Scaled limits (access tokens on 100+ seat workspaces) are out of scope for user API tokens. If the response headers `X-RateLimit-Limit` or `X-RateLimit-NearLimit` ever appear, the adapter MUST honor them: update `limitPerWindow`, and treat `NearLimit: true` as "≤ 20% remaining" by clamping the background pool to 0 until the window advances.
+  Values come from config (`endpoints[].quota.overrides`), so updated Atlassian numbers need no code change. Scaled limits (access tokens on 100+ seat workspaces) are out of scope for user API tokens. If the response headers `X-RateLimit-Limit` or `X-RateLimit-NearLimit` ever appear, the adapter MUST honor them: update `limitPerWindow`, and treat `NearLimit: true` as "≤ 20% remaining" by clamping the background pool to 0 until the window advances. The clamp affects only the background pool; it never lowers the local count (ADR-0180).
 - **JOB-044 429 handling.**
   - Honor `Retry-After` when present.
   - Otherwise set `QuotaState.blockedUntil = oldestEventInWindow + window`. For Bitbucket that is at least 60 s.
@@ -90,6 +90,7 @@ The feeder never selects Migrations in `running`, `verified`, `manually_complete
 - **JOB-045 GitHub.**
   - Primary limits are read from `x-ratelimit-limit/remaining/reset/resource` and stored in `QuotaState`, one bucket per `resource` (`core`, `graphql`, …).
   - With `used = limit − remaining`, the same pool rule as JOB-041 applies: background only while `used < limit × safetyFactor × backgroundShare`, interactive while `used < limit × safetyFactor`.
+  - Reported usage is a floor, never a replacement: `used = max(local sliding count, (limit − remaining) + events acquired since the reporting request)`. Feedback can only make the service more conservative. The adapter passes the acquire time of the request whose response carried the headers; the service caps it at its own clock, and caps a reported reset at one window ahead. Requests acquired earlier and still in flight may be under-counted, bounded by the concurrency cap and the safety margin (ADR-0180).
   - GraphQL requests pre-acquire an estimate of 1 point and reconcile with the reported cost afterwards.
   - Secondary limits are tracked locally:
     - ≤ `github.maxConcurrentRequests` (default 10) in flight per installation across all pods. This is enforced by a Postgres lease table `quota_lease(bucket_key, holder, expires_at)`: a row is inserted per in-flight request with a 60 s expiry, and the insert is refused when the count of unexpired rows reaches the cap;

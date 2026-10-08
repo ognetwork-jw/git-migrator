@@ -1,6 +1,6 @@
 # ADR-0180: Quota service design
 
-- Status: agent-decided
+- Status: accepted (spec updated)
 - Date: 2026-10-08
 - Task: T-025
 - Affects: JOB-040, JOB-041, JOB-042, JOB-043, JOB-044, JOB-045, JOB-046, JOB-047, DEP-050, GLO-002, ARC-012
