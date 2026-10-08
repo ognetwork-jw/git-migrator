@@ -5,9 +5,9 @@ The orchestrator maintains this table (see [workflow](workflow.md)). Integration
 | Task | Status | Branch | PR | Review rounds | Notes |
 |---|---|---|---|---|---|
 | T-001 | merged | task/T-001-bootstrap | [#1](https://github.com/ognetwork-jw/git-migrator/pull/1) | 5 | merged to ai-main 26d7246; ADR-0028..0030 folded into spec |
-| T-002 | in_review | task/T-002-dev-environment | [#9](https://github.com/ognetwork-jw/git-migrator/pull/9) | 2 | r1: 6 MAJOR; fix pass queued (implementor cap) |
+| T-002 | in_review | task/T-002-dev-environment | [#9](https://github.com/ognetwork-jw/git-migrator/pull/9) | 2 | r1: 6 MAJOR in fix pass |
 | T-003 | in_review | task/T-003-agent-tooling-ci | [#4](https://github.com/ognetwork-jw/git-migrator/pull/4) | 3 | r2 fixed (8f8fa66, fail-closed guard); round-3 review |
-| T-004 | in_review | task/T-004-config-observability | [#7](https://github.com/ognetwork-jw/git-migrator/pull/7) | 3 | r2: 2 BLOCKER + 1 MAJOR (redaction) in fix pass |
+| T-004 | in_review | task/T-004-config-observability | [#7](https://github.com/ognetwork-jw/git-migrator/pull/7) | 3 | r2 fixed (96805fd); round-3 review |
 | T-010 | todo |  | | | |
 | T-011 | merged | task/T-011-core-primitives | [#6](https://github.com/ognetwork-jw/git-migrator/pull/6) | 2 | merged to ai-main 1c654ab; ADR-0058 folded into LIF-002; 0055-0057, 0059 accepted |
 | T-012 | in_progress | task/T-012-facet-engine | | | |
