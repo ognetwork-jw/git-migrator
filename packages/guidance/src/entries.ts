@@ -155,9 +155,13 @@ export const GUIDANCE: Readonly<Record<FindingCode, Guidance>> = {
   ),
   'webhooks.set-secret': plain(
     'webhooks.set-secret',
-    [step('webhooks.set-secret', 1), step('webhooks.set-secret', 2)],
+    [
+      step('webhooks.set-secret', 1),
+      step('webhooks.set-secret', 2, { when: 'activateAfterSecret' }),
+    ],
     VERIFICATION.webhookSecret,
   ),
+  'webhooks.duplicate-url': plain('webhooks.duplicate-url', [step('webhooks.duplicate-url', 1)]),
   'webhooks.accept-lossy': acceptLossy('webhooks.accept-lossy'),
 
   // deploy-keys

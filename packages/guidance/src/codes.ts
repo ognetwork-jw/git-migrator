@@ -158,6 +158,14 @@ export const FINDING_SPECS = [
     ref: 'FAC-WEB-003',
   },
   {
+    // Agent-decided (ADR-0141): ADR-0088 requires a finding for duplicate-URL hooks.
+    code: 'webhooks.duplicate-url',
+    facet: 'webhooks',
+    severity: 'warning',
+    verifiable: false,
+    ref: 'FAC-WEB',
+  },
+  {
     code: 'webhooks.accept-lossy',
     facet: 'webhooks',
     severity: 'pre',

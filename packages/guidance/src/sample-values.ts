@@ -27,4 +27,5 @@ export const SAMPLE_VALUES: ParamValues = {
   branch: 'git-migrator/ci',
   keyName: 'deploy-payments',
   unsupported: ['/image/pipe'],
+  activateAfterSecret: true,
 };

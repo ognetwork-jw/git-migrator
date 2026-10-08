@@ -117,6 +117,8 @@ function validItems(kind: ParamKind, value: unknown): string[] | undefined {
       return optional(validInteger(value));
     case 'list':
       return validList(value);
+    case 'flag':
+      return value === true ? ['true'] : undefined;
   }
 }
 
@@ -167,6 +169,7 @@ export function isSupplied(value: unknown): boolean {
   if (value === undefined || value === null) return false;
   if (typeof value === 'string') return value.trim() !== '';
   if (Array.isArray(value)) return value.length > 0;
+  if (typeof value === 'boolean') return value;
   return true;
 }
 

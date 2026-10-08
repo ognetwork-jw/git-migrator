@@ -7,7 +7,7 @@
  * bad value never reaches the output as "undefined", "null", "NaN" or an unescaped string.
  */
 
-export const PARAM_KINDS = ['text', 'url', 'integer', 'list'] as const;
+export const PARAM_KINDS = ['text', 'url', 'integer', 'list', 'flag'] as const;
 export type ParamKind = (typeof PARAM_KINDS)[number];
 
 export const PARAMS = {
@@ -44,6 +44,11 @@ export const PARAMS = {
   branch: { kind: 'text', description: 'Branch that holds a generated change.' },
   keyName: { kind: 'text', description: 'Deploy key title or file name.' },
   unsupported: { kind: 'list', description: 'YAML paths of unsupported pipeline constructs.' },
+  activateAfterSecret: {
+    kind: 'flag',
+    description:
+      'True when the hook was active on the source and should be activated after its secret is set.',
+  },
 } as const satisfies Record<string, { readonly kind: ParamKind; readonly description: string }>;
 
 export type ParamName = keyof typeof PARAMS;
@@ -52,7 +57,9 @@ type ValueOf<K extends ParamKind> = K extends 'text' | 'url'
   ? string
   : K extends 'integer'
     ? number
-    : readonly string[];
+    : K extends 'flag'
+      ? boolean
+      : readonly string[];
 
 /** Values a caller may supply, typed by each parameter's kind. Omitted or null means missing. */
 export type ParamValues = {

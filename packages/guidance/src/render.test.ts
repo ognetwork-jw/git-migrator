@@ -240,6 +240,17 @@ describe('display and copy of webhook URLs (UI-040, ADR-0092)', () => {
     );
   });
 
+  it('[FAC-WEB-003] set-secret asks for activation only when the hook was active on the source', () => {
+    const params = { targetUrlDisplay: 'https://example.test/…' };
+    expect(
+      renderGuidance('webhooks.set-secret', { ...params, activateAfterSecret: true }).steps,
+    ).toHaveLength(2);
+    expect(
+      renderGuidance('webhooks.set-secret', { ...params, activateAfterSecret: false }).steps,
+    ).toHaveLength(1);
+    expect(renderGuidance('webhooks.set-secret', params).steps).toHaveLength(1);
+  });
+
   it('[UI-040] non-http(s) URLs show the marker, never "null/…" or the raw URL', () => {
     for (const url of ['javascript:alert(1)', 'data:text/html,hi', 'mailto:ops@example.test']) {
       const rendered = renderGuidance('webhooks.set-secret', { targetUrl: url });
