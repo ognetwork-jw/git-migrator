@@ -21,7 +21,7 @@ The orchestrator maintains this table (see [workflow](workflow.md)). Status valu
 | T-026 | todo |  | | | |
 | T-027 | todo |  | | | |
 | T-028 | todo |  | | | |
-| T-030 | todo | task/T-030-bitbucket-api-verification | | | BLOCKED: network policy denies developer.atlassian.com and dac-static.atlassian.com; T-032/T-041 wait on it |
+| T-030 | in_progress | task/T-030-bitbucket-api-verification | | | Unblocked after network allowlist change |
 | T-031 | in_progress | task/T-031-github-api-verification | | | |
 | T-032 | todo |  | | | |
 | T-033 | todo |  | | | |
