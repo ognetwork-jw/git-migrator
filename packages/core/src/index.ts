@@ -7,6 +7,7 @@ export * from './facet-types.ts';
 export * from './field-path.ts';
 export * from './jcs.ts';
 export * from './lifecycle.ts';
+export * from './naming.ts';
 export * from './pattern.ts';
 export * from './plan.ts';
 export * from './policy.ts';

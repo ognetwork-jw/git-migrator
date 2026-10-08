@@ -102,6 +102,15 @@ const parity = compareFacet(registry, 'a', desired, actual /* null = unreadable 
   pre/post tasks and warnings, merged by (facet, code, `paramsHash`) and ordered deterministically.
 - Contract violations by a facet throw `FacetEngineError`; plan inconsistencies throw `PlanError`.
 
+## Naming (LIF-030, LIF-031)
+
+`resolveTargetName(rules, source, limits)` picks the rule (override > repository pipeline > namespace
+pipeline > Route default), runs the pipeline (`runNamingPipeline`) and validates the result against
+the target's name limits (`validateTargetName`, all violations reported). `planRouteNaming(migrations,
+limits, existingTargets)` names a whole Route, reports every case-insensitive, NFKC-normalized
+collision group (`detectCollisions`) and classifies existing targets (`classifyExistingTarget`).
+`replace` steps run on the linear-time `re2js` engine (`compileReplacePattern`, `validateReplacePattern`; `$1`, `$<name>`, `$$` in `with`). Decisions: ADR-0095.
+
 ## Tests
 
 Test names carry the requirement ID. The facet engine is tested with two synthetic facets defined in the tests only. The lifecycle suite generates the full status x event

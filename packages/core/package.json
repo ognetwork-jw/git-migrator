@@ -12,5 +12,8 @@
     "typecheck": "tsc -b",
     "lint": "biome check .",
     "test": "vitest run --root ../.. --project unit packages/core"
+  },
+  "dependencies": {
+    "re2js": "2.8.6"
   }
 }

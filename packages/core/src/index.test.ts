@@ -32,6 +32,8 @@ describe('[ARC-012] @git-migrator/core stays pure', () => {
     for (const file of sources) {
       const text = readFileSync(join(here, file), 'utf8');
       for (const m of text.matchAll(/^(?:import|export)\b[^'"]*?\bfrom\s+['"]([^'"]+)['"]/gm)) {
+        // The one external dependency: `re2js`, a pure linear-time regex engine used by naming.ts (ADR-0095).
+        if (m[1] === 're2js' && file === 'naming.ts') continue;
         expect(m[1], `${file} imports ${m[1]}`).toMatch(/^\.\/[a-z0-9-]+\.ts$/);
       }
     }
