@@ -21,7 +21,7 @@ The orchestrator maintains this table (see [workflow](workflow.md)). Status valu
 | T-026 | todo |  | | | |
 | T-027 | todo |  | | | |
 | T-028 | todo |  | | | |
-| T-030 | in_review | task/T-030-bitbucket-api-verification | [#2](https://github.com/ognetwork-jw/git-migrator/pull/2) | 2 | Unblocked after network allowlist change; ADR-0035, 0036 |
+| T-030 | merged | task/T-030-bitbucket-api-verification | [#2](https://github.com/ognetwork-jw/git-migrator/pull/2) | 2 | ADR-0035, 0036 folded into spec; r2 adversarial MAJOR downgraded to MINOR (pre-existing text) |
 | T-031 | in_review | task/T-031-github-api-verification | [#3](https://github.com/ognetwork-jw/git-migrator/pull/3) | 2 | r1: BLOCKER (force-push mapping) + MAJOR in fix pass |
 | T-032 | todo |  | | | |
 | T-033 | todo |  | | | |

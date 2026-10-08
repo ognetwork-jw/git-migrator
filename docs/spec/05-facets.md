@@ -115,9 +115,11 @@ type MergeSettings = {
 ```
 
 - **FAC-MRG-001 Mapping to GitHub.** `merge-commit` → `allow_merge_commit`, `squash` → `allow_squash_merge`, `rebase` → `allow_rebase_merge`. Bitbucket's rebase variants (`rebase_merge`, `rebase_fast_forward`) map to `rebase`, translated. `fast-forward-only` has no GitHub equivalent and maps to `rebase`, lossy with policy key `merge-settings.ff-only-as-rebase`. `deleteBranchOnMerge` ↔ GitHub `delete_branch_on_merge`.
-- **FAC-MRG-002 Bitbucket readability.** Task T-030 MUST determine whether Bitbucket's REST API exposes allowed merge strategies and the "close source branch" default per repository (effective, including project inheritance).
-  - If they are exposed, read them.
-  - If not, those fields are `unreadable` on the source. The desired target uses `routes[].defaults.mergeSettings` from config (default: all three GitHub strategies allowed, `deleteBranchOnMerge: true`). The analysis records an `unreadable_defaulted` Expected Difference automatically, with no task. T-030 records the finding in `docs/providers/bitbucket-cloud.md`.
+- **FAC-MRG-002 Bitbucket readability.** Resolved by T-030 (ADR-0035): both values are exposed and MUST be read.
+  - `allowed` comes from `merge_strategies` on the repository's main branch (`GET …/refs/branches/{mainbranch}`). `squash_fast_forward` is mapped by T-050.
+  - `deleteBranchOnMerge` comes from `default_branch_deletion` on `GET …/branching-model/settings` (a string `"true"`/`"false"` absent from the schema; accept string or boolean).
+  - A field that cannot be read (403, 404, missing field, or no main branch) is `unreadable` on the source. The desired target uses `routes[].defaults.mergeSettings` from config (default: all three GitHub strategies allowed, `deleteBranchOnMerge: true`). The analysis records an `unreadable_defaulted` Expected Difference automatically, with no task.
+  - Whether these values reflect project-level inheritance is unverified; the live e2e validates it (ADR-0036).
 - **Findings:** `merge-settings.accept-lossy` pre.
 
 ## access-control (FAC-ACL)

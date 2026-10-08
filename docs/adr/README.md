@@ -29,7 +29,7 @@
 | [0025](0025-single-image.md) | Single image, three entrypoints | accepted |
 | [0026](0026-review-loop.md) | Review loop with fixup commits | accepted |
 | [0027](0027-model-tiers.md) | Cheapest appropriate model per subagent | accepted |
-| [0035](0035-merge-settings-from-main-branch.md) | Bitbucket merge settings are read from the main branch (FAC-MRG-002) | agent-decided |
-| [0036](0036-unverified-bitbucket-items.md) | Bitbucket facts the published docs cannot settle | agent-decided |
+| [0035](0035-merge-settings-from-main-branch.md) | Bitbucket merge settings are read from the main branch (FAC-MRG-002) | accepted (spec updated) |
+| [0036](0036-unverified-bitbucket-items.md) | Bitbucket facts the published docs cannot settle | accepted (spec updated) |
 
 New ADRs continue from 0028. Implementor decisions use `status: agent-decided` (PROC-005).

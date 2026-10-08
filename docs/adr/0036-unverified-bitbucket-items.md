@@ -1,6 +1,6 @@
 # ADR-0036: Bitbucket facts the published docs cannot settle
 
-- Status: agent-decided
+- Status: accepted (spec updated)
 - Date: 2026-10-08
 - Task: T-030
 - Affects: AUTH-050, FAC-ACL-001, FAC-BRR-001, FAC-MRG-002, JOB-015, JOB-043, LIF-070

@@ -233,6 +233,7 @@ Default `sourcePostAction: read-only`, with per-Migration opt-out as a Run optio
 
 1. Add a branch restriction `kind: push`, pattern `*` (all branches), with no users or groups.
 2. Prefix the description with `[MIGRATED → <target web URL>] `.
+   The repository update endpoint can also create or rename a repository (ADR-0036), so the adapter MUST: `GET` the repository first in the same step and never write if it is missing; send a body containing only `description` (never `name`); `GET` again afterwards and, if `is_private`, `fork_policy`, `project`, `name` or `mainbranch` changed, restore them and fail the step.
 
 Both are Mutations, so undo (`undo_source_read_only` Run) deletes the restriction and restores the description. `sourceReadOnlyApplied` tracks the state. Tags are not protected; Bitbucket has no tag restriction. This is noted in the guidance.
 

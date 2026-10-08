@@ -1,6 +1,6 @@
 # ADR-0035: Bitbucket merge settings are read from the main branch (FAC-MRG-002)
 
-- Status: agent-decided
+- Status: accepted (spec updated)
 - Date: 2026-10-08
 - Task: T-030
 - Affects: FAC-MRG-002, FAC-MRG-001
