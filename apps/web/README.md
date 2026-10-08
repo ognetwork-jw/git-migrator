@@ -4,6 +4,10 @@ Next.js app: UI and Hono API.
 
 Status: the API is mounted (T-021); the UI shell is a later task (T-080). `pnpm dev` still runs the placeholder server in `src/dev-server.ts`, which does not serve the API yet.
 
+## Production entrypoint (DEP-002, ADR-0290)
+
+`src/web.ts` is what the image runs as `web` (`/app/dist/web.js`). Until the Next.js app lands it serves the Hono API (`/api/healthz`, `/api/readyz`, `/api/v1`, `/api/auth`) with `@hono/node-server` on port 3000 (`PORT`, `HOST`), starts the metrics server on `metrics.port` and tracing, and on SIGTERM stops accepting connections, finishes in-flight requests, cuts streams still open after 20 s and exits 0. T-080 swaps the server for the Next.js standalone one.
+
 ## API mount (API-001)
 
 - `app/api/[[...route]]/route.ts` is the Next.js route handler (Node.js runtime, `hono/vercel` `handle`). It forwards every method to the Hono app of `@git-migrator/api`, built on first use.

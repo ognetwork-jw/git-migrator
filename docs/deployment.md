@@ -1,6 +1,113 @@
-# Deployment notes
+# Deployment
 
-This file collects operational facts the spec asks implementors to record. The chart and image documentation (T-090) extends it.
+How to run git-migrator on Azure Kubernetes Service (AKS) with the Helm chart in `deploy/helm/git-migrator` (DEP-030). Secrets live in Azure Key Vault and reach the pods through secretspec and workload identity (DEP-020). Nothing secret is in the image, the chart values or the workflows.
+
+## Image
+
+`deploy/docker/Dockerfile` builds the image in stages (`secretspec-cli`, `base`, `dev`, `build`, `runtime`; DEP-001). The `runtime` stage is the last one, so a plain `docker build -f deploy/docker/Dockerfile .` produces it.
+
+- Runs as user `gm`, UID and GID 10001, under `tini -g` and `/app/bin/entrypoint.sh <web|worker|migrate>` (DEP-002). With `GM_SECRETSPEC_PROVIDER` set the entrypoint wraps the process in `secretspec run`, so secrets exist only in the process environment.
+- `secretspec.toml` is copied to `/app`, where `secretspec run` looks for it, and declares a `production` profile that inherits the secrets of `default` (ADR-0293). Without that profile the entrypoint stops with `'production' is not defined`.
+- The root filesystem is read-only (DEP-003). The process writes only to `/tmp`, `/home/gm`, `/scratch` (workers) and `/app/apps/web/.next/cache` (web), which the chart mounts as `emptyDir` volumes (the large worker's `/scratch` is a generic ephemeral volume).
+- The workspace packages are TypeScript that Node runs with type stripping, so the image keeps the workspace layout and the production `node_modules` instead of using `pnpm deploy` (ADR-0290). The ZenStack CLI that `migrate` runs is a production dependency of `@git-migrator/db`.
+- Until the Next.js UI lands (T-080), `web` serves the API (`/api/healthz`, `/api/readyz`, `/api/v1`, `/api/auth`) from `apps/web/src/web.ts`.
+- Smoke test: `deploy/docker/smoke.sh <image>` starts a throw-away Postgres and runs `migrate`, `web` and `worker` through `secretspec run` (production profile, dotenv provider with fake values) with `--read-only`, UID 10001, dropped capabilities and tmpfs mounts. It checks that a missing secret stops the process, `/api/healthz`, `/api/readyz`, `/readyz`, `:9464/metrics` and the SIGTERM exit codes. CI runs it on every pull request and the release workflow runs it before pushing.
+
+## Azure prerequisites
+
+1. **AKS cluster** with the OIDC issuer and workload identity enabled (`az aks update --enable-oidc-issuer --enable-workload-identity`), the NGINX ingress controller (or set `ingress.className`) and cert-manager if you use `ingress.clusterIssuer`.
+2. **Azure Key Vault** with the RBAC permission model. Nobody needs data-plane access except the managed identity below and the operator who populates the secrets.
+3. **User-assigned managed identity** with the **Key Vault Secrets User** role on that vault. Its client id is `azure.workloadIdentityClientId`.
+4. **Azure Database for PostgreSQL Flexible Server**, version 16, reachable from the cluster, with a database (`git_migrator`) and a role that owns it. Add `PG_TRGM` to `azure.extensions` (see [PostgreSQL extensions](#postgresql-extensions)). TLS is on: the chart sets `postgres.sslmode: require`.
+5. **Microsoft Entra app registration** for sign-in (redirect URI `<publicUrl>/api/auth/callback/entra`). The tenant id goes in `config.auth.entra.tenantId`; the client id and secret go in Key Vault.
+6. **Image registry access**: the release workflow publishes to `ghcr.io/<owner>/git-migrator` and the chart to `oci://ghcr.io/<owner>/charts`. Private packages need `imagePullSecrets`.
+7. A **GitHub App** and **Bitbucket credentials** for the endpoints you configure (see `docs/providers/`).
+
+## Key Vault secrets
+
+secretspec stores each secret under the name `secretspec--<base32(project)>--<base32(profile)>--<base32(key)>`, where each component is lowercase, unpadded Base32. Key Vault names allow only letters, digits and hyphens, which is why the components are encoded. The project is `git-migrator` and the profile is `production`.
+
+| Key | Content | Required | Key Vault secret name |
+|---|---|---|---|
+| `POSTGRES_PASSWORD` | Password of the Postgres role | yes | `secretspec--m5uxillnnftxeylun5za--obzg6zdvmn2gs33o--kbhvgvchkjcvgx2qifjvgv2pkjca` |
+| `BETTER_AUTH_SECRET` | Better Auth signing secret, at least 32 random bytes in base64 | yes | `secretspec--m5uxillnnftxeylun5za--obzg6zdvmn2gs33o--ijcvivcfkjpucvkujbpvgrkdkjcvi` |
+| `ENTRA_CLIENT_ID` | Entra app registration client id | yes | `secretspec--m5uxillnnftxeylun5za--obzg6zdvmn2gs33o--ivhfiusbl5buyskfjzkf6ske` |
+| `ENTRA_CLIENT_SECRET` | Entra app registration client secret | yes | `secretspec--m5uxillnnftxeylun5za--obzg6zdvmn2gs33o--ivhfiusbl5buyskfjzkf6u2finjekva` |
+| `BITBUCKET_CREDENTIALS` | JSON array `[{id, accountId, email, apiToken}]` | yes | `secretspec--m5uxillnnftxeylun5za--obzg6zdvmn2gs33o--ijeviqsvinfukvc7injekrcfjzkesqkmkm` |
+| `GITHUB_APP_PRIVATE_KEY` | PEM private key of the GitHub App | yes | `secretspec--m5uxillnnftxeylun5za--obzg6zdvmn2gs33o--i5eviscvijpucucql5ifeskwifkekx2livmq` |
+| `ATLASSIAN_ADMIN_API_KEY` | Atlassian Admin API key for email enrichment | no | `secretspec--m5uxillnnftxeylun5za--obzg6zdvmn2gs33o--ifkeyqktkneucts7ifce2skol5avask7jncvs` |
+
+The names were derived from the encoding in secretspec's Azure Key Vault provider (`secretspec/src/provider/akv.rs`) and are not read from a running vault. Confirm them once against the pinned secretspec release (0.21.1): set a secret with `secretspec set`, list the vault (`az keyvault secret list --vault-name <vault> --query '[].name'`) and compare. If the names differ, the `secretspec set` command below is still the source of truth and no chart value changes.
+
+### One-time population
+
+Run this from a machine whose Azure CLI session can write secrets to the vault (a data-plane role such as Key Vault Secrets Officer, held by the operator and never by the workload identity). secretspec prompts for each value, so no secret appears in shell history or argv.
+
+```sh
+VAULT=<vault-name>
+b32() { printf '%s' "$1" | base32 | tr -d '=' | tr 'A-Z' 'a-z'; }
+for key in POSTGRES_PASSWORD BETTER_AUTH_SECRET ENTRA_CLIENT_ID ENTRA_CLIENT_SECRET \
+           BITBUCKET_CREDENTIALS GITHUB_APP_PRIVATE_KEY ATLASSIAN_ADMIN_API_KEY; do
+  secretspec set "$key" --profile production --provider "akv://${VAULT}?auth=cli"
+  echo "stored $key as secretspec--$(b32 git-migrator)--$(b32 production)--$(b32 "$key")"
+done
+secretspec check --profile production --provider "akv://${VAULT}?auth=cli"
+```
+
+The script prints the vault secret name of each key it stores; compare them with the table above and with `az keyvault secret list`. `ATLASSIAN_ADMIN_API_KEY` is optional: skip it unless you use email enrichment. `secretspec check` must report no missing required key before the first install. Endpoint credentials named in `config.endpoints[].credentialsSecret` are keys of the same manifest.
+
+## Workload identity
+
+1. Create the federated credentials on the managed identity. **Two** subjects are needed, because the migrate Job runs under its own hook ServiceAccount (DEP-030):
+
+   ```sh
+   ISSUER=$(az aks show -g <rg> -n <cluster> --query oidcIssuerProfile.issuerUrl -o tsv)
+   for sa in <release> <release>-migrate; do
+     az identity federated-credential create --name "git-migrator-${sa}" \
+       --identity-name <identity> --resource-group <rg> --issuer "$ISSUER" \
+       --subject "system:serviceaccount:<namespace>:${sa}" --audiences api://AzureADTokenExchange
+   done
+   ```
+
+   The subjects are `system:serviceaccount:<namespace>:<release>` and `system:serviceaccount:<namespace>:<release>-migrate`. With `fullnameOverride` the release name is replaced by that value. With `serviceAccount.name` set the first subject is that name.
+2. The chart annotates both ServiceAccounts with `azure.workload.identity/client-id: <azure.workloadIdentityClientId>` and labels every pod `azure.workload.identity/use: "true"`. The pods set `automountServiceAccountToken: false`; the workload identity webhook injects its own projected token.
+3. `GM_SECRETSPEC_PROVIDER` defaults to `akv://<azure.keyVaultName>?auth=workload_identity`. Set `secretspec.provider` to use another vault URI.
+
+## Install and upgrade
+
+```sh
+helm upgrade --install git-migrator oci://ghcr.io/<owner>/charts/git-migrator --version <x.y.z> \
+  --namespace git-migrator --create-namespace -f my-values.yaml
+```
+
+A minimal `my-values.yaml`:
+
+```yaml
+image: { repository: <owner>/git-migrator }
+azure: { workloadIdentityClientId: <client-id>, keyVaultName: <vault> }
+postgres: { host: <server>.postgres.database.azure.com }
+ingress: { host: git-migrator.example.com, clusterIssuer: letsencrypt }
+config:
+  auth:
+    entra: { tenantId: <tenant-guid> }
+    roleMappings: [ { method: entra, claim: roles, value: GitMigrator.Admin, role: admin } ]
+  endpoints: [ ... ]
+  routes: [ ... ]
+```
+
+The image tag defaults to the chart's `appVersion`, which the release workflow sets to the git tag. Every upgrade first runs the `migrate` Job (pre-install and pre-upgrade hook); if it fails the release stops and the Deployments are untouched. `values.config` is merged with the top-level values the app needs (`postgres`, `worker.*.concurrency`, `observability`, `metrics.port`, `secretspec.profile`); those win on conflict. The `environment` defaults to `production` and `publicUrl` to `https://<ingress.host>`. The config checksum annotation rolls the pods when the file changes.
+
+### Chart notes
+
+- **Disruption budgets** take one of `minAvailable` and `maxUnavailable`. The defaults set one per workload (`web.pdb.minAvailable: 1`, `maxUnavailable: 1` for workers), so to use the other, set the default to null: `--set web.pdb.minAvailable=null --set web.pdb.maxUnavailable=1`. Setting both fails the render.
+- **NetworkPolicy** (`networkPolicy.enabled`, off by default) restricts ingress only. By default the web port 3000 is open to every source, because the ingress controller's namespace is unknown. Set `networkPolicy.ingressFrom` to a list of NetworkPolicy peers (for example `- namespaceSelector: { matchLabels: { kubernetes.io/metadata.name: ingress-nginx } }`) to allow only those. Metrics and worker health ports stay open to pods in the release namespace.
+- **Web shutdown:** the web container sleeps 5 s in `preStop` so the Service and Ingress stop routing before the server stops accepting; the drain then takes at most 20 s, inside the 30 s grace period.
+
+`pnpm helm:check` lints and renders the chart for every `deploy/helm/git-migrator/ci/*.yaml` file, validates the output with `kubeconform -strict` against the current AKS default Kubernetes version, and runs the helm-unittest suites in `tests/`.
+
+## Releases
+
+Pushing a tag `v<major>.<minor>.<patch>[-prerelease]` runs `.github/workflows/release.yml`: it builds the multi-arch image (`linux/amd64`, `linux/arm64`), pushes it to `ghcr.io/<owner>/git-migrator:<tag>` with provenance and an SBOM, then packages the chart (version is the tag without `v`, `appVersion` is the tag) and pushes it to `oci://ghcr.io/<owner>/charts`. The workflow uses only `GITHUB_TOKEN`. Gates, in order: the tag is well formed; the tagged commit is an ancestor of `origin/main`; the amd64 image passes `smoke.sh` before anything is pushed (arm64 is built but not smoke-tested); an existing image tag or chart version is never overwritten; and the publishing jobs run in the GitHub environment `release`. Create that environment in the repository settings and add required reviewers, otherwise that last gate is not enforced.
 
 ## Worker database connections (JOB-014)
 
@@ -22,9 +129,36 @@ total           = bullmq + application + leader
 
 The BullMQ pool is a cap: measured with the `all` role and 20 jobs processed, it held 4 connections. Size `max_connections` for the sum over all pods plus the web pods' pools.
 
-## Database setup
+Each web pod holds the application pool (`postgres.pool.app`, default 10) plus the Better Auth pool (4), so 14 at the defaults.
 
-`migrate` (DATA-030) creates the `app`, `auth` and `bullmq` schemas and `pg_trgm`. On Azure Database for PostgreSQL Flexible Server, add `pg_trgm` to the `azure.extensions` server parameter first.
+### Connection-count formula
+
+With the chart defaults (`web.replicas: 2`, `worker.standard.replicas: 2`, `worker.large.replicas: 1`, `postgres.pool.app: 10`):
+
+```
+web              = web.replicas × (pool.app + 4)
+worker-standard  = standard.replicas × (6 + 4 + pool.app + 1)
+worker-large     = large.replicas × (1 + 4 + pool.app)
+migrate          = up to 3 while the hook Job runs (before the new pods start)
+total            = web + worker-standard + worker-large
+                 = 2×14 + 2×21 + 1×15 = 85
+needed           = total × 1.25 (rolling updates start new pods before old ones stop)
+                 + 10 (psql sessions, monitoring, the migrate Job)
+                 ≈ 116
+```
+
+Set the server's `max_connections` above `needed`, minus the connections Azure reserves for itself (`superuser_reserved_connections`, 15 on Flexible Server). With HPA scale-out, use `web.hpa.maxReplicas` instead of `web.replicas`. Lowering `postgres.pool.app` is the first lever; the BullMQ pool sizes follow the worker count and are not configurable.
+
+## PostgreSQL extensions
+
+`migrate` (DATA-030) creates the `app`, `auth` and `bullmq` schemas and the `pg_trgm` extension (trigram indexes for path search). Azure Database for PostgreSQL Flexible Server only lets a role create extensions that are allow-listed, so before the first install:
+
+```sh
+az postgres flexible-server parameter set --resource-group <rg> --server-name <server> \
+  --name azure.extensions --value PG_TRGM
+```
+
+If the parameter already has a value, append `,PG_TRGM` to it. Without the allow-list entry the migrate Job fails at its first step with `extension "pg_trgm" is not allow-listed`, and the release stops. The database role needs to own the database (it creates schemas and tables in `app`, `auth`, `bullmq` and `public`). `postgres.sslmode` defaults to `require`; do not weaken it outside development. Entra authentication for Postgres (`postgres.auth: entra`) is optional and off by default.
 
 ## Worker health
 

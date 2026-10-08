@@ -14,4 +14,8 @@ Status: `src/worker.ts` (T-028) and `src/migrate.ts` and `src/db-commands.ts` (T
 
 Connection budgets per process are in `docs/deployment.md`.
 
+## In the image (DEP-001, DEP-002)
+
+The runtime image starts these files through `/app/dist/worker.js` and `/app/dist/migrate.js`, small shims generated in the Dockerfile. `worker.ts` exports `main()` for that reason (`import.meta.main` is false when imported). The `migrate` Job runs the ZenStack CLI from `@git-migrator/db`, so that package keeps it as a production dependency (ADR-0290).
+
 Declared internal dependencies (ARC-012, checked by `pnpm lint`): @git-migrator/auth, @git-migrator/jobs, @git-migrator/config, @git-migrator/observability, @git-migrator/db, @git-migrator/registry, @git-migrator/quota.
