@@ -1,0 +1,30 @@
+/** Sample values for every parameter in PARAMS. Used by tests to render each entry in full. */
+import type { ParamValues } from './params.ts';
+
+export const SAMPLE_VALUES: ParamValues = {
+  repository: 'acme/payments',
+  namespace: 'acme',
+  targetUrl: 'https://example.test/hooks/1',
+  names: ['API_TOKEN', 'DB_PASSWORD'],
+  scope: 'environment:production',
+  environment: 'production',
+  policyKey: 'branch-rules.advisory-enforced',
+  paths: ['/rules[pattern=main]/enforcement', '/rules[pattern=release/*]/enforcement'],
+  path: 'assets/video.bin',
+  size: '120MiB',
+  limit: '100MiB',
+  count: 3,
+  ids: ['#12 Fix the build'],
+  refs: ['refs/notes/commits'],
+  kinds: ['custom-kind'],
+  pattern: 'release/**',
+  principal: 'jane.doe',
+  facet: 'access-control',
+  team: 'platform',
+  groups: ['Platform', 'platform-team'],
+  events: ['push', 'cr.opened'],
+  workflowPath: '.github/workflows/ci.yml',
+  branch: 'git-migrator/ci',
+  keyName: 'deploy-payments',
+  unsupported: ['/image/pipe'],
+};
