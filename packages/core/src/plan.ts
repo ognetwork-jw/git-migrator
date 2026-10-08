@@ -17,7 +17,7 @@ import type { CompletionMode, FacetCapability, FacetKey } from './facet-types.ts
 import { canonicalFieldPath } from './field-path.ts';
 import { canonicalize, hashCanonical } from './jcs.ts';
 import { deriveReadiness, type ReadinessResult } from './readiness.ts';
-import { acceptLossyCode, type FacetRegistry } from './registry.ts';
+import { acceptLossyCode, type FacetLookup } from './registry.ts';
 import type { Fidelity } from './types.ts';
 
 export class PlanError extends Error {
@@ -110,7 +110,7 @@ export const ENDPOINT_STEP_TEMPLATE: StepTemplate = {
 };
 
 export interface PlanInput {
-  readonly registry: FacetRegistry;
+  readonly registry: FacetLookup;
   readonly translations: readonly FacetTranslation[];
   readonly extraFindings?: readonly ExtraFinding[];
   /** Defaults to `REPOSITORY_STEP_TEMPLATE`. */

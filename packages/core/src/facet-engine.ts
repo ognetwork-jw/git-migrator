@@ -38,7 +38,7 @@ import {
 import { canonicalize } from './jcs.ts';
 import { compilePattern } from './pattern.ts';
 import { applyLossyPolicies } from './policy.ts';
-import { acceptLossyCode, type FacetRegistry } from './registry.ts';
+import { acceptLossyCode, type FacetLookup } from './registry.ts';
 import type { FieldDecision, FieldDiff, Finding } from './types.ts';
 import { FIDELITIES } from './types.ts';
 
@@ -448,7 +448,7 @@ function detectOnlyCheck(def: FacetDefinition<unknown>, r: TranslationResult<unk
 
 /** Translates one Facet. See the module comment for what the harness enforces. */
 export function translateFacet(
-  registry: FacetRegistry,
+  registry: FacetLookup,
   facetKey: FacetKey,
   source: unknown,
   input: TranslateInput,
@@ -616,10 +616,7 @@ export interface TranslateAllResult {
  * Translates every Facet that has a source document, dependencies first, handing each Facet the
  * already-translated results of its `dependsOn` (a dependency that was skipped is absent from `deps`).
  */
-export function translateAll(
-  registry: FacetRegistry,
-  input: TranslateAllInput,
-): TranslateAllResult {
+export function translateAll(registry: FacetLookup, input: TranslateAllInput): TranslateAllResult {
   const translations: FacetTranslation[] = [];
   const skipped: FacetKey[] = [];
   const byKey = new Map<FacetKey, FacetTranslation>();
@@ -685,7 +682,7 @@ export interface CompareInput {
  * is real drift and stays.
  */
 export function compareFacet(
-  registry: FacetRegistry,
+  registry: FacetLookup,
   facetKey: FacetKey,
   desired: unknown,
   actual: unknown | null,
@@ -814,7 +811,7 @@ export function diffDocuments(
  * document and its remaining diffs.
  */
 export function satisfiedTasks<K extends FacetTaskRef>(
-  registry: FacetRegistry,
+  registry: FacetLookup,
   facetKey: FacetKey,
   tasks: readonly K[],
   target: unknown,

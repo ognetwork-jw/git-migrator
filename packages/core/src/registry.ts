@@ -252,3 +252,9 @@ export class FacetRegistry {
 function overrideId(pair: ProviderPair, facet: FacetKey): string {
   return JSON.stringify([pair.source, pair.target, facet]);
 }
+
+/**
+ * The read-only part of `FacetRegistry` the engine and the plan need. A host that exposes only
+ * lookups (the provider registry's `facets` view) satisfies it.
+ */
+export type FacetLookup = Pick<FacetRegistry, 'has' | 'get' | 'override' | 'ordered'>;
