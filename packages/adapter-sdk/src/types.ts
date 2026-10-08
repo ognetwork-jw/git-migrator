@@ -192,6 +192,13 @@ export interface FacetRead<T> {
    * analysis (ADR-0230).
    */
   capabilities?: Record<FieldPath, FieldSupport>;
+  /**
+   * In-memory content that `data` refers to only by hash, keyed by that hash (sha256, lowercase
+   * hex). For example the text of a pipeline definition file, which the canonical document keeps
+   * as a hash. Never persisted, captured or logged (ADR-0311): the Analysis hands it to `translate`
+   * through the route index and drops it.
+   */
+  attachments?: Record<string, string>;
 }
 
 export interface DriverContext {

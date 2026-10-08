@@ -53,7 +53,12 @@ type Read<K extends FacetKey> = FacetRead<CanonicalData<K>>;
 function finish<K extends FacetKey>(
   key: K,
   data: unknown,
-  extra: { unreadable?: string[]; warnings?: AdapterWarning[]; rawResponseIds?: string[] } = {},
+  extra: {
+    unreadable?: string[];
+    warnings?: AdapterWarning[];
+    rawResponseIds?: string[];
+    attachments?: Record<string, string>;
+  } = {},
 ): Read<K> {
   const parsed = parseCanonical(key, data);
   if (!parsed.success) {
@@ -69,6 +74,7 @@ function finish<K extends FacetKey>(
     unreadable: extra.unreadable ?? [],
     warnings: extra.warnings ?? [],
     rawResponseIds: [...new Set(extra.rawResponseIds ?? [])],
+    ...(extra.attachments !== undefined ? { attachments: extra.attachments } : {}),
   };
 }
 
@@ -315,6 +321,7 @@ export function createFacetDrivers(
       const main = repo.mainbranch?.name ?? undefined;
       const unreadable: string[] = [];
       const files: { path: string; sha256: string }[] = [];
+      const attachments: Record<string, string> = {};
       if (main === undefined) unreadable.push('/files');
       else {
         const res = await optional(() =>
@@ -328,9 +335,11 @@ export function createFacetDrivers(
         );
         if (res !== undefined) {
           if (res.rawResponseId !== undefined) ids.push(res.rawResponseId);
-          files.push(
-            pipelineFile(typeof res.body === 'string' ? res.body : JSON.stringify(res.body ?? '')),
-          );
+          const text = typeof res.body === 'string' ? res.body : JSON.stringify(res.body ?? '');
+          const file = pipelineFile(text);
+          files.push(file);
+          // The text itself is handed to the Analysis in memory only (ADR-0311).
+          attachments[file.sha256] = text;
         }
       }
       return finish(
@@ -341,7 +350,7 @@ export function createFacetDrivers(
           // Computed in translate; nothing is known to be unsupported at read time.
           translation: { supported: true, unsupported: [] },
         },
-        { unreadable, rawResponseIds: ids },
+        { unreadable, rawResponseIds: ids, attachments },
       );
     }),
 

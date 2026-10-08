@@ -1,5 +1,6 @@
 import type { FacetKey } from '@git-migrator/canonical';
 import { parseCanonical } from '@git-migrator/canonical';
+import { sha256Hex } from '@git-migrator/core';
 import { describe, expect, it } from 'vitest';
 import { bitbucketCloudAdapter, capabilities } from './adapter.ts';
 import {
@@ -449,6 +450,16 @@ describe('facet reads', () => {
     expect(data.enabled).toBe(true);
     expect(data.files[0]?.path).toBe('bitbucket-pipelines.yml');
     expect(data.files[0]?.sha256).toMatch(/^[0-9a-f]{64}$/);
+  });
+
+  it('[FAC-PIP-002] pipelines hands the file text over as an in-memory attachment keyed by its hash', async () => {
+    const { res } = await read('pipelines', target());
+    const data = res.data as { files: { path: string; sha256: string }[] };
+    const sha = data.files[0]?.sha256 as string;
+    const text = res.attachments?.[sha];
+    expect(typeof text).toBe('string');
+    expect(sha256Hex(text as string)).toBe(sha);
+    expect(JSON.stringify(res.data)).not.toContain(text as string);
   });
 
   it('[ADP-061] the pipelines file body is never captured', async () => {
