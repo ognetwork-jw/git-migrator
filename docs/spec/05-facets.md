@@ -325,22 +325,32 @@ type Pipelines = {
   - `deployment: <env>` → `environment: <env>`.
   - `definitions.services` with `image` and `variables` only, used via `services:` → job `services`. `docker` service → dropped.
   - Bitbucket variables:
-    - `BITBUCKET_BRANCH` → `${{ github.ref_name }}`
-    - `BITBUCKET_TAG` → `${{ github.ref_name }}`
+    - `BITBUCKET_BRANCH` → `${{ github.ref_name }}` in branch workflows and `${{ github.head_ref || github.ref_name }}` in the default workflow; unset elsewhere (ADR-0161)
+    - `BITBUCKET_TAG` → `${{ github.ref_name }}` in tag workflows only; unset elsewhere (ADR-0161)
     - `BITBUCKET_COMMIT` → `${{ github.sha }}`
     - `BITBUCKET_BUILD_NUMBER` → `${{ github.run_number }}`
     - `BITBUCKET_REPO_SLUG` → `${{ github.event.repository.name }}`
-    - `BITBUCKET_CLONE_DIR` → `${{ github.workspace }}`
+    - `BITBUCKET_CLONE_DIR` → `${{ github.workspace }}`; in a container job the run script exports it from `$GITHUB_WORKSPACE` instead (ADR-0161)
     - `BITBUCKET_PR_ID` → `${{ github.event.pull_request.number }}`
     - `BITBUCKET_PR_DESTINATION_BRANCH` → `${{ github.base_ref }}`
     - `BITBUCKET_DEPLOYMENT_ENVIRONMENT` → environment name literal
   - Repository, deployment and workspace variables referenced as `$NAME` → workflow `env:` entries from `vars.NAME` or `secrets.NAME`, according to the `variables` and `secrets` Facets.
+
+  Variables reach scripts only through job `env:` entries, never by text substitution; a script that reads a variable whose trigger leaves it unset is listed as unsupported.
+
+  Safety rules of the generated workflows (ADR-0161, ADR-0162):
+  - A step with `trigger: manual` is not generated, and neither is anything after it in that pipeline, so nothing runs that the source would hold for approval. A manual step anywhere inside a stage or parallel group, or in a part of the file that cannot be inspected within the limits, counts the same.
+  - No source text is placed inside an expression. Any source string containing `${{` is not copied and is listed as unsupported. Globs, images, environment and cache names must match fixed allow-lists; image credentials must be whole references to known variables or secrets.
+  - Every workflow sets read-only `contents` permission, and every action is pinned to a full commit SHA.
+  - Inputs and outputs are bounded (aliases, file size, patterns, keys and list entries examined, jobs per workflow and per file, output size). Whatever exceeds a bound is listed as unsupported, never silently dropped.
+  - When several branch or tag patterns match the same ref, each workflow excludes its strictly more specific siblings. Overlaps whose specificity cannot be decided, and overlaps where the broader pattern is listed first in the file, are listed as unsupported, because the source's selection rule is unconfirmed (docs/providers).
 
   Anything else is unsupported, and its YAML path is listed in `translation.unsupported`. Examples: `pipe:`, `trigger: manual`, `condition`, `oidc`, `runs-on`, `size`, `pull-requests:` triggers (Bitbucket filters by source branch, GitHub by base branch), other `BITBUCKET_*` variables, `stages`, and `step.services` with unsupported options.
 - **FAC-PIP-003 Delivery.** Always via a target Change Request (LIF-047), never a direct commit.
   - **Fully supported:** generated workflows on branch `git-migrator/ci`; post task `pipelines.review-and-merge` (v once merged).
   - **Partially supported:** the generated workflow carries `# TODO(git-migrator): <path> — <reason>` comments for each unsupported construct, plus the original file as `.github/git-migrator/bitbucket-pipelines.yml`; post task `pipelines.complete-translation` (v once merged).
   - **Pipelines disabled** (`enabled: false`) with a file present: no workflow is generated; warning `pipelines.disabled`.
+  - **Nothing generated** with a file present and pipelines enabled (no override for the pair, or nothing translatable): the source file path is listed as unsupported and only `pipelines.complete-translation` is raised; an empty set of generated paths never satisfies a task (ADR-0160).
 - **FAC-PIP-004 Parity.** Only `files[].path` is compared: equal when the target default branch contains every generated workflow path. `sha256` is informational, because once merged the human owns the content. `enabled` and `translation` are not compared. Before merge, the facet is `different` and the task is open.
 - **Findings:** `pipelines.review-and-merge` post (v) · `pipelines.complete-translation` post (v) · `pipelines.disabled` W.
 

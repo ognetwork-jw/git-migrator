@@ -123,6 +123,7 @@ const NON_CODE_NAMES: readonly string[] = [
   'vars.NAME',
   'secrets.NAME',
   'github.base_ref',
+  'github.head_ref',
   'github.event.pull_request.number',
   'github.event.repository.name',
   'github.ref_name',

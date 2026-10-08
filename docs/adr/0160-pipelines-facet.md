@@ -1,6 +1,6 @@
 # ADR-0160: pipelines facet and where the pair override lives
 
-- Status: agent-decided
+- Status: accepted (spec updated)
 - Date: 2026-10-08
 - Task: T-057
 - Affects: FAC-PIP-001, FAC-PIP-002, FAC-PIP-003, FAC-PIP-004, ADP-032, ARC-012, GLO-002, FAC-002

@@ -17,7 +17,7 @@ The orchestrator maintains this table (see [workflow](workflow.md)). Integration
 | T-020 | in_progress | task/T-020-auth | | 0 | implementing (ADR range 0170-0179) |
 | T-021 | todo |  | | | |
 | T-022 | todo |  | | | |
-| T-025 | in_progress | task/T-025-quota | | 0 | implementing (ADR range 0180-0189) |
+| T-025 | in_review | task/T-025-quota | [#26](https://github.com/ognetwork-jw/git-migrator/pull/26) | 1 | implemented (f074191); round-1 review |
 | T-026 | todo |  | | | |
 | T-027 | todo |  | | | |
 | T-028 | todo |  | | | |
@@ -37,7 +37,7 @@ The orchestrator maintains this table (see [workflow](workflow.md)). Integration
 | T-054 | merged | task/T-054-facets-env-vars-secrets | [#21](https://github.com/ognetwork-jw/git-migrator/pull/21) | 1 | merged to ai-main d705ec3; ADR-0145 folded into FAC-ENV/FAC-VAR/FAC-SEC |
 | T-055 | merged | task/T-055-facets-cr-extras | [#23](https://github.com/ognetwork-jw/git-migrator/pull/23) | 2 | merged to ai-main 8cc5d13; ADR-0155/0156 accepted (param formats, no spec change) |
 | T-056 | merged | task/T-056-facets-members-teams-org | [#24](https://github.com/ognetwork-jw/git-migrator/pull/24) | 2 | merged to ai-main c37018c; ADR-0150..0152 folded into 05-facets members/teams/org-* |
-| T-057 | in_review | task/T-057-facets-pipelines | [#25](https://github.com/ognetwork-jw/git-migrator/pull/25) | 4 | r3: MAJOR (quadratic sibling patterns) + gate hidden by truncation; fix pass |
+| T-057 | merged | task/T-057-facets-pipelines | [#25](https://github.com/ognetwork-jw/git-migrator/pull/25) | 4 | merged to ai-main bfbf891 (r4 ACCEPTABLE; MINORs → followups.md); ADR-0160..0162 folded into FAC-PIP-002/003 |
 | T-058 | todo |  | | | |
 | T-060 | todo |  | | | |
 | T-061 | todo |  | | | |

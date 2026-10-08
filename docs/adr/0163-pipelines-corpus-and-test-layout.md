@@ -1,6 +1,6 @@
 # ADR-0163: where the pipelines corpus and its tests live
 
-- Status: agent-decided
+- Status: accepted (no spec change needed)
 - Date: 2026-10-08
 - Task: T-057
 - Affects: FAC-PIP-002, TST-006, ARC-012

@@ -1,6 +1,6 @@
 # ADR-0162: shape of the generated workflows
 
-- Status: agent-decided
+- Status: accepted (spec updated)
 - Date: 2026-10-08
 - Task: T-057
 - Affects: FAC-PIP-002, FAC-PIP-003
