@@ -128,6 +128,7 @@
 | [0202](0202-rpc-ids-last-admin-and-error-shapes.md) | RPC primary keys are immutable, the last-admin guard, problem+json for every /api/v1 error, argument limits | agent-decided |
 | [0230](0230-github-adapter-identity-and-connection.md) | GitHub adapter: identifiers, configuration, App token cache, quota buckets, error mapping | accepted (no spec change needed) |
 | [0231](0231-github-facet-drivers.md) | GitHub facet drivers: apply semantics, dynamic capabilities, branch rules, Change Requests | accepted (spec updated) |
+| [0250](0250-adapter-contract-suite.md) | Adapter contract suite: shape, placement and normalisations | agent-decided |
 | [0260](0260-capability-matrix-shape.md) | Capability matrix shape, registry ownership, dynamic overlay | agent-decided |
 | [0261](0261-capability-matrix-vs-mapping-tables.md) | Adapter capabilities aligned to the 05-facets mapping tables | agent-decided |
 
