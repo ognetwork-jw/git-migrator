@@ -101,15 +101,52 @@ describe('migrate entrypoint (DATA-030)', () => {
     expect(second.routes).toMatchObject({ created: 0, updated: 0 });
   }, 120_000);
 
+  it('[DATA-030] step 3 creates the Better Auth tables in schema auth, between steps 2 and 5', async () => {
+    const tables = await t.db.pool.query<{ table_name: string }>(
+      `SELECT table_name FROM information_schema.tables WHERE table_schema = 'auth' ORDER BY 1`,
+    );
+    expect(tables.rows.map((r) => r.table_name)).toEqual([
+      'account',
+      'session',
+      'user',
+      'verification',
+    ]);
+  });
+
   it('[DATA-040] seeds dev data after the migrate and refuses production', async () => {
     const seeded = await runSeed(configFor(t), envFor(t));
     expect(seeded).toEqual({ actors: 3, wave: true, allowlistEntry: true });
     const production = resolveConfig({
-      text: 'environment: production\npublicUrl: https://gm.example.test\nauth: { entra: { tenantId: x } }',
+      text: 'environment: production\npublicUrl: https://gm.example.test\nauth: { entra: { tenantId: 00000000-0000-4000-8000-000000000001 } }',
       env: {},
     });
     await expect(runSeed(production, {})).rejects.toThrow(/production/);
     await expect(runReset(production, {})).rejects.toThrow(/production/);
+  });
+
+  it('[AUTH-012] db:seed creates the test sign-in users only when auth.testSignIn.enabled', async () => {
+    const config = configFor(t, 'auth:\n  testSignIn: { enabled: true }\n');
+    const env = { ...envFor(t), GM_TEST_USER_PASSWORD: 'fake-seed-password' };
+    const first = await runSeed(config, env);
+    expect(first.testSignInUsers).toEqual({ created: 3, passwordUpdated: 0 });
+    const again = await runSeed(config, env);
+    expect(again.testSignInUsers).toEqual({ created: 0, passwordUpdated: 0 });
+    const users = await t.db.pool.query<{ email: string }>(
+      'SELECT email FROM auth."user" ORDER BY email',
+    );
+    expect(users.rows.map((r) => r.email)).toEqual([
+      'admin@test.local',
+      'operator@test.local',
+      'viewer@test.local',
+    ]);
+    await expect(runSeed(config, envFor(t))).rejects.toThrow(/GM_TEST_USER_PASSWORD/);
+  }, 60_000);
+
+  it('[AUTH-012] db:seed refuses test sign-in users under GM_ENVIRONMENT=production', async () => {
+    const config = configFor(t, 'auth:\n  testSignIn: { enabled: true }\n');
+    await expect(runSeed(config, { ...envFor(t), GM_ENVIRONMENT: 'production' })).rejects.toThrow(
+      /AUTH-012/,
+    );
   });
 
   it('[DATA-030] reset drops and recreates the database, then migrates it', async () => {
@@ -141,7 +178,7 @@ describe('seed and reset guards', () => {
 
   it('[DATA-040] refuses production even when it is explicit', async () => {
     const production = resolveConfig({
-      text: 'environment: production\npublicUrl: https://gm.example.test\nauth: { entra: { tenantId: x } }',
+      text: 'environment: production\npublicUrl: https://gm.example.test\nauth: { entra: { tenantId: 00000000-0000-4000-8000-000000000001 } }',
       env: {},
     });
     await expect(runSeed(production, { GM_ENVIRONMENT: 'production' })).rejects.toThrow(

@@ -8,6 +8,7 @@
   "include": ["src"],
   "exclude": ["src/**/*.test.*", "src/**/*.spec.*"],
   "references": [
+    { "path": "../../packages/auth" },
     { "path": "../../packages/jobs" },
     { "path": "../../packages/config" },
     { "path": "../../packages/observability" },

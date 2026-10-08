@@ -1,4 +1,10 @@
 import { readFileSync } from 'node:fs';
+import {
+  createAuth,
+  migrateAuthSchema,
+  seedTestSignInUsers,
+  type TestUserSeedResult,
+} from '@git-migrator/auth';
 import type { Config } from '@git-migrator/config';
 import {
   applyAppMigrations,
@@ -12,6 +18,7 @@ import {
   seedDev,
   syncConfig,
 } from '@git-migrator/db';
+import { createLogger } from '@git-migrator/observability';
 import pg from 'pg';
 
 type Env = Readonly<Record<string, string | undefined>>;
@@ -88,8 +95,8 @@ export function toConfigSnapshot(config: Config): ConfigSnapshot {
 
 /**
  * The `migrate` entrypoint (DATA-030), in order. Each step is idempotent and the first failure
- * throws. Steps 3 (Better Auth) and 4 (BullMQ) are added between steps 2 and 5 by the tasks that
- * own those schemas.
+ * throws. Step 3 (Better Auth, AUTH-001) runs between steps 2 and 5. Step 4 (BullMQ) is added at
+ * the same place by the task that owns that schema.
  */
 export async function runMigrate(config: Config, env: Env): Promise<SyncResult> {
   const connectionString = connectionStringFor(config, env);
@@ -97,18 +104,52 @@ export async function runMigrate(config: Config, env: Env): Promise<SyncResult> 
   try {
     await ensureSchemas(handle.pool); // step 1
     await applyAppMigrations({ connectionString }); // step 2
+    await migrateAuthSchema(
+      connectionString,
+      createLogger({ level: config.observability.logLevel }),
+    ); // step 3
     return await syncConfig(handle.privileged, toConfigSnapshot(config)); // step 5
   } finally {
     await handle.close();
   }
 }
 
-/** `pnpm db:seed` (DATA-040). Refuses to run in production. */
-export async function runSeed(config: Config, env: Env): Promise<SeedResult> {
+/** The result of `pnpm db:seed`: the dev data, and the test sign-in users when AUTH-012 is on. */
+export type SeedCommandResult = SeedResult & { readonly testSignInUsers?: TestUserSeedResult };
+
+/**
+ * `pnpm db:seed` (DATA-040). Refuses to run in production. When `auth.testSignIn.enabled` is true
+ * it also creates the Better Auth users for the seeded test Actors, with the password from
+ * `GM_TEST_USER_PASSWORD` (AUTH-012).
+ */
+export async function runSeed(config: Config, env: Env): Promise<SeedCommandResult> {
   assertDevEnvironment('db:seed', config, env);
-  const handle = createDb({ connectionString: connectionStringFor(config, env), poolMax: 2 });
+  const connectionString = connectionStringFor(config, env);
+  const handle = createDb({ connectionString, poolMax: 2 });
   try {
-    return await seedDev(handle.privileged);
+    const seeded = await seedDev(handle.privileged);
+    if (!config.auth.testSignIn.enabled) return seeded;
+    const service = createAuth({
+      config,
+      secrets: {
+        authSecret: env.BETTER_AUTH_SECRET ?? '',
+        entraClientId: env.ENTRA_CLIENT_ID ?? '',
+        entraClientSecret: env.ENTRA_CLIENT_SECRET ?? '',
+      },
+      connectionString,
+      db: handle.privileged,
+      env,
+    });
+    try {
+      const testSignInUsers = await seedTestSignInUsers(service, {
+        config,
+        env,
+        password: env.GM_TEST_USER_PASSWORD ?? '',
+      });
+      return { ...seeded, testSignInUsers };
+    } finally {
+      await service.close();
+    }
   } finally {
     await handle.close();
   }

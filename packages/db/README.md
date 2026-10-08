@@ -24,8 +24,8 @@ Never hand `privileged` to the RPC handler. The value `forActor` returns is not 
 
 | Command | Action |
 |---|---|
-| `pnpm db:migrate` | DATA-030 steps 1, 2 and 5 (steps 3 and 4 arrive with T-020 and T-028). Needs `POSTGRES_PASSWORD` and the config file |
-| `pnpm db:seed` | DATA-040: the three test Actors, a sample Wave and a webhook allowlist sample. Only for an explicitly set `development`, `test` or `e2e` environment |
+| `pnpm db:migrate` | DATA-030 steps 1, 2, 3 (Better Auth, `@git-migrator/auth`) and 5 (step 4 arrives with T-028). Needs `POSTGRES_PASSWORD` and the config file |
+| `pnpm db:seed` | DATA-040: the three test Actors, a sample Wave and a webhook allowlist sample, plus their sign-in users when `auth.testSignIn.enabled` (AUTH-012). Only for an explicitly set `development`, `test` or `e2e` environment |
 | `pnpm db:reset --yes` | Drops and recreates the configured database, then migrates. Only for an explicitly set `development`, `test` or `e2e` environment |
 | `pnpm generate` | ZenStack generate |
 
