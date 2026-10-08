@@ -1,6 +1,6 @@
 # ADR-0071: How the fake target rejects oversized blobs and pushes
 
-- Status: agent-decided
+- Status: accepted (no spec change needed)
 - Date: 2026-10-08
 - Task: T-040
 - Affects: TST-013, LIF-044

@@ -1,6 +1,6 @@
 # ADR-0072: Seeding fake git repositories with `git fast-import`
 
-- Status: agent-decided
+- Status: accepted (no spec change needed)
 - Date: 2026-10-08
 - Task: T-040
 - Affects: TST-012, TST-013

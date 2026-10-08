@@ -1,6 +1,6 @@
 # ADR-0070: Fake git server URL layout and authentication
 
-- Status: agent-decided
+- Status: accepted (no spec change needed)
 - Date: 2026-10-08
 - Task: T-040
 - Affects: TST-013, DEV-020
