@@ -3,7 +3,7 @@
 | ADR | Title | Status |
 |---|---|---|
 | [0001](0001-record-architecture-decisions.md) | Record architecture decisions | accepted |
-| [0002](0002-versions.md) | Dependency versions | proposed |
+| [0002](0002-versions.md) | Dependency versions | accepted |
 | [0003](0003-canonical-model.md) | Canonical model with pair overrides | accepted |
 | [0004](0004-vocabulary.md) | Provider-neutral vocabulary; Actor vs Identity | accepted |
 | [0005](0005-monorepo-build-time-adapters.md) | Monorepo, build-time adapters | accepted |
@@ -29,6 +29,9 @@
 | [0025](0025-single-image.md) | Single image, three entrypoints | accepted |
 | [0026](0026-review-loop.md) | Review loop with fixup commits | accepted |
 | [0027](0027-model-tiers.md) | Cheapest appropriate model per subagent | accepted |
+| [0028](0028-dependency-rule-checker.md) | Custom dependency-rule checker for ARC-012 | agent-decided |
+| [0029](0029-spec-coverage-modes.md) | spec:coverage runs report-only until the end of the project | agent-decided |
+| [0030](0030-coverage-placeholders.md) | Coverage thresholds, placeholders and module resolution | agent-decided |
 | [0035](0035-merge-settings-from-main-branch.md) | Bitbucket merge settings are read from the main branch (FAC-MRG-002) | accepted (spec updated) |
 | [0036](0036-unverified-bitbucket-items.md) | Bitbucket facts the published docs cannot settle | accepted (spec updated) |
 | [0040](0040-force-push-fail-closed.md) | Force-push exemptions follow the spec pairing and fail closed on GitHub | accepted (spec updated) |

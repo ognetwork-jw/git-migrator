@@ -12,6 +12,10 @@
 | API usage | `api-usage.md` (written by T-062) | Automation via RPC and `/api/v1` |
 | Handoff | `handoff.md` (written by T-097) | Final state for the human |
 
+## Commands
+
+The root [README](../README.md) lists the commands; the ones added by T-001 are `pnpm lint` (Biome plus the ARC-012 dependency check), `pnpm typecheck` (`tsc -b`), `pnpm test` (Vitest with the TST-005 coverage thresholds), `pnpm check:packages` (the same checks through Turborepo), `pnpm spec:coverage` (requirement IDs without tests; add `-- --strict` to gate) and `pnpm spec:must-test` (regenerate `must-test.txt`). Commands owned by later tasks currently print "not yet implemented (T-xxx)". T-002 extends the getting-started section below.
+
 ## Getting started
 
 T-002 writes this section: devenv path, Docker Compose path, secretspec setup and the first run.
