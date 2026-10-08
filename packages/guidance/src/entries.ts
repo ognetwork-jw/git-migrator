@@ -213,6 +213,32 @@ export const GUIDANCE: Readonly<Record<FindingCode, Guidance>> = {
     VERIFICATION.secrets,
   ),
 
+  'org-secrets.name-invalid': plain('org-secrets.name-invalid', [
+    step('org-secrets.name-invalid', 1),
+  ]),
+  'org-variables.accept-lossy': acceptLossy('org-variables.accept-lossy'),
+  'org-variables.name-invalid': plain('org-variables.name-invalid', [
+    step('org-variables.name-invalid', 1),
+  ]),
+  'org-webhooks.recreate-manually': plain(
+    'org-webhooks.recreate-manually',
+    [
+      // Shell context: the URL may carry ; | & $( ) ` or a quote, so it is always single-quoted.
+      step('org-webhooks.recreate-manually', 1, { copy: '{targetUrl:shell}' }),
+      step('org-webhooks.recreate-manually', 2),
+    ],
+    VERIFICATION.hook,
+  ),
+  'org-webhooks.set-secret': plain(
+    'org-webhooks.set-secret',
+    [
+      step('org-webhooks.set-secret', 1),
+      step('org-webhooks.set-secret', 2, { when: 'activateAfterSecret' }),
+    ],
+    VERIFICATION.webhookSecret,
+  ),
+  'org-webhooks.accept-lossy': acceptLossy('org-webhooks.accept-lossy'),
+
   // pipelines
   'pipelines.review-and-merge': plain(
     'pipelines.review-and-merge',
@@ -274,6 +300,7 @@ export const GUIDANCE: Readonly<Record<FindingCode, Guidance>> = {
 
   // teams
   'teams.slug-collision': plain('teams.slug-collision', [step('teams.slug-collision', 1)]),
+  'teams.slug-invalid': plain('teams.slug-invalid', [step('teams.slug-invalid', 1)]),
   'teams.set-membership': plain(
     'teams.set-membership',
     [step('teams.set-membership', 1)],

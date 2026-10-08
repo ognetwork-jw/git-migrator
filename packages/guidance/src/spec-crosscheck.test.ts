@@ -73,6 +73,29 @@ const KNOWN_POLICY_KEYS: readonly string[] = [
 ];
 
 /**
+ * Codes that implementors added where the spec is silent (PROC-005). They are in `codes.ts` and have
+ * guidance, but the spec does not name them yet. Each one is recorded in an agent-decided ADR.
+ */
+const AGENT_DECIDED_CODES: Readonly<Record<string, string>> = {
+  'org-secrets.name-invalid': 'ADR-0151',
+  'org-variables.accept-lossy': 'ADR-0151',
+  'org-variables.name-invalid': 'ADR-0151',
+  'org-webhooks.accept-lossy': 'ADR-0152',
+  'org-webhooks.recreate-manually': 'ADR-0152',
+  'org-webhooks.set-secret': 'ADR-0152',
+  'teams.slug-invalid': 'ADR-0150',
+};
+
+/**
+ * Policy keys decided by an implementor (agent-decided ADR) and not yet folded into the spec. They
+ * stay out of the list above. Remove an entry once the spec names it.
+ */
+const AGENT_DECIDED_POLICY_KEYS: readonly string[] = [
+  'org-variables.uppercase-names', // ADR-0151
+  'org-webhooks.event-dropped', // ADR-0152
+];
+
+/**
  * Dotted names in backticks that are neither finding codes nor policy keys: pipeline YAML and
  * translation fields, CI variables, file paths, placeholders and API fields. Each one must appear in
  * the spec, so a stale entry fails too. `translation.unsupported` is the list of unsupported YAML
@@ -125,12 +148,6 @@ const NON_CODE_NAMES: readonly string[] = [
   '<facet>.team-missing',
   'translation.unsupported',
 ];
-
-/**
- * Codes that implementors added where the spec is silent (PROC-005). They are in `codes.ts` and have
- * guidance, but the spec does not name them yet. Each one is recorded in an agent-decided ADR.
- */
-const AGENT_DECIDED_CODES: Readonly<Record<string, string>> = {};
 
 const SEVERITY_BY_MARK: Record<string, Severity> = {
   B: 'blocker',
@@ -246,11 +263,16 @@ describe('finding code list matches the facets spec (FAC-002)', () => {
     }
   });
 
-  it('[FAC-002] every agent-decided code is listed and not yet named in the spec', () => {
+  it('[FAC-002] every agent-decided code and policy key is listed and not yet named in the spec', () => {
     const mentioned = new Set(specNames().map((n) => n.name));
     for (const code of Object.keys(AGENT_DECIDED_CODES)) {
       expect(FINDING_CODES.includes(code as never), `${code} is not in codes.ts`).toBe(true);
       expect(mentioned.has(code), `${code} is in the spec now: drop the exemption`).toBe(false);
+    }
+    for (const key of AGENT_DECIDED_POLICY_KEYS) {
+      expect(mentioned.has(key), `${key} is in the spec now: move it to KNOWN_POLICY_KEYS`).toBe(
+        false,
+      );
     }
   });
 
@@ -301,7 +323,7 @@ describe('finding code list matches the facets spec (FAC-002)', () => {
   });
 
   it('[FAC-002] every policy key has a <facet>.accept-lossy task in the list', () => {
-    for (const key of KNOWN_POLICY_KEYS) {
+    for (const key of [...KNOWN_POLICY_KEYS, ...AGENT_DECIDED_POLICY_KEYS]) {
       const facet = key.split('.')[0] ?? '';
       expect(FINDING_CODES, key).toContain(`${facet}.accept-lossy`);
     }

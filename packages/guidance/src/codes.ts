@@ -232,6 +232,49 @@ export const FINDING_SPECS = [
     verifiable: true,
     ref: 'FAC-END org-variables',
   },
+  // Agent-decided (ADR-0151, ADR-0152): the org-level counterparts of the repository codes.
+  {
+    code: 'org-secrets.name-invalid',
+    facet: 'org-secrets',
+    severity: 'pre',
+    verifiable: false,
+    ref: 'ADR-0151',
+  },
+  {
+    code: 'org-variables.accept-lossy',
+    facet: 'org-variables',
+    severity: 'pre',
+    verifiable: false,
+    ref: 'ADR-0151',
+  },
+  {
+    code: 'org-variables.name-invalid',
+    facet: 'org-variables',
+    severity: 'pre',
+    verifiable: false,
+    ref: 'ADR-0151',
+  },
+  {
+    code: 'org-webhooks.recreate-manually',
+    facet: 'org-webhooks',
+    severity: 'post',
+    verifiable: true,
+    ref: 'ADR-0152',
+  },
+  {
+    code: 'org-webhooks.set-secret',
+    facet: 'org-webhooks',
+    severity: 'post',
+    verifiable: true,
+    ref: 'ADR-0152',
+  },
+  {
+    code: 'org-webhooks.accept-lossy',
+    facet: 'org-webhooks',
+    severity: 'pre',
+    verifiable: false,
+    ref: 'ADR-0152',
+  },
   // pipelines
   {
     code: 'pipelines.review-and-merge',
@@ -356,6 +399,14 @@ export const FINDING_SPECS = [
     severity: 'blocker',
     verifiable: false,
     ref: 'FAC-END teams',
+  },
+  {
+    // Agent-decided (ADR-0150): the naming pipeline produced no usable slug for the group.
+    code: 'teams.slug-invalid',
+    facet: 'teams',
+    severity: 'blocker',
+    verifiable: false,
+    ref: 'ADR-0150',
   },
   {
     code: 'teams.set-membership',
