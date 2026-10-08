@@ -1,7 +1,23 @@
 # @git-migrator/jobs
 
-Queue names, job payloads, enqueue helpers, processors.
+Queue names, job payloads, the BullMQ runtime on PostgreSQL, the scheduler leader, schedulers, maintenance jobs, Run leases and the reaper, retention, scratch handling and the worker health server (JOB-010 to JOB-015, JOB-046, JOB-050, ARC-023, LIF-046, DATA-020). Decisions: ADR-0210, ADR-0211, ADR-0212.
 
-Status: placeholder from T-001; a later task fills it (see `docs/spec/15-work-breakdown.md`).
+Internal dependencies (ARC-012, checked by `pnpm lint`): @git-migrator/core, @git-migrator/canonical, @git-migrator/db, @git-migrator/quota, @git-migrator/registry, @git-migrator/git, @git-migrator/adapter-sdk, @git-migrator/config, @git-migrator/observability, @git-migrator/guidance.
 
-Declared internal dependencies (ARC-012, checked by `pnpm lint`): @git-migrator/core, @git-migrator/canonical, @git-migrator/db, @git-migrator/quota, @git-migrator/registry, @git-migrator/git, @git-migrator/adapter-sdk, @git-migrator/config, @git-migrator/observability, @git-migrator/guidance.
+## Runtime
+
+- `queues.ts`: the seven queues, which jobs each carries, role to queue mapping (`queuesForRole`), concurrency from config, default job options (`removeOnComplete` 1 day, `removeOnFail` 7 days, 3 attempts with exponential backoff, 1 for Run queues), `runQueue` / `analysisQueue` routing.
+- `payloads.ts`: strict Zod payloads, IDs only. Validated on enqueue and again on processing.
+- `runtime.ts`: `JobRuntime` owns the shared `pg.Pool` (`search_path = bullmq`), one Queue per name, and Workers. `enqueue`, `enqueueAnalysis` and `enqueueRun` deduplicate with `deduplication.id`. `startWorkers(role, config, handlers)`, `close()` (graceful), and `isRunJobPending(dedupeId)` for the reaper.
+- `connection.ts`: `migrateBullmqSchema` is DATA-030 step 4; `bullmqPoolSize` is the JOB-014 formula (see `docs/deployment.md`).
+- `telemetry.ts`: `bullmq-otel` traces for every Queue and Worker (DEP-050).
+- `leader.ts`: `LeaderElection` with `pg_try_advisory_lock` (ARC-023). `schedules.ts`: `desiredSchedulers`, `reconcileSchedulers`, `SchedulerManager` (JOB-050).
+- `maintenance.ts`: handlers for `maintenance.prune` (`QuotaService.prune()` plus hourly `retention.ts`), `maintenance.scratch-cleanup`, `maintenance.run-reaper`; scheduled jobs of later tasks complete as skipped (ADR-0212).
+- `run-leases.ts`, `reaper.ts`: Run lease claim, renew, release and `keepRunLease`; pending markers that carry the awaited job's deduplication id; `reapRuns`, which counts a dead resume or hand-off job toward the bound (LIF-046). The Run executor (T-070) uses `keepRunLease`.
+- `scratch.ts`: size class, disk precheck, per-Run scratch directory, cleanup (JOB-015).
+- `provider-wiring.ts`: `RawCaptureSink` over `RawResponse`, `ProviderTelemetry` over `MetricRecorders` and the tracer, and `createProviderEnvironment` for the adapter host (ADR-0190).
+- `health.ts`, `queue-metrics.ts`: the worker health server (port 8081) and the `gm_queue_jobs` gauge.
+
+Handlers are registered by the process: `JobHandlers` maps a job name to `(payload, { job, queue, log, shutdown }) => Promise`. A job without a handler fails without retry.
+
+Tests use a throw-away Postgres database (`@git-migrator/db/testing`) and real BullMQ; no provider is contacted.

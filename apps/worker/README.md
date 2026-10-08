@@ -6,7 +6,7 @@ Status: `src/worker.ts` (T-028) and `src/migrate.ts` and `src/db-commands.ts` (T
 
 ## `worker --role <standard|large|all>` (DEP-002)
 
-`src/worker.ts` starts the queue Workers of the role (`@git-migrator/jobs`), the health server on port 8081 (`/healthz`, `/readyz`), the metrics server (`metrics.port`), a pod-local scratch cleaner, and, for `standard` and `all`, the scheduler leader election that registers the job schedulers from config (ARC-023, JOB-050). `maintenance.prune` calls `QuotaService.prune()`; `MetricRecorders` is the quota metrics sink. The handle also carries the adapter host environment (quota and lease gates, raw capture, telemetry). SIGTERM and SIGINT stop gracefully. `pnpm dev` runs it with `--role all`.
+`src/worker.ts` starts the queue Workers of the role (`@git-migrator/jobs`), the health server on port 8081 (`/healthz`, `/readyz`), the metrics server (`metrics.port`), a pod-local scratch cleaner, and, for `standard` and `all`, the scheduler leader election that registers the job schedulers from config (ARC-023, JOB-050). `maintenance.prune` calls `QuotaService.prune()`; `MetricRecorders` is the quota metrics sink. The handle also carries the adapter host environment (quota and lease gates, raw capture, telemetry). SIGTERM and SIGINT stop gracefully (`runWorkerProcess`): after start-up the process drains with no timer of its own, and only a signal during start-up exits after at most 30 s (ADR-0213). `pnpm dev` runs it with `--role all`.
 
 ## `migrate` (DATA-030)
 

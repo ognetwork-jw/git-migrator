@@ -115,6 +115,10 @@
 | [0135](0135-headless-secrets-in-devenv-ci.md) | Headless secretspec route for the devenv CI job (env provider, test profile) | accepted (spec updated) |
 | [0136](0136-devenv-ci-cli-and-lock.md) | devenv CI pins the CLI to the v2.4.0 tag and uses the devenv cache; devenv.lock not committed yet | accepted (no spec change needed) |
 | [0137](0137-devenv-test-readiness.md) | devenv test waits on readiness probes; Postgres probed over the socket; CREATEDB for the app role | accepted (spec updated) |
+| [0210](0210-bullmq-runtime-wiring.md) | BullMQ runtime wiring: shared pool, job tracing, retries | agent-decided |
+| [0211](0211-worker-process-decisions.md) | Worker process decisions: scratch cleanup, retention gate, leader, entrypoints | agent-decided |
+| [0212](0212-reaper-and-pending-processors.md) | Run reaper details and processors owned by later tasks | agent-decided |
+| [0213](0213-worker-readiness-and-cold-start.md) | Worker readiness probe and cold start | agent-decided |
 | [0220](0220-bitbucket-adapter-connection-and-inventory.md) | Bitbucket adapter config and credential shape, ids, bucket-key sanitising, inventory | accepted (no spec change needed) |
 | [0221](0221-bitbucket-facet-read-mappings.md) | Bitbucket Facet read mappings the spec leaves open (grants, enforcement, webhooks, failure policy) | accepted (spec updated) |
 | [0222](0222-bitbucket-source-lock.md) | Source read-only apply and undo, partial results | accepted (spec updated) |

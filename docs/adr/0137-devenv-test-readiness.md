@@ -1,6 +1,6 @@
 # ADR-0137: devenv test waits on readiness probes; Postgres is probed over the socket
 
-- Status: accepted (spec updated)
+- Status: accepted (spec updated); item 2 amended by ADR-0213 (worker probe)
 - Date: 2026-10-08
 
 ## Context
