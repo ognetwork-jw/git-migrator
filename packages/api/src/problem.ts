@@ -21,6 +21,7 @@ export const PROBLEMS = {
   payload_too_large: { status: 413, title: 'Request body too large' },
   unsupported_media_type: { status: 415, title: 'Unsupported media type' },
   validation_failed: { status: 422, title: 'Validation failed' },
+  too_many_streams: { status: 429, title: 'Too many open event streams' },
   not_ready: { status: 503, title: 'Not ready' },
   internal_error: { status: 500, title: 'Internal server error' },
 } as const;
@@ -91,6 +92,8 @@ export function problemCodeForStatus(status: number): ProblemCode {
       return 'unsupported_media_type';
     case 422:
       return 'validation_failed';
+    case 429:
+      return 'too_many_streams';
     case 503:
       return 'not_ready';
     default:

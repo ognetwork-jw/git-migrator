@@ -11,7 +11,14 @@ import { createTestDatabase, type TestDatabase } from '@git-migrator/db/testing'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { type ApiDeps, createApiApp, MAX_API_BODY_BYTES } from './app.ts';
 import { createApiClient } from './client.ts';
+import { createEventHub } from './events.ts';
 import { PROBLEM_BASE, PROBLEM_CONTENT_TYPE } from './problem.ts';
+
+/** A hub whose listener never connects: these tests do not use `/api/v1/events`. */
+const inertEvents = () =>
+  createEventHub({
+    listener: { start: () => undefined, subscribe: () => () => undefined, connected: false },
+  });
 
 const TENANT = '11111111-2222-3333-4444-555555555555';
 const CLIENT_ID = 'client-id-fake';
@@ -60,6 +67,7 @@ beforeAll(async () => {
     { entraAuthority: stub.authority },
   );
   const deps: ApiDeps = {
+    events: inertEvents(),
     db: t.db,
     auth: service,
     publicUrl: ORIGIN,
@@ -154,6 +162,7 @@ describe('[API-001] one Hono app serves auth, RPC, v1 and health', () => {
 
   it('[API-001] readiness fails when the database is unreachable', async () => {
     const broken = createApiApp({
+      events: inertEvents(),
       db: { ...t.db, pool: { query: () => Promise.reject(new Error('down')) } as never },
       auth: service,
       publicUrl: ORIGIN,
@@ -574,6 +583,7 @@ describe('[API-011] problem+json, validation and limits', () => {
 
   it('[API-011] an unexpected error is a generic 500 problem without details', async () => {
     const boom = createApiApp({
+      events: inertEvents(),
       db: {
         ...t.db,
         privileged: new Proxy(t.db.privileged, {
@@ -612,6 +622,7 @@ describe('[API-001] OpenAPI document and typed client', () => {
       '/actors/{id}',
       '/actors/{id}/api-keys',
       '/api-keys/{id}',
+      '/events',
       '/me',
     ]);
     expect(Object.keys(doc.components.securitySchemes)).toEqual(['bearerAuth', 'sessionCookie']);

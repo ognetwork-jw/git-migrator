@@ -12,7 +12,14 @@ import { createTestDatabase, type TestDatabase } from '@git-migrator/db/testing'
 import SuperJSON from 'superjson';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { createApiApp, safeErrorFields } from './app.ts';
+import { createEventHub } from './events.ts';
 import { PROBLEM_BASE, PROBLEM_CONTENT_TYPE } from './problem.ts';
+
+/** A hub whose listener never connects: these tests do not use `/api/v1/events`. */
+const inertEvents = () =>
+  createEventHub({
+    listener: { start: () => undefined, subscribe: () => () => undefined, connected: false },
+  });
 
 const TENANT = '11111111-2222-3333-4444-555555555555';
 const CLIENT_ID = 'client-id-fake';
@@ -52,6 +59,7 @@ beforeAll(async () => {
     { entraAuthority: stub.authority },
   );
   app = createApiApp({
+    events: inertEvents(),
     db: t.db,
     auth: service,
     publicUrl: ORIGIN,
@@ -171,6 +179,7 @@ describe('[AUTH-021] the RPC mount', () => {
     const actor = await t.db.privileged.actor.findFirstOrThrow({ where: { email } });
     const real = t.db.forActor(actor);
     const broken = createApiApp({
+      events: inertEvents(),
       db: {
         ...t.db,
         forActor: () =>
@@ -388,6 +397,7 @@ describe('[API-020] Actor administration, round 2', () => {
     expect(isRetryableConflict(new Error('x'))).toBe(false);
     const { jar } = await signInAdmin();
     const boom = createApiApp({
+      events: inertEvents(),
       db: {
         ...t.db,
         privileged: new Proxy(t.db.privileged, {
@@ -466,7 +476,7 @@ describe('[AUTH-021] the RPC mount, round 3', () => {
       pool: t.db.pool,
       onError: (error) => records.push([safeErrorFields(error), 'database call failed']),
     });
-    const logged2 = createApiApp({ db, auth: service, publicUrl: ORIGIN });
+    const logged2 = createApiApp({ events: inertEvents(), db, auth: service, publicUrl: ORIGIN });
     const body = JSON.stringify({ data: { name: 'dup-wave-for-log' } });
     const headers = { cookie: jar.header(), origin: ORIGIN, 'content-type': 'application/json' };
     const first = await logged2.request(`${ORIGIN}/api/model/wave/create`, {

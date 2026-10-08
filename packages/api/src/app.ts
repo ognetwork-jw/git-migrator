@@ -6,6 +6,7 @@ import { createHonoHandler } from '@zenstackhq/server/hono';
 import { type Context, Hono } from 'hono';
 import { bodyLimit } from 'hono/body-limit';
 import { HTTPException } from 'hono/http-exception';
+import type { EventHub } from './events.ts';
 import { type Principal, resolvePrincipal } from './principal.ts';
 import {
   PROBLEM_BASE,
@@ -28,6 +29,11 @@ export interface ApiDeps {
   /** `publicUrl` of the configuration. Session-cookie writes must come from this origin. */
   readonly publicUrl: string;
   readonly logger?: Logger;
+  /**
+   * Fan-out of domain events to SSE clients (JOB-060). The process owner creates it and closes it
+   * on shutdown; the app never owns a listener connection.
+   */
+  readonly events: EventHub;
   /** Extra readiness check, run after `select 1` (for example "configuration loaded"). */
   readonly ready?: () => boolean | Promise<boolean>;
 }
@@ -202,7 +208,7 @@ export function createApiApp(deps: ApiDeps) {
     return response;
   });
 
-  const v1 = createV1({ db: deps.db, auth: deps.auth });
+  const v1 = createV1({ db: deps.db, auth: deps.auth, events: deps.events });
   v1.doc31('/openapi.json', {
     openapi: '3.1.0',
     info: { title: API_TITLE, version: '1.0.0' },

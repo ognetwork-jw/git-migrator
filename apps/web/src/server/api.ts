@@ -1,7 +1,12 @@
-import { type AppType, createApiApp, safeErrorFields } from '@git-migrator/api';
+import { type AppType, createApiApp, createEventHub, safeErrorFields } from '@git-migrator/api';
 import { createAuth } from '@git-migrator/auth';
 import { type Config, loadConfig } from '@git-migrator/config';
-import { buildConnectionString, createDb } from '@git-migrator/db';
+import {
+  buildConnectionString,
+  createDb,
+  createEventListener,
+  pgListenClient,
+} from '@git-migrator/db';
 import { createLogger } from '@git-migrator/observability';
 
 type Env = Readonly<Record<string, string | undefined>>;
@@ -46,11 +51,20 @@ export function buildApiRuntime(env: Env = process.env): ApiRuntime {
     env,
     logger,
   });
-  const app = createApiApp({ db, auth, publicUrl: config.publicUrl, logger });
+  // One dedicated LISTEN connection for the whole process, fanned out to SSE clients (JOB-060).
+  const events = createEventHub({
+    listener: createEventListener({
+      createClient: pgListenClient(db.pool),
+      onProblem: (what) => logger.warn({ what }, 'event listener problem'),
+    }),
+    onSlowClient: () => logger.warn('dropped a slow event stream client'),
+  });
+  const app = createApiApp({ db, auth, publicUrl: config.publicUrl, logger, events });
   return {
     app,
     config,
     close: async () => {
+      await events.close();
       await auth.close();
       await db.close();
     },

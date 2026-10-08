@@ -20,6 +20,7 @@
     "conflict": "This change conflicts with the current state. Reload and try again.",
     "payload_too_large": "The request is too large.",
     "validation_failed": "Some of the values you entered are not valid.",
+    "too_many_streams": "Too many live update connections are open. Close other tabs or try again shortly.",
     "not_ready": "The service is starting or temporarily unavailable. Try again shortly.",
     "internal_error": "Something went wrong on our side. Try again, or contact an administrator if it keeps happening.",
     "bad_request": "The request could not be understood. Reload the page and try again.",

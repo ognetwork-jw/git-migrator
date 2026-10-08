@@ -10,6 +10,7 @@ export {
   MAX_API_BODY_BYTES,
   safeErrorFields,
 } from './app.ts';
+export { createEventHub, type EventHub, type EventHubOptions } from './events.ts';
 export {
   DEFAULT_PAGE_LIMIT,
   MAX_PAGE_LIMIT,

@@ -9,6 +9,8 @@ import {
 import type { Actor, DbHandle } from '@git-migrator/db';
 import { createRoute, OpenAPIHono, z } from '@hono/zod-openapi';
 import type { Context } from 'hono';
+import type { EventHub } from './events.ts';
+import { eventsHandler, eventsRoute } from './events-route.ts';
 import type { Principal } from './principal.ts';
 import { ProblemError, ProblemSchema } from './problem.ts';
 
@@ -19,6 +21,8 @@ export interface ApiEnv {
 export interface V1Deps {
   readonly db: Pick<DbHandle, 'privileged'>;
   readonly auth: AuthService;
+  /** Fan-out for `GET /events` (JOB-060). */
+  readonly events: EventHub;
 }
 
 /** `pg_advisory_xact_lock` key that serializes Actor changes (any fixed bigint not used elsewhere). */
@@ -178,6 +182,10 @@ export const validationHook = (
 export function createV1(deps: V1Deps) {
   const { privileged } = deps.db;
   const v1 = new OpenAPIHono<ApiEnv>({ defaultHook: validationHook as never });
+  // Registered apart from the chain below: a stream is not a typed JSON endpoint, and the typed
+  // client (`hc<AppType>`) has no use for it (browsers use EventSource).
+  v1.openAPIRegistry.registerPath(eventsRoute);
+  v1.get('/events', eventsHandler(deps.events));
 
   return v1
     .openapi(meRoute, (c) => c.json(toActor(c.get('principal').actor), 200))
@@ -256,6 +264,8 @@ export function createV1(deps: V1Deps) {
         });
         return { target: before, updated: row };
       });
+      // Streams (JOB-060) end at once on this process; on others within their lifetime.
+      if (body.disabled === true) deps.events.closeOwner(id);
       if (body.disabled === true && target.authUserId) {
         // AUTH-005: a disabled Actor's sessions are revoked. The Actor check on every request
         // already rejects them; this removes the rows.
@@ -291,12 +301,15 @@ export function createV1(deps: V1Deps) {
     .openapi(revokeKeyRoute, async (c) => {
       requireCapability(c, 'manageActors');
       const { id } = c.req.valid('param');
+      const key = await privileged.apiKey.findUnique({ where: { id }, select: { actorId: true } });
       try {
         await revokeApiKey(privileged, id, c.get('principal').actor.id);
       } catch (error) {
         if (error instanceof ApiKeyError) throw new ProblemError('not_found');
         throw error;
       }
+      // The Actor's open event streams may belong to the revoked key: end them, clients reconnect.
+      if (key) deps.events.closeOwner(key.actorId);
       return c.body(null, 204);
     });
 }
