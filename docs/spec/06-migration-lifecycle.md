@@ -110,6 +110,7 @@ type NamingStep =
   - `naming.invalid`: fails validation.
   - `naming.collision`: two source repositories on the Route produce the same name, case-insensitively. Every member of the collision is blocked.
   - `target.exists-nonempty`: the name exists on the target, has refs, and was not created by this Migration.
+  - `target.owned-by-other-migration`: the target repository is already claimed by another Migration on the Route, either by the same `targetRepositoryId` or by a name that matches a target another Migration claims. Every Migration involved is blocked.
   - `target.exists-foreign-adopted`: an existing **empty** target is adopted automatically (Q12), so this is information only.
 
   Force-adopting a non-empty target is a Run option (`adoptNonEmpty: true`) that requires typed confirmation of the target name (LIF-043).
