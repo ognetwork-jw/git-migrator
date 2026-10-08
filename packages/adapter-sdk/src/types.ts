@@ -3,7 +3,7 @@
  * docs/spec/04-adapter-contract.md). Names may gain fields; they must not lose them.
  */
 import type { FacetKey } from '@git-migrator/canonical';
-import type { FacetCapability, FieldDecision, FieldPath } from '@git-migrator/core';
+import type { FacetCapability, FieldDecision, FieldPath, FieldSupport } from '@git-migrator/core';
 import type { ZodType } from 'zod';
 import type { ProviderHttpClient, ProviderHttpEnvironment } from './http.ts';
 import type { Logger } from './logger.ts';
@@ -186,6 +186,12 @@ export interface FacetRead<T> {
   unreadable: FieldPath[];
   warnings: AdapterWarning[];
   rawResponseIds: string[];
+  /**
+   * Per-read refinements of the static capability, for facts only the live provider knows (for
+   * example an organization that forbids a setting). Merged over `ProviderCapabilities` by the
+   * analysis (ADR-0230).
+   */
+  capabilities?: Record<FieldPath, FieldSupport>;
 }
 
 export interface DriverContext {

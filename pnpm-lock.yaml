@@ -288,6 +288,13 @@ importers:
       yaml:
         specifier: 2.9.1
         version: 2.9.1
+      zod:
+        specifier: 4.6.5
+        version: 4.6.5
+    devDependencies:
+      '@git-migrator/provider-fakes':
+        specifier: workspace:*
+        version: link:../../../testing/provider-fakes
 
   packages/api:
     dependencies:
