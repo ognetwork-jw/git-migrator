@@ -1,6 +1,6 @@
 # ADR-0040: Force-push exemptions follow the spec pairing and fail closed on GitHub
 
-- Status: agent-decided
+- Status: accepted (spec updated)
 - Date: 2026-10-08
 - Task: T-031
 - Affects: FAC-BRR-002 (rows `blockForcePush` and non-empty `forcePushExempt`), FAC-BRR-001, TST-011, T-033

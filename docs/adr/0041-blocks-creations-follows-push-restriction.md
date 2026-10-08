@@ -1,6 +1,6 @@
 # ADR-0041: `blocksCreations` follows `restrictsPushes`
 
-- Status: agent-decided
+- Status: accepted (spec updated)
 - Date: 2026-10-08
 - Task: T-031
 - Affects: FAC-BRR-002 (`restrictPushes` row), FAC-BRR-001

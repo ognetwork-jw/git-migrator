@@ -191,11 +191,11 @@ type BranchRules = { rules: BranchRule[] };
 | Canonical | GitHub branch protection | Fidelity |
 |---|---|---|
 | `enforcement: advisory` | always enforced | lossy, policy `branch-rules.advisory-enforced` (accepted by default) |
-| `restrictPushes` | `restrictions.{users,teams}` | translated |
+| `restrictPushes` | `restrictions.{users,teams}`; `blocksCreations` follows: `true` when `restrictPushes` is non-null (ADR-0041) | translated |
 | `restrictMerges` without `restrictPushes` | `restrictions` (merging is a push on GitHub) | lossy `branch-rules.merge-restriction-as-push` |
 | `restrictMerges` ≠ `restrictPushes`, both set | `restrictions` = `restrictPushes` | lossy, same key |
 | `blockForcePush` / `blockDeletion` | `allow_force_pushes: false` / `allow_deletions: false` | exact |
-| non-empty `forcePushExempt` | `bypassForcePushAllowances` (GraphQL) **[verify in T-031]** | translated (lossy `branch-rules.exemptions-dropped` if unavailable) |
+| non-empty `forcePushExempt` | `allowsForcePushes: false` + `bypassForcePushActorIds` (GraphQL; Users, Teams, Apps). Read: `allowsForcePushes: true` → `blockForcePush: false`, bypass list ignored; `false` → `blockForcePush: true`, exempt = bypass actors (ADR-0040). Fail closed: a contract/staging check MUST prove non-listed writers are rejected | translated (lossy `branch-rules.exemptions-dropped` if unavailable or unresolvable) |
 | non-empty `deletionExempt` | not representable | lossy `branch-rules.exemptions-dropped` |
 | `minApprovals` 1–6 | `required_approving_review_count` | exact |
 | `minApprovals` > 6 | capped at 6 | lossy `branch-rules.approvals-capped` |

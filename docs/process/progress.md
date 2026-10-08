@@ -22,7 +22,7 @@ The orchestrator maintains this table (see [workflow](workflow.md)). Integration
 | T-027 | todo |  | | | |
 | T-028 | todo |  | | | |
 | T-030 | merged | task/T-030-bitbucket-api-verification | [#2](https://github.com/ognetwork-jw/git-migrator/pull/2) | 2 | ADR-0035, 0036 folded into spec; r2 adversarial MAJOR downgraded to MINOR (pre-existing text) |
-| T-031 | in_review | task/T-031-github-api-verification | [#3](https://github.com/ognetwork-jw/git-migrator/pull/3) | 2 | r2 ACCEPTABLE (both); rebased locally to 2d5e1b7; merge to ai-main pending (ADR-0045) |
+| T-031 | merged | task/T-031-github-api-verification | [#3](https://github.com/ognetwork-jw/git-migrator/pull/3) | 2 | merged to ai-main 033bd88; ADR-0040, 0041 folded into spec |
 | T-032 | todo |  | | | |
 | T-033 | todo |  | | | |
 | T-034 | todo |  | | | |
