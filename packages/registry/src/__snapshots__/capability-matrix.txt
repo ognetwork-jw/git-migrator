@@ -1,0 +1,473 @@
+[
+  {
+    "facet": "change-requests",
+    "scope": "repository",
+    "inScope": true,
+    "cells": [
+      {
+        "pair": "bitbucket-cloud -> github",
+        "fidelity": "exact",
+        "read": true,
+        "write": false,
+        "override": false,
+        "fields": []
+      },
+      {
+        "pair": "github -> bitbucket-cloud",
+        "fidelity": "exact",
+        "read": true,
+        "write": false,
+        "override": false,
+        "fields": []
+      }
+    ]
+  },
+  {
+    "facet": "deploy-keys",
+    "scope": "repository",
+    "inScope": true,
+    "cells": [
+      {
+        "pair": "bitbucket-cloud -> github",
+        "fidelity": "exact",
+        "read": true,
+        "write": true,
+        "override": false,
+        "fields": []
+      },
+      {
+        "pair": "github -> bitbucket-cloud",
+        "fidelity": "exact",
+        "read": true,
+        "write": false,
+        "override": false,
+        "fields": []
+      }
+    ]
+  },
+  {
+    "facet": "environments",
+    "scope": "repository",
+    "inScope": true,
+    "cells": [
+      {
+        "pair": "bitbucket-cloud -> github",
+        "fidelity": "unsupported",
+        "read": true,
+        "write": true,
+        "override": false,
+        "fields": [
+          "/environments/category: unsupported"
+        ]
+      },
+      {
+        "pair": "github -> bitbucket-cloud",
+        "fidelity": "unsupported",
+        "read": true,
+        "write": false,
+        "override": false,
+        "fields": [
+          "/environments/category: unsupported"
+        ]
+      }
+    ]
+  },
+  {
+    "facet": "extras",
+    "scope": "repository",
+    "inScope": false,
+    "cells": [
+      {
+        "pair": "bitbucket-cloud -> github",
+        "fidelity": "exact",
+        "read": true,
+        "write": false,
+        "override": false,
+        "fields": []
+      },
+      {
+        "pair": "github -> bitbucket-cloud",
+        "fidelity": "unsupported",
+        "read": false,
+        "write": false,
+        "override": false,
+        "fields": []
+      }
+    ]
+  },
+  {
+    "facet": "git-refs",
+    "scope": "repository",
+    "inScope": true,
+    "cells": [
+      {
+        "pair": "bitbucket-cloud -> github",
+        "fidelity": "exact",
+        "read": true,
+        "write": false,
+        "override": false,
+        "fields": []
+      },
+      {
+        "pair": "github -> bitbucket-cloud",
+        "fidelity": "exact",
+        "read": true,
+        "write": false,
+        "override": false,
+        "fields": []
+      }
+    ]
+  },
+  {
+    "facet": "members",
+    "scope": "endpoint",
+    "inScope": true,
+    "cells": [
+      {
+        "pair": "bitbucket-cloud -> github",
+        "fidelity": "exact",
+        "read": true,
+        "write": false,
+        "override": false,
+        "fields": []
+      },
+      {
+        "pair": "github -> bitbucket-cloud",
+        "fidelity": "exact",
+        "read": true,
+        "write": false,
+        "override": false,
+        "fields": []
+      }
+    ]
+  },
+  {
+    "facet": "merge-settings",
+    "scope": "repository",
+    "inScope": true,
+    "cells": [
+      {
+        "pair": "bitbucket-cloud -> github",
+        "fidelity": "lossy",
+        "read": true,
+        "write": true,
+        "override": false,
+        "fields": [
+          "/allowed: lossy"
+        ]
+      },
+      {
+        "pair": "github -> bitbucket-cloud",
+        "fidelity": "lossy",
+        "read": true,
+        "write": false,
+        "override": false,
+        "fields": [
+          "/allowed: lossy"
+        ]
+      }
+    ]
+  },
+  {
+    "facet": "org-secrets",
+    "scope": "endpoint",
+    "inScope": true,
+    "cells": [
+      {
+        "pair": "bitbucket-cloud -> github",
+        "fidelity": "exact",
+        "read": true,
+        "write": false,
+        "override": false,
+        "fields": []
+      },
+      {
+        "pair": "github -> bitbucket-cloud",
+        "fidelity": "exact",
+        "read": true,
+        "write": false,
+        "override": false,
+        "fields": []
+      }
+    ]
+  },
+  {
+    "facet": "org-variables",
+    "scope": "endpoint",
+    "inScope": true,
+    "cells": [
+      {
+        "pair": "bitbucket-cloud -> github",
+        "fidelity": "exact",
+        "read": true,
+        "write": true,
+        "override": false,
+        "fields": []
+      },
+      {
+        "pair": "github -> bitbucket-cloud",
+        "fidelity": "exact",
+        "read": true,
+        "write": false,
+        "override": false,
+        "fields": []
+      }
+    ]
+  },
+  {
+    "facet": "org-webhooks",
+    "scope": "endpoint",
+    "inScope": true,
+    "cells": [
+      {
+        "pair": "bitbucket-cloud -> github",
+        "fidelity": "exact",
+        "read": true,
+        "write": true,
+        "override": false,
+        "fields": [
+          "/hooks/secret: exact"
+        ]
+      },
+      {
+        "pair": "github -> bitbucket-cloud",
+        "fidelity": "unreadable",
+        "read": true,
+        "write": false,
+        "override": false,
+        "fields": [
+          "/hooks/secret: unreadable"
+        ]
+      }
+    ]
+  },
+  {
+    "facet": "repository-settings",
+    "scope": "repository",
+    "inScope": true,
+    "cells": [
+      {
+        "pair": "bitbucket-cloud -> github",
+        "fidelity": "exact",
+        "read": true,
+        "write": true,
+        "override": false,
+        "fields": [
+          "/forking: exact"
+        ]
+      },
+      {
+        "pair": "github -> bitbucket-cloud",
+        "fidelity": "exact",
+        "read": true,
+        "write": false,
+        "override": false,
+        "fields": [
+          "/forking: exact"
+        ]
+      }
+    ]
+  },
+  {
+    "facet": "secrets",
+    "scope": "repository",
+    "inScope": true,
+    "cells": [
+      {
+        "pair": "bitbucket-cloud -> github",
+        "fidelity": "exact",
+        "read": true,
+        "write": false,
+        "override": false,
+        "fields": []
+      },
+      {
+        "pair": "github -> bitbucket-cloud",
+        "fidelity": "exact",
+        "read": true,
+        "write": false,
+        "override": false,
+        "fields": []
+      }
+    ]
+  },
+  {
+    "facet": "teams",
+    "scope": "endpoint",
+    "inScope": true,
+    "cells": [
+      {
+        "pair": "bitbucket-cloud -> github",
+        "fidelity": "exact",
+        "read": true,
+        "write": true,
+        "override": false,
+        "fields": []
+      },
+      {
+        "pair": "github -> bitbucket-cloud",
+        "fidelity": "exact",
+        "read": true,
+        "write": false,
+        "override": false,
+        "fields": []
+      }
+    ]
+  },
+  {
+    "facet": "access-control",
+    "scope": "repository",
+    "inScope": true,
+    "cells": [
+      {
+        "pair": "bitbucket-cloud -> github",
+        "fidelity": "exact",
+        "read": true,
+        "write": true,
+        "override": false,
+        "fields": []
+      },
+      {
+        "pair": "github -> bitbucket-cloud",
+        "fidelity": "exact",
+        "read": true,
+        "write": false,
+        "override": false,
+        "fields": []
+      }
+    ]
+  },
+  {
+    "facet": "branch-rules",
+    "scope": "repository",
+    "inScope": true,
+    "cells": [
+      {
+        "pair": "bitbucket-cloud -> github",
+        "fidelity": "unsupported",
+        "read": true,
+        "write": true,
+        "override": false,
+        "fields": [
+          "/rules/changeRequest/minApprovals: lossy",
+          "/rules/changeRequest/minPassingBuilds: unsupported",
+          "/rules/deletionExempt: unsupported",
+          "/rules/enforcement: lossy",
+          "/rules/forcePushExempt: exact",
+          "/rules/restrictMerges: unsupported"
+        ]
+      },
+      {
+        "pair": "github -> bitbucket-cloud",
+        "fidelity": "unsupported",
+        "read": true,
+        "write": false,
+        "override": false,
+        "fields": [
+          "/rules/changeRequest/minApprovals: lossy",
+          "/rules/changeRequest/minPassingBuilds: unsupported",
+          "/rules/deletionExempt: unsupported",
+          "/rules/enforcement: lossy",
+          "/rules/forcePushExempt: exact",
+          "/rules/restrictMerges: unsupported"
+        ]
+      }
+    ]
+  },
+  {
+    "facet": "code-ownership",
+    "scope": "repository",
+    "inScope": true,
+    "cells": [
+      {
+        "pair": "bitbucket-cloud -> github",
+        "fidelity": "exact",
+        "read": true,
+        "write": true,
+        "override": false,
+        "fields": []
+      },
+      {
+        "pair": "github -> bitbucket-cloud",
+        "fidelity": "exact",
+        "read": true,
+        "write": false,
+        "override": false,
+        "fields": []
+      }
+    ]
+  },
+  {
+    "facet": "variables",
+    "scope": "repository",
+    "inScope": true,
+    "cells": [
+      {
+        "pair": "bitbucket-cloud -> github",
+        "fidelity": "exact",
+        "read": true,
+        "write": true,
+        "override": false,
+        "fields": []
+      },
+      {
+        "pair": "github -> bitbucket-cloud",
+        "fidelity": "exact",
+        "read": true,
+        "write": false,
+        "override": false,
+        "fields": []
+      }
+    ]
+  },
+  {
+    "facet": "pipelines",
+    "scope": "repository",
+    "inScope": true,
+    "cells": [
+      {
+        "pair": "bitbucket-cloud -> github",
+        "fidelity": "exact",
+        "read": true,
+        "write": false,
+        "override": true,
+        "fields": []
+      },
+      {
+        "pair": "github -> bitbucket-cloud",
+        "fidelity": "exact",
+        "read": true,
+        "write": false,
+        "override": false,
+        "fields": []
+      }
+    ]
+  },
+  {
+    "facet": "webhooks",
+    "scope": "repository",
+    "inScope": true,
+    "cells": [
+      {
+        "pair": "bitbucket-cloud -> github",
+        "fidelity": "exact",
+        "read": true,
+        "write": true,
+        "override": false,
+        "fields": [
+          "/hooks/secret: exact"
+        ]
+      },
+      {
+        "pair": "github -> bitbucket-cloud",
+        "fidelity": "unreadable",
+        "read": true,
+        "write": false,
+        "override": false,
+        "fields": [
+          "/hooks/secret: unreadable"
+        ]
+      }
+    ]
+  }
+]

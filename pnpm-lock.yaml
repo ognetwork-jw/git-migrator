@@ -546,6 +546,12 @@ importers:
 
   packages/registry:
     dependencies:
+      '@git-migrator/adapter-bitbucket-cloud':
+        specifier: workspace:*
+        version: link:../adapters/bitbucket-cloud
+      '@git-migrator/adapter-github':
+        specifier: workspace:*
+        version: link:../adapters/github
       '@git-migrator/adapter-sdk':
         specifier: workspace:*
         version: link:../adapter-sdk

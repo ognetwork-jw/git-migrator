@@ -11,6 +11,8 @@
     { "path": "../../packages/core" },
     { "path": "../../packages/canonical" },
     { "path": "../../packages/adapter-sdk" },
-    { "path": "../../packages/facets" }
+    { "path": "../../packages/facets" },
+    { "path": "../../packages/adapters/bitbucket-cloud" },
+    { "path": "../../packages/adapters/github" }
   ]
 }

@@ -124,5 +124,7 @@
 | [0202](0202-rpc-ids-last-admin-and-error-shapes.md) | RPC primary keys are immutable, the last-admin guard, problem+json for every /api/v1 error, argument limits | agent-decided |
 | [0230](0230-github-adapter-identity-and-connection.md) | GitHub adapter: identifiers, configuration, App token cache, quota buckets, error mapping | accepted (no spec change needed) |
 | [0231](0231-github-facet-drivers.md) | GitHub facet drivers: apply semantics, dynamic capabilities, branch rules, Change Requests | accepted (spec updated) |
+| [0260](0260-capability-matrix-shape.md) | Capability matrix shape, registry ownership, dynamic overlay | agent-decided |
+| [0261](0261-capability-matrix-vs-mapping-tables.md) | Declared capabilities versus the 05-facets mapping tables: disagreements | agent-decided |
 
 New ADRs continue from 0028. Implementor decisions use `status: agent-decided` (PROC-005). T-002 uses 0065–0069.

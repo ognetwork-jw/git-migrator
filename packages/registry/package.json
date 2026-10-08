@@ -14,6 +14,8 @@
     "test": "vitest run --root ../.. --project unit packages/registry"
   },
   "dependencies": {
+    "@git-migrator/adapter-bitbucket-cloud": "workspace:*",
+    "@git-migrator/adapter-github": "workspace:*",
     "@git-migrator/core": "workspace:*",
     "@git-migrator/canonical": "workspace:*",
     "@git-migrator/adapter-sdk": "workspace:*",
