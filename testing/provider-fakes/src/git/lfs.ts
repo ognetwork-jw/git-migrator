@@ -6,6 +6,7 @@ import { dirname, join } from 'node:path';
 import { pipeline } from 'node:stream/promises';
 
 const OID = /^[0-9a-f]{64}$/;
+export const LFS_TICKET_HEADER = 'X-Fake-Lfs-Ticket';
 export const LFS_CONTENT_TYPE = 'application/vnd.git-lfs+json';
 
 /** On-disk store of LFS objects for one side, keyed by repository and sha256 (TST-013). */
@@ -105,6 +106,8 @@ export interface LfsRequestContext {
   /** Rest of the path after `/info/lfs`, e.g. `/objects/batch`. */
   subPath: string;
   maxBatchObjects: number;
+  /** Issues the ticket that the actions of one operation require (see the server). */
+  issueTicket(operation: 'download' | 'upload'): string;
 }
 
 /** Minimal Git LFS server, basic transfer only: batch, object PUT/GET and verify (TST-013). */
@@ -174,6 +177,12 @@ async function batch(
   if (objects.length > ctx.maxBatchObjects) {
     return json(res, 413, { message: `Too many objects in batch (max ${ctx.maxBatchObjects})` });
   }
+  // `authenticated: true` tells the client not to look up credentials for the actions, so each
+  // action carries the header its endpoint requires (git-lfs batch API: actions[].header). The
+  // header is a ticket for this repository and operation, never the caller's credential.
+  const headerFor = (operation: 'download' | 'upload'): Record<string, string> => ({
+    [LFS_TICKET_HEADER]: ctx.issueTicket(operation),
+  });
   const out = [];
   for (const { oid, size } of objects) {
     if (!OID.test(oid ?? '') || !Number.isInteger(size) || size < 0) {
@@ -186,7 +195,12 @@ async function batch(
       out.push(
         existing === undefined
           ? { oid, size, error: { code: 404, message: 'Object does not exist' } }
-          : { oid, size: existing, authenticated: true, actions: { download: { href } } },
+          : {
+              oid,
+              size: existing,
+              authenticated: true,
+              actions: { download: { href, header: headerFor('download') } },
+            },
       );
     } else if (existing === size) {
       out.push({ oid, size }); // already stored: no actions
@@ -196,7 +210,10 @@ async function batch(
         oid,
         size,
         authenticated: true,
-        actions: { upload: { href }, verify: { href: `${ctx.lfsUrl}/verify` } },
+        actions: (() => {
+          const header = headerFor('upload');
+          return { upload: { href, header }, verify: { href: `${ctx.lfsUrl}/verify`, header } };
+        })(),
       });
     }
   }

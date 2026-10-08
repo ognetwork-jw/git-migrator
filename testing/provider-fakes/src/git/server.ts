@@ -6,7 +6,7 @@ import { createServer, type IncomingMessage, type Server, type ServerResponse } 
 import type { AddressInfo } from 'node:net';
 import { join } from 'node:path';
 import { POLICY_FLAG_FILE, PRE_RECEIVE_HOOK } from './hook.ts';
-import { handleLfs, LfsObjectStore } from './lfs.ts';
+import { handleLfs, LFS_TICKET_HEADER, LfsObjectStore } from './lfs.ts';
 import { assertGitPrerequisites } from './preconditions.ts';
 
 /** The two fake sides (TST-013): the migration source and the migration target. */
@@ -89,6 +89,8 @@ export interface FakeGitServerOptions {
   publicUrl?: string;
   /** LFS batch size limit. Default 100 (GitHub's documented default). */
   maxLfsBatchObjects?: number;
+  /** How long an LFS action ticket stays valid, in milliseconds. Default 5 minutes. */
+  lfsTicketTtlMs?: number;
 }
 
 interface SideState {
@@ -188,6 +190,23 @@ export async function startFakeGitServer(options: FakeGitServerOptions): Promise
     { side: SideState; repo: string; username: string; password: string }
   >();
   const policyKey = randomUUID();
+  /**
+   * LFS action tickets (the `header` of batch actions). A ticket is bound to side, repository and
+   * operation (download: GET and HEAD of objects; upload: PUT of objects and verify), expires, and
+   * stands for the identity that called the batch endpoint: `authorize` runs for it on every use.
+   */
+  const lfsTickets = new Map<
+    string,
+    {
+      side: GitSide;
+      repo: string;
+      operation: 'download' | 'upload';
+      expires: number;
+      username: string;
+      password: string;
+    }
+  >();
+  const ticketTtlMs = options.lfsTicketTtlMs ?? 5 * 60 * 1000;
 
   function authenticate(side: SideState, header: string | undefined): string | undefined {
     const m = /^Basic (.+)$/i.exec(header ?? '');
@@ -239,7 +258,33 @@ export async function startFakeGitServer(options: FakeGitServerOptions): Promise
     if (!m) return text(res, 404, 'Not found\n');
     const side = sides[m[1] as GitSide];
     const rest = m[2] as string;
-    const user = authenticate(side, req.headers.authorization);
+    const lfsRoute = /^(.+?)\/info\/lfs(\/.*)$/.exec(rest);
+    // Object transfers and verify accept the ticket the batch response handed out instead of
+    // credentials; the batch call itself always needs credentials.
+    let ticket: (typeof lfsTickets extends Map<string, infer V> ? V : never) | undefined;
+    const presented = req.headers[LFS_TICKET_HEADER.toLowerCase()];
+    if (lfsRoute && typeof presented === 'string' && lfsRoute[2] !== '/objects/batch') {
+      const found = lfsTickets.get(presented);
+      const method = req.method ?? 'GET';
+      const allowed =
+        found?.operation === 'download'
+          ? (method === 'GET' || method === 'HEAD') && lfsRoute[2]?.startsWith('/objects/')
+          : method === 'PUT' || (method === 'POST' && lfsRoute[2] === '/verify');
+      try {
+        if (
+          found &&
+          found.expires > Date.now() &&
+          found.side === m[1] &&
+          found.repo === normalizeRepoPath(lfsRoute[1] as string) &&
+          allowed
+        ) {
+          ticket = found;
+        }
+      } catch {
+        ticket = undefined;
+      }
+    }
+    const user = ticket ? ticket.username : authenticate(side, req.headers.authorization);
     if (!user) {
       res.writeHead(401, {
         'www-authenticate': 'Basic realm="fake-git"',
@@ -248,11 +293,15 @@ export async function startFakeGitServer(options: FakeGitServerOptions): Promise
       req.resume();
       return void res.end('Authentication required\n');
     }
-    const creds = credentials(req.headers.authorization);
+    const creds = ticket
+      ? { username: ticket.username, password: ticket.password }
+      : credentials(req.headers.authorization);
     if (side.authorize && creds) {
       const repoPath = rest.replace(/\.git(\/.*)?$/, '');
       const operation =
-        rest.endsWith('/git-receive-pack') || url.searchParams.get('service') === 'git-receive-pack'
+        ticket?.operation === 'upload' ||
+        rest.endsWith('/git-receive-pack') ||
+        url.searchParams.get('service') === 'git-receive-pack'
           ? 'write'
           : 'read';
       const status = await side.authorize({ ...creds, repo: repoPath, operation });
@@ -278,6 +327,20 @@ export async function startFakeGitServer(options: FakeGitServerOptions): Promise
         lfsUrl: `${baseUrl}/${m[1]}/${repo}.git/info/lfs`,
         subPath: lfs[2] as string,
         maxBatchObjects: maxBatch,
+        issueTicket: (operation) => {
+          const now = Date.now();
+          for (const [key, value] of lfsTickets) if (value.expires <= now) lfsTickets.delete(key);
+          const value = randomUUID();
+          lfsTickets.set(value, {
+            side: m[1] as GitSide,
+            repo,
+            operation,
+            expires: now + ticketTtlMs,
+            username: creds?.username ?? '',
+            password: creds?.password ?? '',
+          });
+          return value;
+        },
       });
     }
     if (!/^[A-Za-z0-9._/-]+$/.test(rest) || rest.split('/').some((seg) => seg === '..')) {

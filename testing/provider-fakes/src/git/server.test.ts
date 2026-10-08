@@ -384,8 +384,21 @@ describe('fake git server', () => {
       expect(
         upload?.href.startsWith(`${server.baseUrl}/target/acme/app.git/info/lfs/objects/`),
       ).toBe(true);
-      expect(upload?.header).toBeUndefined(); // credentials are not echoed; follow-up requests must authenticate
+      // The caller's credential is not echoed: the action carries a per-repository ticket.
+      const header = upload?.header as Record<string, string>;
+      expect(Object.keys(header)).toEqual(['X-Fake-Lfs-Ticket']);
+      expect(JSON.stringify(body)).not.toContain(TOKEN);
       expect((await fetch(upload?.href as string, { method: 'PUT', body: 'y' })).status).toBe(401);
+      expect(
+        (await fetch(upload?.href as string, { method: 'PUT', body: 'y', headers: header })).status,
+      ).toBe(200);
+      // A ticket does not open the batch call or another repository.
+      const batch = await fetch(`${server.repoUrl('target', 'acme/app')}/info/lfs/objects/batch`, {
+        method: 'POST',
+        headers: header,
+        body: '{}',
+      });
+      expect(batch.status).toBe(401);
     });
 
     it('[TST-013] rejects an upload whose size differs from the batch announcement', async () => {
