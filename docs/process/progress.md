@@ -4,7 +4,7 @@ The orchestrator maintains this table (see [workflow](workflow.md)). Integration
 
 | Task | Status | Branch | PR | Review rounds | Notes |
 |---|---|---|---|---|---|
-| T-001 | in_review | task/T-001-bootstrap | [#1](https://github.com/ognetwork-jw/git-migrator/pull/1) | 3 | r2: 2 MAJOR (fail-open exemptions) in fix pass |
+| T-001 | in_review | task/T-001-bootstrap | [#1](https://github.com/ognetwork-jw/git-migrator/pull/1) | 4 | r3: 1 MAJOR (tests not typechecked) in fix pass |
 | T-002 | todo |  | | | |
 | T-003 | todo |  | | | |
 | T-004 | todo |  | | | |
