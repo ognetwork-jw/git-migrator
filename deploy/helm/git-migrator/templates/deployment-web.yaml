@@ -1,0 +1,97 @@
+{{- $name := printf "%s-web" (include "git-migrator.fullname" .) }}
+{{- $ctx := dict "root" . "component" "web" }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ $name }}
+  labels:
+    {{- include "git-migrator.labels" $ctx | nindent 4 }}
+spec:
+  {{- if not .Values.web.hpa.enabled }}
+  replicas: {{ .Values.web.replicas }}
+  {{- end }}
+  selector:
+    matchLabels:
+      {{- include "git-migrator.selectorLabels" $ctx | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "git-migrator.podLabels" $ctx | nindent 8 }}
+      annotations:
+        checksum/config: {{ include "git-migrator.config" . | sha256sum }}
+    spec:
+      serviceAccountName: {{ include "git-migrator.serviceAccountName" . }}
+      automountServiceAccountToken: false
+      terminationGracePeriodSeconds: {{ .Values.web.terminationGracePeriodSeconds }}
+      securityContext:
+        {{- include "git-migrator.podSecurityContext" . | nindent 8 }}
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      containers:
+        - name: web
+          image: {{ include "git-migrator.image" . | quote }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          args: ["web"]
+          env:
+            {{- include "git-migrator.env" (dict "root" .) | nindent 12 }}
+            - name: PORT
+              value: "3000"
+          ports:
+            - name: http
+              containerPort: 3000
+            {{- if .Values.metrics.enabled }}
+            - name: metrics
+              containerPort: {{ .Values.metrics.port }}
+            {{- end }}
+          startupProbe:
+            httpGet: { path: /api/readyz, port: http }
+            periodSeconds: 5
+            failureThreshold: 36
+          readinessProbe:
+            httpGet: { path: /api/readyz, port: http }
+            periodSeconds: 10
+            timeoutSeconds: 3
+          livenessProbe:
+            httpGet: { path: /api/healthz, port: http }
+            periodSeconds: 20
+            timeoutSeconds: 3
+          # The Service and Ingress stop routing to a terminating pod a moment after SIGTERM would
+          # reach it; the pause keeps the server accepting connections until they have. It plus the
+          # 20 s drain of web.ts stays inside terminationGracePeriodSeconds (30).
+          lifecycle:
+            preStop:
+              exec:
+                command: ["sleep", "5"]
+          resources:
+            {{- toYaml .Values.web.resources | nindent 12 }}
+          securityContext:
+            {{- include "git-migrator.containerSecurityContext" . | nindent 12 }}
+          volumeMounts:
+            - { name: tmp, mountPath: /tmp }
+            - { name: home, mountPath: /home/gm }
+            - { name: next-cache, mountPath: /app/apps/web/.next/cache }
+            - { name: config, mountPath: /etc/git-migrator, readOnly: true }
+      volumes:
+        - name: tmp
+          emptyDir: { sizeLimit: 256Mi }
+        - name: home
+          emptyDir: { sizeLimit: 16Mi }
+        - name: next-cache
+          emptyDir: { sizeLimit: 512Mi }
+        - name: config
+          configMap:
+            name: {{ include "git-migrator.fullname" . }}-config
+      {{- with .Values.web.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.web.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.web.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}

@@ -1,0 +1,147 @@
+suite: ingress, scaling and network (DEP-030, DEP-032)
+templates:
+  - templates/ingress.yaml
+  - templates/hpa.yaml
+  - templates/pdb.yaml
+  - templates/networkpolicy.yaml
+  - templates/service.yaml
+values:
+  - ../ci/default-values.yaml
+release:
+  name: gm
+tests:
+  - it: "[DEP-032] the Ingress carries the SSE annotations"
+    template: templates/ingress.yaml
+    asserts:
+      - equal: { path: 'metadata.annotations["nginx.ingress.kubernetes.io/proxy-buffering"]', value: "off" }
+      - equal: { path: 'metadata.annotations["nginx.ingress.kubernetes.io/proxy-read-timeout"]', value: "3600" }
+      - equal: { path: 'metadata.annotations["nginx.ingress.kubernetes.io/proxy-send-timeout"]', value: "3600" }
+      - equal: { path: 'metadata.annotations["nginx.ingress.kubernetes.io/proxy-body-size"]', value: 5m }
+      - notExists: { path: 'metadata.annotations["cert-manager.io/cluster-issuer"]' }
+  - it: "[DEP-032] a cluster issuer adds the cert-manager annotation and user annotations are merged after the defaults"
+    template: templates/ingress.yaml
+    set:
+      ingress.clusterIssuer: letsencrypt
+      ingress.annotations: { nginx.ingress.kubernetes.io/proxy-body-size: 10m, example.com/extra: "1" }
+    asserts:
+      - equal: { path: 'metadata.annotations["cert-manager.io/cluster-issuer"]', value: letsencrypt }
+      - equal: { path: 'metadata.annotations["nginx.ingress.kubernetes.io/proxy-body-size"]', value: 10m }
+      - equal: { path: 'metadata.annotations["example.com/extra"]', value: "1" }
+      - equal: { path: 'metadata.annotations["nginx.ingress.kubernetes.io/proxy-buffering"]', value: "off" }
+  - it: "[DEP-030] the Ingress routes the host to the web Service with TLS"
+    template: templates/ingress.yaml
+    asserts:
+      - equal: { path: "spec.ingressClassName", value: nginx }
+      - equal: { path: "spec.rules[0].host", value: git-migrator.example.com }
+      - equal: { path: "spec.rules[0].http.paths[0].backend.service.name", value: gm-web }
+      - equal: { path: "spec.tls[0].secretName", value: gm-tls }
+      - equal: { path: "spec.tls[0].hosts", value: [git-migrator.example.com] }
+  - it: "[DEP-030] the Ingress can be disabled, and needs a host when enabled"
+    template: templates/ingress.yaml
+    set:
+      ingress.enabled: false
+    asserts:
+      - hasDocuments: { count: 0 }
+  - it: "[DEP-030] an enabled Ingress without a host fails"
+    template: templates/ingress.yaml
+    set:
+      ingress.host: ""
+    asserts:
+      - failedTemplate: { errorMessage: "ingress.host is required when the Ingress is enabled" }
+  - it: "[DEP-030] the web Service exposes http 3000 and metrics 9464"
+    template: templates/service.yaml
+    asserts:
+      - hasDocuments: { count: 1 }
+      - equal: { path: "metadata.name", value: gm-web }
+      - contains: { path: "spec.ports", content: { name: http, port: 3000, targetPort: http } }
+      - contains: { path: "spec.ports", content: { name: metrics, port: 9464, targetPort: metrics } }
+  - it: "[DEP-030] worker Services are optional"
+    template: templates/service.yaml
+    set:
+      worker.service.enabled: true
+    asserts:
+      - hasDocuments: { count: 3 }
+      - equal: { path: "metadata.name", value: gm-worker-standard }
+        documentIndex: 1
+  - it: "[DEP-030] the HPA and the PDBs are off by default"
+    asserts:
+      - hasDocuments: { count: 0 }
+        template: templates/hpa.yaml
+      - hasDocuments: { count: 0 }
+        template: templates/pdb.yaml
+      - hasDocuments: { count: 0 }
+        template: templates/networkpolicy.yaml
+  - it: "[DEP-030] the HPA targets the web Deployment"
+    template: templates/hpa.yaml
+    set:
+      web.hpa.enabled: true
+    asserts:
+      - equal: { path: "spec.scaleTargetRef.name", value: gm-web }
+      - equal: { path: "spec.minReplicas", value: 2 }
+      - equal: { path: "spec.maxReplicas", value: 4 }
+      - equal: { path: "spec.metrics[0].resource.target.averageUtilization", value: 70 }
+  - it: "[DEP-030] each Deployment gets a PodDisruptionBudget when enabled"
+    template: templates/pdb.yaml
+    set:
+      web.pdb.enabled: true
+      worker.standard.pdb.enabled: true
+      worker.large.pdb.enabled: true
+    asserts:
+      - hasDocuments: { count: 3 }
+      - equal: { path: "spec.minAvailable", value: 1 }
+        documentIndex: 0
+      - equal: { path: "spec.maxUnavailable", value: 1 }
+        documentIndex: 1
+      - equal: { path: "metadata.name", value: gm-worker-large }
+        documentIndex: 2
+  - it: "[DEP-030] the NetworkPolicy opens the web port and limits the others to the namespace"
+    template: templates/networkpolicy.yaml
+    set:
+      networkPolicy.enabled: true
+    asserts:
+      - equal: { path: "spec.policyTypes", value: [Ingress] }
+      - equal: { path: "spec.ingress[0].ports[0].port", value: 3000 }
+      - equal: { path: "spec.ingress[1].from[0].podSelector", value: {} }
+      - notExists: { path: "spec.ingress[0].from" }
+  - it: "[DEP-030] networkPolicy.ingressFrom restricts the web port to those peers"
+    template: templates/networkpolicy.yaml
+    set:
+      networkPolicy.enabled: true
+      networkPolicy.ingressFrom:
+        - namespaceSelector: { matchLabels: { kubernetes.io/metadata.name: ingress-nginx } }
+    asserts:
+      - equal: { path: "spec.ingress[0].from[0].namespaceSelector.matchLabels", value: { kubernetes.io/metadata.name: ingress-nginx } }
+      - equal: { path: "spec.ingress[0].ports[0].port", value: 3000 }
+      - equal: { path: "spec.ingress[1].from[0].podSelector", value: {} }
+  - it: "[DEP-030] a user-set web.pdb.maxUnavailable needs the minAvailable default set to null"
+    template: templates/pdb.yaml
+    set:
+      web.pdb.enabled: true
+      web.pdb.maxUnavailable: 1
+    asserts:
+      - failedTemplate: { errorMessage: "web.pdb sets both minAvailable and maxUnavailable; set the one you do not want to null" }
+  - it: "[DEP-030] web.pdb renders maxUnavailable when minAvailable is null"
+    template: templates/pdb.yaml
+    set:
+      web.pdb.enabled: true
+      web.pdb.minAvailable: null
+      web.pdb.maxUnavailable: 1
+    asserts:
+      - equal: { path: "spec.maxUnavailable", value: 1 }
+      - notExists: { path: "spec.minAvailable" }
+  - it: "[DEP-030] a worker PDB renders minAvailable when maxUnavailable is null"
+    template: templates/pdb.yaml
+    set:
+      worker.standard.pdb.enabled: true
+      worker.standard.pdb.maxUnavailable: null
+      worker.standard.pdb.minAvailable: 1
+    asserts:
+      - equal: { path: "spec.minAvailable", value: 1 }
+      - notExists: { path: "spec.maxUnavailable" }
+  - it: "[DEP-030] an enabled PDB with neither setting fails"
+    template: templates/pdb.yaml
+    set:
+      web.pdb.enabled: true
+      web.pdb.minAvailable: null
+    asserts:
+      - failedTemplate: { errorMessage: "web.pdb is enabled but sets neither minAvailable nor maxUnavailable" }

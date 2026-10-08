@@ -1,0 +1,51 @@
+{{- $ctx := dict "root" . "component" "migrate" }}
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ include "git-migrator.fullname" . }}-migrate
+  labels:
+    {{- include "git-migrator.labels" $ctx | nindent 4 }}
+  annotations:
+    helm.sh/hook: pre-install,pre-upgrade
+    helm.sh/hook-weight: "0"
+    helm.sh/hook-delete-policy: before-hook-creation,hook-succeeded
+spec:
+  backoffLimit: 1
+  activeDeadlineSeconds: 900
+  template:
+    metadata:
+      labels:
+        {{- include "git-migrator.podLabels" $ctx | nindent 8 }}
+    spec:
+      restartPolicy: Never
+      serviceAccountName: {{ include "git-migrator.migrateServiceAccountName" . }}
+      automountServiceAccountToken: false
+      securityContext:
+        {{- include "git-migrator.podSecurityContext" . | nindent 8 }}
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      containers:
+        - name: migrate
+          image: {{ include "git-migrator.image" . | quote }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          args: ["migrate"]
+          env:
+            {{- include "git-migrator.env" (dict "root" .) | nindent 12 }}
+          resources:
+            {{- toYaml .Values.migrateJob.resources | nindent 12 }}
+          securityContext:
+            {{- include "git-migrator.containerSecurityContext" . | nindent 12 }}
+          volumeMounts:
+            - { name: tmp, mountPath: /tmp }
+            - { name: home, mountPath: /home/gm }
+            - { name: config, mountPath: /etc/git-migrator, readOnly: true }
+      volumes:
+        - name: tmp
+          emptyDir: { sizeLimit: 256Mi }
+        - name: home
+          emptyDir: { sizeLimit: 16Mi }
+        - name: config
+          configMap:
+            name: {{ include "git-migrator.fullname" . }}-config-migrate

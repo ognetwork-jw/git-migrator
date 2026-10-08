@@ -1,0 +1,14 @@
+# Minimal installation: required values only (DEP-033).
+image:
+  repository: example/git-migrator
+azure:
+  workloadIdentityClientId: 00000000-0000-0000-0000-000000000001
+  keyVaultName: kv-example
+postgres:
+  host: example.postgres.database.azure.com
+ingress:
+  host: git-migrator.example.com
+config:
+  auth:
+    entra:
+      tenantId: 11111111-2222-3333-4444-555555555555

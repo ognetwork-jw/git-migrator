@@ -1,0 +1,72 @@
+# Every optional template enabled (DEP-033).
+image:
+  registry: ghcr.io
+  repository: example/git-migrator
+  tag: v1.2.3
+imagePullSecrets:
+  - name: registry-credentials
+serviceAccount:
+  annotations:
+    example.com/owner: platform
+azure:
+  workloadIdentityClientId: 00000000-0000-0000-0000-000000000001
+  keyVaultName: kv-example
+postgres:
+  host: example.postgres.database.azure.com
+  sslmode: verify-full
+  pool: { app: 12 }
+web:
+  hpa: { enabled: true, minReplicas: 2, maxReplicas: 6, targetCPUUtilizationPercentage: 65 }
+  pdb: { enabled: true, minAvailable: 1 }
+  nodeSelector: { kubernetes.io/os: linux }
+  tolerations:
+    - { key: dedicated, operator: Equal, value: web, effect: NoSchedule }
+  affinity:
+    podAntiAffinity:
+      preferredDuringSchedulingIgnoredDuringExecution:
+        - weight: 100
+          podAffinityTerm:
+            topologyKey: kubernetes.io/hostname
+            labelSelector:
+              matchLabels: { app.kubernetes.io/component: web }
+worker:
+  service: { enabled: true }
+  standard:
+    pdb: { enabled: true, maxUnavailable: 1 }
+    nodeSelector: { kubernetes.io/os: linux }
+  large:
+    pdb: { enabled: true, maxUnavailable: 1 }
+    scratch: { size: 100Gi, storageClassName: managed-csi }
+ingress:
+  host: git-migrator.example.com
+  clusterIssuer: letsencrypt
+  tls: { enabled: true, secretName: git-migrator-tls }
+  annotations:
+    nginx.ingress.kubernetes.io/proxy-body-size: 10m
+networkPolicy: { enabled: true }
+observability: { logLevel: debug, otlpEndpoint: "https://otel.example.com:4318", serviceName: git-migrator-prod }
+config:
+  auth:
+    entra:
+      tenantId: 11111111-2222-3333-4444-555555555555
+    roleMappings:
+      - { method: entra, claim: roles, value: GitMigrator.Admin, role: admin }
+  git: { maxPushBytes: 1610612736, maxConcurrentLfsTransfers: 8 }
+  endpoints:
+    - id: bitbucket-main
+      provider: bitbucket-cloud
+      baseUrl: https://api.bitbucket.org
+      gitBaseUrl: https://bitbucket.org
+      options: { workspace: acme }
+      credentialsSecret: BITBUCKET_CREDENTIALS
+    - id: github-main
+      provider: github
+      baseUrl: https://api.github.com
+      gitBaseUrl: https://github.com
+      options: { org: acme, appId: 1, installationId: 2 }
+      credentialsSecret: GITHUB_APP_PRIVATE_KEY
+  routes:
+    - id: bitbucket-to-github
+      source: bitbucket-main
+      target: github-main
+      targetNamespace: acme

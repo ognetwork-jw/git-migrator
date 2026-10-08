@@ -1,0 +1,45 @@
+{{- $web := dict "root" . "component" "web" }}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "git-migrator.fullname" . }}-web
+  labels:
+    {{- include "git-migrator.labels" $web | nindent 4 }}
+spec:
+  type: ClusterIP
+  selector:
+    {{- include "git-migrator.selectorLabels" $web | nindent 4 }}
+  ports:
+    - name: http
+      port: 3000
+      targetPort: http
+    {{- if .Values.metrics.enabled }}
+    - name: metrics
+      port: {{ .Values.metrics.port }}
+      targetPort: metrics
+    {{- end }}
+{{- if .Values.worker.service.enabled }}
+{{- range $role := list "standard" "large" }}
+{{- $ctx := dict "root" $ "component" (printf "worker-%s" $role) }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "git-migrator.fullname" $ }}-worker-{{ $role }}
+  labels:
+    {{- include "git-migrator.labels" $ctx | nindent 4 }}
+spec:
+  type: ClusterIP
+  selector:
+    {{- include "git-migrator.selectorLabels" $ctx | nindent 4 }}
+  ports:
+    - name: health
+      port: 8081
+      targetPort: health
+    {{- if $.Values.metrics.enabled }}
+    - name: metrics
+      port: {{ $.Values.metrics.port }}
+      targetPort: metrics
+    {{- end }}
+{{- end }}
+{{- end }}

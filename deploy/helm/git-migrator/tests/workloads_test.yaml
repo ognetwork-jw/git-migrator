@@ -1,0 +1,149 @@
+suite: workload shape (DEP-003, DEP-030, DEP-031)
+templates:
+  - templates/deployment-web.yaml
+  - templates/deployment-worker-standard.yaml
+  - templates/deployment-worker-large.yaml
+values:
+  - ../ci/default-values.yaml
+release:
+  name: gm
+tests:
+  - it: "[DEP-003] web mounts only emptyDir volumes for /tmp, /home/gm and the Next.js cache"
+    template: templates/deployment-web.yaml
+    asserts:
+      - contains: { path: "spec.template.spec.volumes", content: { name: tmp, emptyDir: { sizeLimit: 256Mi } } }
+      - contains: { path: "spec.template.spec.volumes", content: { name: home, emptyDir: { sizeLimit: 16Mi } } }
+      - contains: { path: "spec.template.spec.volumes", content: { name: next-cache, emptyDir: { sizeLimit: 512Mi } } }
+      - contains: { path: "spec.template.spec.containers[0].volumeMounts", content: { name: next-cache, mountPath: /app/apps/web/.next/cache } }
+      - contains: { path: "spec.template.spec.containers[0].volumeMounts", content: { name: tmp, mountPath: /tmp } }
+      - contains: { path: "spec.template.spec.containers[0].volumeMounts", content: { name: home, mountPath: /home/gm } }
+      - contains: { path: "spec.template.spec.containers[0].volumeMounts", content: { name: config, mountPath: /etc/git-migrator, readOnly: true } }
+      - notContains: { path: "spec.template.spec.containers[0].volumeMounts", content: { name: scratch, mountPath: /scratch } }
+  - it: "[DEP-003] worker-standard scratch is an emptyDir with the size limit from values"
+    template: templates/deployment-worker-standard.yaml
+    asserts:
+      - contains: { path: "spec.template.spec.volumes", content: { name: scratch, emptyDir: { sizeLimit: 15Gi } } }
+      - contains: { path: "spec.template.spec.containers[0].volumeMounts", content: { name: scratch, mountPath: /scratch } }
+      - contains: { path: "spec.template.spec.volumes", content: { name: tmp, emptyDir: { sizeLimit: 256Mi } } }
+      - contains: { path: "spec.template.spec.volumes", content: { name: home, emptyDir: { sizeLimit: 16Mi } } }
+  - it: "[DEP-003][DEP-030] worker-large scratch is a generic ephemeral volume with the size from values"
+    template: templates/deployment-worker-large.yaml
+    set:
+      worker.large.scratch.storageClassName: managed-csi
+    asserts:
+      - equal: { path: "spec.template.spec.volumes[?(@.name=='scratch')].ephemeral.volumeClaimTemplate.spec.resources.requests.storage", value: 60Gi }
+      - equal: { path: "spec.template.spec.volumes[?(@.name=='scratch')].ephemeral.volumeClaimTemplate.spec.storageClassName", value: managed-csi }
+      - equal: { path: "spec.template.spec.volumes[?(@.name=='scratch')].ephemeral.volumeClaimTemplate.spec.accessModes", value: [ReadWriteOnce] }
+  - it: "[DEP-030] worker-large omits storageClassName when none is set"
+    template: templates/deployment-worker-large.yaml
+    asserts:
+      - notExists: { path: "spec.template.spec.volumes[?(@.name=='scratch')].ephemeral.volumeClaimTemplate.spec.storageClassName" }
+  - it: "[DEP-031] web resources and replicas come from values"
+    template: templates/deployment-web.yaml
+    asserts:
+      - equal: { path: "spec.replicas", value: 2 }
+      - equal: { path: "spec.template.spec.containers[0].resources.requests", value: { cpu: 250m, memory: 512Mi } }
+      - equal: { path: "spec.template.spec.containers[0].resources.limits", value: { cpu: "1", memory: 1Gi } }
+  - it: "[DEP-031] worker-standard resources include ephemeral storage"
+    template: templates/deployment-worker-standard.yaml
+    asserts:
+      - equal: { path: "spec.replicas", value: 2 }
+      - equal: { path: "spec.template.spec.containers[0].resources.requests", value: { cpu: 500m, memory: 1Gi, ephemeral-storage: 16Gi } }
+      - equal: { path: "spec.template.spec.containers[0].resources.limits", value: { cpu: "2", memory: 2Gi, ephemeral-storage: 20Gi } }
+  - it: "[DEP-031] worker-large resources come from values"
+    template: templates/deployment-worker-large.yaml
+    asserts:
+      - equal: { path: "spec.replicas", value: 1 }
+      - equal: { path: "spec.template.spec.containers[0].resources.requests", value: { cpu: "1", memory: 2Gi } }
+      - equal: { path: "spec.template.spec.containers[0].resources.limits", value: { cpu: "2", memory: 4Gi } }
+  - it: "[DEP-030] terminationGracePeriodSeconds is 30, 120 and 600"
+    asserts:
+      - equal: { path: "spec.template.spec.terminationGracePeriodSeconds", value: 30 }
+        template: templates/deployment-web.yaml
+      - equal: { path: "spec.template.spec.terminationGracePeriodSeconds", value: 120 }
+        template: templates/deployment-worker-standard.yaml
+      - equal: { path: "spec.template.spec.terminationGracePeriodSeconds", value: 600 }
+        template: templates/deployment-worker-large.yaml
+  - it: "[DEP-030] web probes: startup and readiness on /api/readyz, liveness on /api/healthz"
+    template: templates/deployment-web.yaml
+    asserts:
+      - equal: { path: "spec.template.spec.containers[0].startupProbe.httpGet.path", value: /api/readyz }
+      - equal: { path: "spec.template.spec.containers[0].readinessProbe.httpGet.path", value: /api/readyz }
+      - equal: { path: "spec.template.spec.containers[0].livenessProbe.httpGet.path", value: /api/healthz }
+  - it: "[DEP-030] worker probes use the health server on port 8081 (/readyz, /healthz)"
+    template: templates/deployment-worker-standard.yaml
+    asserts:
+      - equal: { path: "spec.template.spec.containers[0].readinessProbe.httpGet.path", value: /readyz }
+      - equal: { path: "spec.template.spec.containers[0].startupProbe.httpGet.path", value: /readyz }
+      - equal: { path: "spec.template.spec.containers[0].livenessProbe.httpGet.path", value: /healthz }
+      - contains: { path: "spec.template.spec.containers[0].ports", content: { name: health, containerPort: 8081 } }
+  - it: "[DEP-002][DEP-040] workers pass their role as an argument and as GM_WORKER_ROLE"
+    asserts:
+      - equal: { path: "spec.template.spec.containers[0].args", value: [worker, --role, standard] }
+        template: templates/deployment-worker-standard.yaml
+      - contains: { path: "spec.template.spec.containers[0].env", content: { name: GM_WORKER_ROLE, value: standard } }
+        template: templates/deployment-worker-standard.yaml
+      - equal: { path: "spec.template.spec.containers[0].args", value: [worker, --role, large] }
+        template: templates/deployment-worker-large.yaml
+      - contains: { path: "spec.template.spec.containers[0].env", content: { name: GM_WORKER_ROLE, value: large } }
+        template: templates/deployment-worker-large.yaml
+      - equal: { path: "spec.template.spec.containers[0].args", value: [web] }
+        template: templates/deployment-web.yaml
+  - it: "[DEP-020] containers run secretspec against Key Vault with the workload identity"
+    template: templates/deployment-web.yaml
+    asserts:
+      - contains: { path: "spec.template.spec.containers[0].env", content: { name: GM_SECRETSPEC_PROVIDER, value: "akv://kv-example?auth=workload_identity" } }
+      - contains: { path: "spec.template.spec.containers[0].env", content: { name: GM_SECRETSPEC_PROFILE, value: production } }
+  - it: "[DEP-003] containers set HOME, TMPDIR and the scratch directory"
+    template: templates/deployment-worker-standard.yaml
+    asserts:
+      - contains: { path: "spec.template.spec.containers[0].env", content: { name: HOME, value: /home/gm } }
+      - contains: { path: "spec.template.spec.containers[0].env", content: { name: TMPDIR, value: /tmp } }
+      - contains: { path: "spec.template.spec.containers[0].env", content: { name: GM_SCRATCH_DIR, value: /scratch } }
+  - it: "[DEP-031] the image tag defaults to the chart appVersion and can be overridden"
+    template: templates/deployment-web.yaml
+    asserts:
+      - equal: { path: "spec.template.spec.containers[0].image", value: "ghcr.io/example/git-migrator:0.0.0" }
+  - it: "[DEP-031] an explicit tag, registry and pull secrets are honoured"
+    template: templates/deployment-web.yaml
+    set:
+      image.tag: v1.2.3
+      image.registry: registry.example.com
+      imagePullSecrets: [{ name: pull }]
+    asserts:
+      - equal: { path: "spec.template.spec.containers[0].image", value: "registry.example.com/example/git-migrator:v1.2.3" }
+      - equal: { path: "spec.template.spec.imagePullSecrets", value: [{ name: pull }] }
+  - it: "[DEP-030] changing the configuration changes the checksum/config pod annotation"
+    template: templates/deployment-web.yaml
+    asserts:
+      - matchRegex: { path: "spec.template.metadata.annotations.checksum/config", pattern: "^[0-9a-f]{64}$" }
+  - it: "[DEP-030] web drops replicas when the HPA is enabled"
+    template: templates/deployment-web.yaml
+    set:
+      web.hpa.enabled: true
+    asserts:
+      - notExists: { path: "spec.replicas" }
+  - it: "[DEP-031] scheduling values reach the pod spec"
+    template: templates/deployment-worker-standard.yaml
+    set:
+      worker.standard.nodeSelector: { pool: workers }
+      worker.standard.tolerations: [{ key: dedicated, operator: Exists }]
+    asserts:
+      - equal: { path: "spec.template.spec.nodeSelector", value: { pool: workers } }
+      - equal: { path: "spec.template.spec.tolerations", value: [{ key: dedicated, operator: Exists }] }
+  - it: "[DEP-050] the metrics port is exposed on every workload when metrics are enabled"
+    asserts:
+      - contains: { path: "spec.template.spec.containers[0].ports", content: { name: metrics, containerPort: 9464 } }
+        template: templates/deployment-web.yaml
+      - contains: { path: "spec.template.spec.containers[0].ports", content: { name: metrics, containerPort: 9464 } }
+        template: templates/deployment-worker-large.yaml
+  - it: "[DEP-050] no metrics port when metrics are disabled"
+    set:
+      metrics.enabled: false
+    template: templates/deployment-web.yaml
+    asserts:
+      - notContains: { path: "spec.template.spec.containers[0].ports", content: { name: metrics, containerPort: 9464 } }
+  - it: "[DEP-030] web waits 5 s in preStop before SIGTERM so routing catches up, within the 30 s grace period"
+    template: templates/deployment-web.yaml
+    asserts:
+      - equal: { path: "spec.template.spec.containers[0].lifecycle.preStop.exec.command", value: [sleep, "5"] }

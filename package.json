@@ -24,7 +24,7 @@
     "test:e2e": "node tools/not-implemented.ts test:e2e T-083",
     "test:e2e:live": "node tools/not-implemented.ts test:e2e:live T-095",
     "e2e:live:reset": "node tools/not-implemented.ts e2e:live:reset T-095",
-    "helm:check": "node tools/not-implemented.ts helm:check T-090",
+    "helm:check": "node tools/helm-check.ts",
     "spec:coverage": "node tools/spec-coverage.ts",
     "spec:must-test": "node tools/spec-coverage.ts --generate",
     "check:packages": "turbo run lint typecheck test"

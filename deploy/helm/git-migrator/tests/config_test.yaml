@@ -1,0 +1,101 @@
+suite: runtime configuration file (DEP-040)
+templates:
+  - templates/configmap.yaml
+  - templates/job-migrate.yaml
+values:
+  - ../ci/default-values.yaml
+release:
+  name: gm
+tests:
+  - it: "[DEP-040] the file merges values.config with the top-level postgres, worker, observability, metrics and secretspec values"
+    template: templates/configmap.yaml
+    documentSelector:
+      path: metadata.name
+      value: gm-config
+    asserts:
+      - matchRegex: { path: 'data["config.yaml"]', pattern: "host: example.postgres.database.azure.com" }
+      - matchRegex: { path: 'data["config.yaml"]', pattern: "sslmode: require" }
+      - matchRegex: { path: 'data["config.yaml"]', pattern: "tenantId: 11111111-2222-3333-4444-555555555555" }
+      - matchRegex: { path: 'data["config.yaml"]', pattern: "runs: 4" }
+      - matchRegex: { path: 'data["config.yaml"]', pattern: "serviceName: git-migrator" }
+      - matchRegex: { path: 'data["config.yaml"]', pattern: "profile: production" }
+      - matchRegex: { path: 'data["config.yaml"]', pattern: "port: 9464" }
+  - it: "[DEP-040] the environment defaults to production and the public URL to the Ingress host"
+    template: templates/configmap.yaml
+    documentSelector:
+      path: metadata.name
+      value: gm-config
+    asserts:
+      - matchRegex: { path: 'data["config.yaml"]', pattern: "environment: production" }
+      - matchRegex: { path: 'data["config.yaml"]', pattern: "publicUrl: https://git-migrator.example.com" }
+  - it: "[DEP-040] an explicit publicUrl and environment in values.config win over the defaults"
+    set:
+      config.publicUrl: https://other.example.com
+      config.environment: staging
+    template: templates/configmap.yaml
+    documentSelector:
+      path: metadata.name
+      value: gm-config
+    asserts:
+      - matchRegex: { path: 'data["config.yaml"]', pattern: "publicUrl: https://other.example.com" }
+      - matchRegex: { path: 'data["config.yaml"]', pattern: "environment: staging" }
+  - it: "[DEP-040] top-level values override the same keys in values.config"
+    set:
+      config.postgres.host: ignored.example.com
+      config.metrics.port: 1
+    template: templates/configmap.yaml
+    documentSelector:
+      path: metadata.name
+      value: gm-config
+    asserts:
+      - matchRegex: { path: 'data["config.yaml"]', pattern: "host: example.postgres.database.azure.com" }
+      - matchRegex: { path: 'data["config.yaml"]', pattern: "port: 9464" }
+  - it: "[DEP-031] sslmode defaults to require and is not weakened by the chart"
+    template: templates/configmap.yaml
+    documentSelector:
+      path: metadata.name
+      value: gm-config
+    asserts:
+      - matchRegex: { path: 'data["config.yaml"]', pattern: "sslmode: require" }
+  - it: "[DEP-040] large numbers in values.config keep their integer form"
+    set:
+      config.git.maxPushBytes: 1610612736
+    template: templates/configmap.yaml
+    documentSelector:
+      path: metadata.name
+      value: gm-config
+    asserts:
+      - matchRegex: { path: 'data["config.yaml"]', pattern: "maxPushBytes: 1610612736" }
+  - it: "[DEP-040] no secret value is rendered into the file"
+    template: templates/configmap.yaml
+    documentSelector:
+      path: metadata.name
+      value: gm-config
+    asserts:
+      - notMatchRegex: { path: 'data["config.yaml"]', pattern: "(?i)password: .+|apiToken|PRIVATE KEY" }
+  - it: "[DEP-031] postgres.host is required"
+    set:
+      postgres.host: ""
+    template: templates/configmap.yaml
+    asserts:
+      - failedTemplate: { errorMessage: "postgres.host is required" }
+  - it: "[DEP-031] a missing vault name fails unless a provider is given"
+    set:
+      azure.keyVaultName: ""
+    template: templates/job-migrate.yaml
+    asserts:
+      - failedTemplate: { errorMessage: "azure.keyVaultName is required unless secretspec.provider is set" }
+  - it: "[DEP-020] the default provider needs the workload identity client id"
+    set:
+      azure.workloadIdentityClientId: ""
+    template: templates/job-migrate.yaml
+    asserts:
+      - failedTemplate: { errorMessage: "azure.workloadIdentityClientId is required unless secretspec.provider is set" }
+  - it: "[DEP-031] secretspec.provider replaces the default provider and the vault settings"
+    set:
+      secretspec.provider: "akv://kv-other?auth=workload_identity"
+      azure.keyVaultName: ""
+      azure.workloadIdentityClientId: ""
+    template: templates/job-migrate.yaml
+    asserts:
+      - contains: { path: "spec.template.spec.containers[0].env", content: { name: GM_SECRETSPEC_PROVIDER, value: "akv://kv-other?auth=workload_identity" } }

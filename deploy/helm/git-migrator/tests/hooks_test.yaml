@@ -1,0 +1,79 @@
+suite: migrate hook (DEP-030)
+templates:
+  - templates/job-migrate.yaml
+  - templates/configmap.yaml
+  - templates/serviceaccount.yaml
+values:
+  - ../ci/default-values.yaml
+release:
+  name: gm
+tests:
+  - it: "[DEP-030] the migrate Job is a pre-install,pre-upgrade hook with weight 0 and backoffLimit 1"
+    template: templates/job-migrate.yaml
+    asserts:
+      - equal: { path: 'metadata.annotations["helm.sh/hook"]', value: "pre-install,pre-upgrade" }
+      - equal: { path: 'metadata.annotations["helm.sh/hook-weight"]', value: "0" }
+      - equal: { path: 'metadata.annotations["helm.sh/hook-delete-policy"]', value: "before-hook-creation,hook-succeeded" }
+      - equal: { path: "spec.backoffLimit", value: 1 }
+      - equal: { path: "spec.template.spec.restartPolicy", value: Never }
+      - equal: { path: "spec.template.spec.containers[0].args", value: [migrate] }
+  - it: "[DEP-030] the migrate Job uses the hook copies of the ConfigMap and ServiceAccount"
+    template: templates/job-migrate.yaml
+    asserts:
+      - equal: { path: "spec.template.spec.serviceAccountName", value: gm-migrate }
+      - equal: { path: "spec.template.spec.volumes[?(@.name=='config')].configMap.name", value: gm-config-migrate }
+  - it: "[DEP-003] the migrate Job writes only to emptyDir volumes"
+    template: templates/job-migrate.yaml
+    asserts:
+      - contains: { path: "spec.template.spec.volumes", content: { name: tmp, emptyDir: { sizeLimit: 256Mi } } }
+      - contains: { path: "spec.template.spec.volumes", content: { name: home, emptyDir: { sizeLimit: 16Mi } } }
+  - it: "[DEP-031] the migrate Job takes its resources from values.migrateJob"
+    template: templates/job-migrate.yaml
+    asserts:
+      - equal: { path: "spec.template.spec.containers[0].resources.requests", value: { cpu: 100m, memory: 256Mi } }
+      - equal: { path: "spec.template.spec.containers[0].resources.limits", value: { cpu: 500m, memory: 512Mi } }
+  - it: "[DEP-030] the hook ConfigMap copy runs at weight -10 and is replaced before creation"
+    template: templates/configmap.yaml
+    documentSelector:
+      path: metadata.name
+      value: gm-config-migrate
+    asserts:
+      - equal: { path: 'metadata.annotations["helm.sh/hook"]', value: "pre-install,pre-upgrade" }
+      - equal: { path: 'metadata.annotations["helm.sh/hook-weight"]', value: "-10" }
+      - equal: { path: 'metadata.annotations["helm.sh/hook-delete-policy"]', value: before-hook-creation }
+  - it: "[DEP-030] the regular ConfigMap is not a hook and holds the same file"
+    template: templates/configmap.yaml
+    documentSelector:
+      path: metadata.name
+      value: gm-config
+    asserts:
+      - notExists: { path: "metadata.annotations" }
+      - matchRegex: { path: 'data["config.yaml"]', pattern: "environment: production" }
+  - it: "[DEP-030][DEP-020] both ServiceAccounts carry the workload identity client id; only the copy is a hook"
+    template: templates/serviceaccount.yaml
+    documentSelector:
+      path: metadata.name
+      value: gm-migrate
+    asserts:
+      - equal: { path: 'metadata.annotations["azure.workload.identity/client-id"]', value: "00000000-0000-0000-0000-000000000001" }
+      - equal: { path: 'metadata.annotations["helm.sh/hook"]', value: "pre-install,pre-upgrade" }
+      - equal: { path: 'metadata.annotations["helm.sh/hook-weight"]', value: "-10" }
+      - equal: { path: 'metadata.annotations["helm.sh/hook-delete-policy"]', value: before-hook-creation }
+      - equal: { path: "automountServiceAccountToken", value: false }
+  - it: "[DEP-020] the regular ServiceAccount carries the client id and is not a hook"
+    template: templates/serviceaccount.yaml
+    documentSelector:
+      path: metadata.name
+      value: gm
+    asserts:
+      - equal: { path: 'metadata.annotations["azure.workload.identity/client-id"]', value: "00000000-0000-0000-0000-000000000001" }
+      - notExists: { path: 'metadata.annotations["helm.sh/hook"]' }
+  - it: "[DEP-031] serviceAccount.create=false renders no ServiceAccounts and the Job uses the named one"
+    set:
+      serviceAccount.create: false
+      serviceAccount.name: existing-sa
+    asserts:
+      - hasDocuments: { count: 0 }
+        template: templates/serviceaccount.yaml
+      - equal: { path: "spec.template.spec.serviceAccountName", value: existing-sa }
+        template: templates/job-migrate.yaml

@@ -1,0 +1,24 @@
+{{- /* Hook copy first: the migrate Job runs before regular resources exist on a first install (DEP-030). */}}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "git-migrator.fullname" . }}-config-migrate
+  labels:
+    {{- include "git-migrator.labels" (dict "root" . "component" "config") | nindent 4 }}
+  annotations:
+    helm.sh/hook: pre-install,pre-upgrade
+    helm.sh/hook-weight: "-10"
+    helm.sh/hook-delete-policy: before-hook-creation
+data:
+  config.yaml: |
+    {{- include "git-migrator.config" . | nindent 4 }}
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "git-migrator.fullname" . }}-config
+  labels:
+    {{- include "git-migrator.labels" (dict "root" . "component" "config") | nindent 4 }}
+data:
+  config.yaml: |
+    {{- include "git-migrator.config" . | nindent 4 }}

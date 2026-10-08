@@ -1,0 +1,34 @@
+{{- $items := list
+      (dict "component" "web" "pdb" .Values.web.pdb)
+      (dict "component" "worker-standard" "pdb" .Values.worker.standard.pdb)
+      (dict "component" "worker-large" "pdb" .Values.worker.large.pdb) }}
+{{- range $item := $items }}
+{{- if $item.pdb.enabled }}
+{{- $ctx := dict "root" $ "component" $item.component }}
+{{- $min := index $item.pdb "minAvailable" }}
+{{- $max := index $item.pdb "maxUnavailable" }}
+{{- /* A PDB takes one of the two. The chart defaults set one per workload, so overriding with the other needs the default set to null. */}}
+{{- if and (not (kindIs "invalid" $min)) (not (kindIs "invalid" $max)) }}
+{{- fail (printf "%s.pdb sets both minAvailable and maxUnavailable; set the one you do not want to null" $item.component) }}
+{{- end }}
+{{- if and (kindIs "invalid" $min) (kindIs "invalid" $max) }}
+{{- fail (printf "%s.pdb is enabled but sets neither minAvailable nor maxUnavailable" $item.component) }}
+{{- end }}
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: {{ include "git-migrator.fullname" $ }}-{{ $item.component }}
+  labels:
+    {{- include "git-migrator.labels" $ctx | nindent 4 }}
+spec:
+  {{- if not (kindIs "invalid" $min) }}
+  minAvailable: {{ $min }}
+  {{- else }}
+  maxUnavailable: {{ $max }}
+  {{- end }}
+  selector:
+    matchLabels:
+      {{- include "git-migrator.selectorLabels" $ctx | nindent 6 }}
+{{- end }}
+{{- end }}

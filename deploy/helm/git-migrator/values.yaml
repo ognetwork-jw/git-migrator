@@ -1,0 +1,95 @@
+# Values surface of DEP-031. Nothing secret belongs here: secrets live in Key Vault and reach the
+# pods through secretspec (DEP-020). Empty strings below are required settings (the chart fails
+# with a message when one is missing).
+
+image:
+  registry: ghcr.io
+  repository: ""           # <org>/git-migrator (required)
+  tag: ""                  # defaults to the chart appVersion, which release.yml sets to the tag
+  pullPolicy: IfNotPresent
+imagePullSecrets: []
+
+# Names the resources after this instead of the release name.
+fullnameOverride: ""
+
+serviceAccount:
+  create: true
+  name: ""                 # defaults to the release name
+  annotations: {}
+
+azure:
+  workloadIdentityClientId: ""   # client id of the user-assigned managed identity (required with the default provider)
+  keyVaultName: ""               # Key Vault holding the secrets (required with the default provider)
+
+secretspec:
+  profile: production
+  provider: ""                   # default: akv://<azure.keyVaultName>?auth=workload_identity
+
+postgres:
+  host: ""                       # Azure Database for PostgreSQL Flexible Server host (required)
+  port: 5432
+  database: git_migrator
+  user: git_migrator
+  sslmode: require
+  auth: password                 # password | entra (the password comes from Key Vault as POSTGRES_PASSWORD)
+  pool: { app: 10 }
+
+web:
+  replicas: 2
+  terminationGracePeriodSeconds: 30
+  resources: { requests: { cpu: 250m, memory: 512Mi }, limits: { cpu: "1", memory: 1Gi } }
+  nodeSelector: {}
+  tolerations: []
+  affinity: {}
+  hpa: { enabled: false, minReplicas: 2, maxReplicas: 4, targetCPUUtilizationPercentage: 70 }
+  pdb: { enabled: false, minAvailable: 1 }
+
+worker:
+  # An optional Service for scraping the workers' metrics.
+  service: { enabled: false }
+  standard:
+    replicas: 2
+    terminationGracePeriodSeconds: 120
+    concurrency: { runs: 4, analysis: 8, inventory: 2, parity: 4 }
+    scratch: { sizeLimit: 15Gi }
+    resources:
+      requests: { cpu: 500m, memory: 1Gi, ephemeral-storage: 16Gi }
+      limits: { cpu: "2", memory: 2Gi, ephemeral-storage: 20Gi }
+    nodeSelector: {}
+    tolerations: []
+    affinity: {}
+    pdb: { enabled: false, maxUnavailable: 1 }
+  large:
+    replicas: 1
+    terminationGracePeriodSeconds: 600
+    concurrency: { runs: 1 }
+    scratch: { size: 60Gi, storageClassName: "" }
+    resources: { requests: { cpu: "1", memory: 2Gi }, limits: { cpu: "2", memory: 4Gi } }
+    nodeSelector: {}
+    tolerations: []
+    affinity: {}
+    pdb: { enabled: false, maxUnavailable: 1 }
+
+migrateJob:
+  resources: { requests: { cpu: 100m, memory: 256Mi }, limits: { cpu: 500m, memory: 512Mi } }
+
+ingress:
+  enabled: true
+  className: nginx
+  host: ""                       # required when the Ingress is enabled
+  clusterIssuer: ""              # becomes the cert-manager.io/cluster-issuer annotation
+  tls: { enabled: true, secretName: "" }
+  annotations: {}                # merged after the chart defaults (SSE: DEP-032)
+
+metrics: { enabled: true, port: 9464 }
+
+networkPolicy:
+  enabled: false
+  # NetworkPolicy peers (podSelector / namespaceSelector / ipBlock) allowed to reach the web port,
+  # for example the ingress controller's namespace. Empty means every source is allowed.
+  ingressFrom: []
+
+observability: { logLevel: info, otlpEndpoint: "", serviceName: git-migrator }
+
+# Rendered into the runtime configuration file (DEP-040), merged with the values above.
+config: {}

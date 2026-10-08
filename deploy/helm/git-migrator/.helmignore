@@ -1,0 +1,5 @@
+.git
+*.swp
+tests/
+ci/
+README.md

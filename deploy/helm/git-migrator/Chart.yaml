@@ -1,0 +1,10 @@
+apiVersion: v2
+name: git-migrator
+description: git-migrator web app, workers and database migration Job (DEP-030).
+type: application
+# version and appVersion are replaced by release.yml with the tag (DEP-060). The values here are
+# what a checkout installs.
+version: 0.0.0
+appVersion: "0.0.0"
+kubeVersion: ">=1.29.0-0"
+keywords: [git, migration]

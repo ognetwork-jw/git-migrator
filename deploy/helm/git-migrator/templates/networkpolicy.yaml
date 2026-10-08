@@ -1,0 +1,30 @@
+{{- if .Values.networkPolicy.enabled }}
+{{- /* Ingress only. Egress reaches Key Vault, Postgres and the providers, whose addresses vary. */}}
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ include "git-migrator.fullname" . }}
+  labels:
+    {{- include "git-migrator.labels" (dict "root" .) | nindent 4 }}
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: git-migrator
+      app.kubernetes.io/instance: {{ .Release.Name }}
+  policyTypes: [Ingress]
+  ingress:
+    # The web port. Without networkPolicy.ingressFrom it is open to every source, because the
+    # ingress controller's namespace is unknown; with it, only those peers may connect.
+    - {{- with .Values.networkPolicy.ingressFrom }}
+      from:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      ports:
+        - { port: 3000, protocol: TCP }
+    # Metrics and worker health are for scrapers and probes in the same namespace.
+    - from:
+        - podSelector: {}
+      ports:
+        - { port: {{ .Values.metrics.port }}, protocol: TCP }
+        - { port: 8081, protocol: TCP }
+{{- end }}

@@ -1,0 +1,90 @@
+suite: workload security (DEP-010)
+templates:
+  - templates/deployment-web.yaml
+  - templates/deployment-worker-standard.yaml
+  - templates/deployment-worker-large.yaml
+  - templates/job-migrate.yaml
+values:
+  - ../ci/default-values.yaml
+release:
+  name: gm
+tests:
+  - it: "[DEP-010] web pod runs as 10001 with the default seccomp profile and no service account token"
+    template: templates/deployment-web.yaml
+    asserts:
+      - equal: { path: "spec.template.spec.securityContext.runAsNonRoot", value: true }
+      - equal: { path: "spec.template.spec.securityContext.runAsUser", value: 10001 }
+      - equal: { path: "spec.template.spec.securityContext.runAsGroup", value: 10001 }
+      - equal: { path: "spec.template.spec.securityContext.fsGroup", value: 10001 }
+      - equal: { path: "spec.template.spec.securityContext.seccompProfile.type", value: RuntimeDefault }
+      - equal: { path: "spec.template.spec.automountServiceAccountToken", value: false }
+  - it: "[DEP-010][DEP-003] web container has a read-only root filesystem and drops all capabilities"
+    template: templates/deployment-web.yaml
+    asserts:
+      - equal: { path: "spec.template.spec.containers[0].securityContext.allowPrivilegeEscalation", value: false }
+      - equal: { path: "spec.template.spec.containers[0].securityContext.readOnlyRootFilesystem", value: true }
+      - equal: { path: "spec.template.spec.containers[0].securityContext.capabilities.drop", value: ["ALL"] }
+  - it: "[DEP-020] web pod opts in to workload identity"
+    template: templates/deployment-web.yaml
+    asserts:
+      - equal: { path: 'spec.template.metadata.labels["azure.workload.identity/use"]', value: "true" }
+
+  - it: "[DEP-010] worker-standard pod runs as 10001 with the default seccomp profile and no service account token"
+    template: templates/deployment-worker-standard.yaml
+    asserts:
+      - equal: { path: "spec.template.spec.securityContext.runAsNonRoot", value: true }
+      - equal: { path: "spec.template.spec.securityContext.runAsUser", value: 10001 }
+      - equal: { path: "spec.template.spec.securityContext.runAsGroup", value: 10001 }
+      - equal: { path: "spec.template.spec.securityContext.fsGroup", value: 10001 }
+      - equal: { path: "spec.template.spec.securityContext.seccompProfile.type", value: RuntimeDefault }
+      - equal: { path: "spec.template.spec.automountServiceAccountToken", value: false }
+  - it: "[DEP-010][DEP-003] worker-standard container has a read-only root filesystem and drops all capabilities"
+    template: templates/deployment-worker-standard.yaml
+    asserts:
+      - equal: { path: "spec.template.spec.containers[0].securityContext.allowPrivilegeEscalation", value: false }
+      - equal: { path: "spec.template.spec.containers[0].securityContext.readOnlyRootFilesystem", value: true }
+      - equal: { path: "spec.template.spec.containers[0].securityContext.capabilities.drop", value: ["ALL"] }
+  - it: "[DEP-020] worker-standard pod opts in to workload identity"
+    template: templates/deployment-worker-standard.yaml
+    asserts:
+      - equal: { path: 'spec.template.metadata.labels["azure.workload.identity/use"]', value: "true" }
+
+  - it: "[DEP-010] worker-large pod runs as 10001 with the default seccomp profile and no service account token"
+    template: templates/deployment-worker-large.yaml
+    asserts:
+      - equal: { path: "spec.template.spec.securityContext.runAsNonRoot", value: true }
+      - equal: { path: "spec.template.spec.securityContext.runAsUser", value: 10001 }
+      - equal: { path: "spec.template.spec.securityContext.runAsGroup", value: 10001 }
+      - equal: { path: "spec.template.spec.securityContext.fsGroup", value: 10001 }
+      - equal: { path: "spec.template.spec.securityContext.seccompProfile.type", value: RuntimeDefault }
+      - equal: { path: "spec.template.spec.automountServiceAccountToken", value: false }
+  - it: "[DEP-010][DEP-003] worker-large container has a read-only root filesystem and drops all capabilities"
+    template: templates/deployment-worker-large.yaml
+    asserts:
+      - equal: { path: "spec.template.spec.containers[0].securityContext.allowPrivilegeEscalation", value: false }
+      - equal: { path: "spec.template.spec.containers[0].securityContext.readOnlyRootFilesystem", value: true }
+      - equal: { path: "spec.template.spec.containers[0].securityContext.capabilities.drop", value: ["ALL"] }
+  - it: "[DEP-020] worker-large pod opts in to workload identity"
+    template: templates/deployment-worker-large.yaml
+    asserts:
+      - equal: { path: 'spec.template.metadata.labels["azure.workload.identity/use"]', value: "true" }
+
+  - it: "[DEP-010] migrate Job pod runs as 10001 with the default seccomp profile and no service account token"
+    template: templates/job-migrate.yaml
+    asserts:
+      - equal: { path: "spec.template.spec.securityContext.runAsNonRoot", value: true }
+      - equal: { path: "spec.template.spec.securityContext.runAsUser", value: 10001 }
+      - equal: { path: "spec.template.spec.securityContext.runAsGroup", value: 10001 }
+      - equal: { path: "spec.template.spec.securityContext.fsGroup", value: 10001 }
+      - equal: { path: "spec.template.spec.securityContext.seccompProfile.type", value: RuntimeDefault }
+      - equal: { path: "spec.template.spec.automountServiceAccountToken", value: false }
+  - it: "[DEP-010][DEP-003] migrate Job container has a read-only root filesystem and drops all capabilities"
+    template: templates/job-migrate.yaml
+    asserts:
+      - equal: { path: "spec.template.spec.containers[0].securityContext.allowPrivilegeEscalation", value: false }
+      - equal: { path: "spec.template.spec.containers[0].securityContext.readOnlyRootFilesystem", value: true }
+      - equal: { path: "spec.template.spec.containers[0].securityContext.capabilities.drop", value: ["ALL"] }
+  - it: "[DEP-020] migrate Job pod opts in to workload identity"
+    template: templates/job-migrate.yaml
+    asserts:
+      - equal: { path: 'spec.template.metadata.labels["azure.workload.identity/use"]', value: "true" }

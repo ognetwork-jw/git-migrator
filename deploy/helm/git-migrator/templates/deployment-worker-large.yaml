@@ -1,0 +1,100 @@
+{{- $w := .Values.worker.large }}
+{{- $name := printf "%s-worker-large" (include "git-migrator.fullname" .) }}
+{{- $ctx := dict "root" . "component" "worker-large" }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ $name }}
+  labels:
+    {{- include "git-migrator.labels" $ctx | nindent 4 }}
+spec:
+  replicas: {{ $w.replicas }}
+  selector:
+    matchLabels:
+      {{- include "git-migrator.selectorLabels" $ctx | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "git-migrator.podLabels" $ctx | nindent 8 }}
+      annotations:
+        checksum/config: {{ include "git-migrator.config" . | sha256sum }}
+    spec:
+      serviceAccountName: {{ include "git-migrator.serviceAccountName" . }}
+      automountServiceAccountToken: false
+      terminationGracePeriodSeconds: {{ $w.terminationGracePeriodSeconds }}
+      securityContext:
+        {{- include "git-migrator.podSecurityContext" . | nindent 8 }}
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      containers:
+        - name: worker
+          image: {{ include "git-migrator.image" . | quote }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          args: ["worker", "--role", "large"]
+          env:
+            {{- include "git-migrator.env" (dict "root" . "role" "large") | nindent 12 }}
+          ports:
+            - name: health
+              containerPort: 8081
+            {{- if .Values.metrics.enabled }}
+            - name: metrics
+              containerPort: {{ .Values.metrics.port }}
+            {{- end }}
+          startupProbe:
+            httpGet: { path: /readyz, port: health }
+            periodSeconds: 5
+            failureThreshold: 60
+          readinessProbe:
+            httpGet: { path: /readyz, port: health }
+            periodSeconds: 10
+            timeoutSeconds: 3
+          livenessProbe:
+            httpGet: { path: /healthz, port: health }
+            periodSeconds: 20
+            timeoutSeconds: 3
+          resources:
+            {{- toYaml $w.resources | nindent 12 }}
+          securityContext:
+            {{- include "git-migrator.containerSecurityContext" . | nindent 12 }}
+          volumeMounts:
+            - { name: tmp, mountPath: /tmp }
+            - { name: home, mountPath: /home/gm }
+            - { name: scratch, mountPath: /scratch }
+            - { name: config, mountPath: /etc/git-migrator, readOnly: true }
+      volumes:
+        - name: tmp
+          emptyDir: { sizeLimit: 256Mi }
+        - name: home
+          emptyDir: { sizeLimit: 16Mi }
+        # A generic ephemeral volume: a PVC that lives and dies with the pod (DEP-003).
+        - name: scratch
+          ephemeral:
+            volumeClaimTemplate:
+              metadata:
+                labels:
+                  {{- include "git-migrator.selectorLabels" $ctx | nindent 18 }}
+              spec:
+                accessModes: ["ReadWriteOnce"]
+                {{- if $w.scratch.storageClassName }}
+                storageClassName: {{ $w.scratch.storageClassName | quote }}
+                {{- end }}
+                resources:
+                  requests:
+                    storage: {{ $w.scratch.size }}
+        - name: config
+          configMap:
+            name: {{ include "git-migrator.fullname" . }}-config
+      {{- with $w.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with $w.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with $w.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
