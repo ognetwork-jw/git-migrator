@@ -1,6 +1,6 @@
 # ADR-0137: devenv test waits on readiness probes; Postgres is probed over the socket
 
-- Status: agent-decided
+- Status: accepted (spec updated)
 - Date: 2026-10-08
 
 ## Context

@@ -11,7 +11,7 @@ devenv and Docker Compose are both first-class (DEV-001). Every documented devel
 - `services.postgres`: PostgreSQL 16, database `git_migrator`, user `git_migrator`, password from secretspec, `pg_trgm` available, listening on `127.0.0.1:5432`.
 - `processes`: `web` (`pnpm --filter @git-migrator/web dev`) and `worker` (`pnpm --filter @git-migrator/worker dev -- --role all`).
 - secretspec integration through devenv's built-in support (`secretspec:` in `devenv.yaml`, profile `development`, provider `keyring` by default). If the integration is unavailable in the pinned devenv version, wrap the processes with `secretspec run`.
-- `enterTest` runs `pnpm turbo run lint typecheck test`.
+- `enterTest` waits (bounded) until the `git_migrator` role can log in over TCP with its password and holds CREATEDB, then runs `pnpm lint`, `pnpm typecheck` and `pnpm test` one after another, as CI does. Processes declare readiness probes (Postgres over the local socket, the web port, the worker process); `devenv test` runs `enterTest` only once every probed process is ready (ADR-0137).
 - A `git-hooks` entry runs Biome on staged files.
 
 ## Docker Compose (DEV-020)
@@ -71,7 +71,7 @@ Notes:
 - Non-secret IDs (Entra tenant ID, GitHub App ID and installation ID, Bitbucket workspace) live in the config file, not in secretspec.
 - In `development` and `test`, the config file points Endpoints at the provider fakes (`http://localhost:4010`, `4020`, git on `4030`).
 - `testing/fixtures/fake-github-app.pem` is a committed, throwaway RSA key used only by the fakes. It is allow-listed in the gitleaks config by exact path. T-002 generates it.
-- **Profile → provider:** `development` uses keyring or dotenv (developer's choice); `test` uses dotenv with the committed `.env.test`, which contains only fake values; `e2e` uses keyring or dotenv (developer's machine); `production` uses `akv://<vault>?auth=workload_identity` (DEP-020).
+- **Profile → provider:** `development` uses keyring or dotenv (developer's choice); `test` uses dotenv with the committed `.env.test`, which contains only fake values (the devenv CI job instead selects the file provider over `testing/fixtures`, because a global provider override drops per-secret routing; the profile's fake defaults fill the rest, ADR-0135); `e2e` uses keyring or dotenv (developer's machine); `production` uses `akv://<vault>?auth=workload_identity` (DEP-020).
 - The exact secretspec TOML syntax for per-profile defaults MUST be verified against the pinned secretspec version in T-002. The intent above is normative; the syntax is not.
 
 ## Commands (DEV-040)

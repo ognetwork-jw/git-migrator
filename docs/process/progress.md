@@ -60,7 +60,7 @@ The orchestrator maintains this table (see [workflow](workflow.md)). Integration
 | T-089 | todo |  | | | |
 | T-090 | todo |  | | | |
 | T-091 | todo |  | | | |
-| T-093 | in_review | task/T-093-devenv-ci | [#18](https://github.com/ognetwork-jw/git-migrator/pull/18) | 2 | r2 ACCEPTABLE (MINORs → followups.md); CI green incl. devenv test; merge pending |
+| T-093 | merged | task/T-093-devenv-ci | [#18](https://github.com/ognetwork-jw/git-migrator/pull/18) | 2 | merged to ai-main 8dba617 (r2 ACCEPTABLE; CI green incl. devenv test); ADR-0135/0137 folded into DEV-010/DEV-030 |
 | T-095 | todo |  | | | |
 | T-096 | todo |  | | | |
 | T-097 | todo |  | | | |

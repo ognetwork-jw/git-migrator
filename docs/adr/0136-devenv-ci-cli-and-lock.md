@@ -1,6 +1,6 @@
 # ADR-0136: devenv CI pins the CLI to a tag; devenv.lock is not committed yet
 
-- Status: agent-decided
+- Status: accepted (no spec change needed)
 - Date: 2026-10-08
 
 ## Context

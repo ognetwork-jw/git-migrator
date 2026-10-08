@@ -1,6 +1,6 @@
 # ADR-0135: Headless secretspec route for the devenv CI job
 
-- Status: agent-decided
+- Status: accepted (spec updated)
 - Date: 2026-10-08
 
 ## Context
