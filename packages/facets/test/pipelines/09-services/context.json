@@ -1,0 +1,8 @@
+{
+  "secrets": [
+    {
+      "scope": "repository",
+      "name": "DB_PASSWORD"
+    }
+  ]
+}

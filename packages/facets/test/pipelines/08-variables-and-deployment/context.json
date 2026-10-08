@@ -1,0 +1,19 @@
+{
+  "variables": [
+    {
+      "scope": "repository",
+      "name": "API_URL"
+    },
+    {
+      "scope": "environment:production",
+      "name": "REGION"
+    }
+  ],
+  "secrets": [
+    {
+      "scope": "repository",
+      "name": "TOKEN"
+    }
+  ],
+  "workspaceSecrets": ["NPM_TOKEN"]
+}

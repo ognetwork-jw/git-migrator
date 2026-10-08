@@ -1,0 +1,24 @@
+definitions:
+  caches:
+    gems: vendor/bundle
+    assets:
+      path: build/assets
+      key:
+        files:
+          - assets/**/*.css
+          - package.json
+pipelines:
+  default:
+    - step:
+        caches:
+          - node
+          - pip
+          - maven
+          - gradle
+          - composer
+          - dotnetcore
+          - docker
+          - gems
+          - assets
+        script:
+          - make build

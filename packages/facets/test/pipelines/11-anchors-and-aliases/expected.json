@@ -1,0 +1,4 @@
+{
+  "files": [".github/workflows/branch-main.yml", ".github/workflows/ci.yml"],
+  "unsupported": []
+}

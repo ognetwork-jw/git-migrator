@@ -1,0 +1,9 @@
+{
+  "files": [],
+  "unsupported": [
+    {
+      "path": "bitbucket-pipelines.yml",
+      "reason": "the file is not valid YAML"
+    }
+  ]
+}

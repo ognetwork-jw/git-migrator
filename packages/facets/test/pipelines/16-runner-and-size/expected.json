@@ -1,0 +1,17 @@
+{
+  "files": [".github/workflows/ci.yml"],
+  "unsupported": [
+    {
+      "path": "options",
+      "reason": "has no translation rule"
+    },
+    {
+      "path": "pipelines.default[0].step.size",
+      "reason": "runner selection is not translated"
+    },
+    {
+      "path": "pipelines.default[0].step.runs-on",
+      "reason": "runner selection is not translated"
+    }
+  ]
+}

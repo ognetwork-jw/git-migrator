@@ -1,0 +1,9 @@
+{
+  "files": [".github/workflows/ci.yml"],
+  "unsupported": [
+    {
+      "path": "pipelines.default[0].step.script[1].pipe",
+      "reason": "pipes have no equivalent action"
+    }
+  ]
+}

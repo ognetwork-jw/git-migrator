@@ -1,0 +1,9 @@
+{
+  "files": [],
+  "unsupported": [
+    {
+      "path": "pipelines",
+      "reason": "it defines no pipeline"
+    }
+  ]
+}

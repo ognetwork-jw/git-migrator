@@ -1,0 +1,9 @@
+{
+  "files": [".github/workflows/ci.yml"],
+  "unsupported": [
+    {
+      "path": "pipelines.default[0].stage",
+      "reason": "stages are not translated"
+    }
+  ]
+}

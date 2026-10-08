@@ -1,0 +1,45 @@
+{
+  "files": [".github/workflows/branch-release.yml"],
+  "unsupported": [
+    {
+      "path": "pipelines.branches['$ {{ github.head_ref }}']",
+      "reason": "the value contains characters that are not translated safely"
+    },
+    {
+      "path": "pipelines.branches['release/*'][0].step.deployment",
+      "reason": "the value contains characters that are not translated safely"
+    },
+    {
+      "path": "image",
+      "reason": "the value contains characters that are not translated safely"
+    },
+    {
+      "path": "pipelines.branches['release/*'][0].step.script[0]",
+      "reason": "it contains an expression delimiter, which would run as a workflow expression"
+    },
+    {
+      "path": "definitions.caches.evil.key.files",
+      "reason": "the value contains characters that are not translated safely"
+    },
+    {
+      "path": "definitions.caches.evil.path",
+      "reason": "the value contains characters that are not translated safely"
+    },
+    {
+      "path": "pipelines.branches['release/*'][0].step.caches[0]",
+      "reason": "the cache is not predefined or defined in definitions.caches"
+    },
+    {
+      "path": "pipelines.branches['release/*'][0].step.artifacts[0]",
+      "reason": "the value contains characters that are not translated safely"
+    },
+    {
+      "path": "pipelines.branches['release/*'][0].step.name",
+      "reason": "the value contains characters that are not translated safely"
+    },
+    {
+      "path": "pipelines.custom['deploy $ {{ secrets.TOKEN }}']",
+      "reason": "it contains an expression delimiter, which would run as a workflow expression"
+    }
+  ]
+}

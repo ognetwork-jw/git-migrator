@@ -1,0 +1,16 @@
+definitions:
+  services:
+    db:
+      image: postgres:16
+      memory: 2048
+      variables:
+        POSTGRES_PASSWORD: secret
+pipelines:
+  default:
+    - step:
+        name: With a service that has options
+        script:
+          - make integration
+        services:
+          - db
+          - missing

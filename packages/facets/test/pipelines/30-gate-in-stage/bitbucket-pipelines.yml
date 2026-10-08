@@ -1,0 +1,17 @@
+pipelines:
+  default:
+    - step:
+        script:
+          - make build
+    - stage:
+        name: Release
+        steps:
+          - step:
+              name: Approve
+              trigger: manual
+              script:
+                - echo approve
+    - step:
+        deployment: production
+        script:
+          - ./deploy.sh

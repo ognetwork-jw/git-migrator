@@ -1,0 +1,13 @@
+{
+  "files": [],
+  "unsupported": [
+    {
+      "path": "pipelines.default[0].step.script[0].pipe",
+      "reason": "pipes have no equivalent action"
+    },
+    {
+      "path": "pipelines.default[0].step.script",
+      "reason": "no script entry could be translated, so the step is not generated"
+    }
+  ]
+}

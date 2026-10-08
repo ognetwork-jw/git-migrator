@@ -1,0 +1,13 @@
+{
+  "files": [],
+  "unsupported": [
+    {
+      "path": "pipelines.default",
+      "reason": "the pipeline has no steps"
+    },
+    {
+      "path": "pipelines.branches.main",
+      "reason": "the pipeline has no steps"
+    }
+  ]
+}

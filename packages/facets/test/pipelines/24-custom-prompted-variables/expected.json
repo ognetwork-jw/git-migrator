@@ -1,0 +1,9 @@
+{
+  "files": [".github/workflows/custom-release.yml"],
+  "unsupported": [
+    {
+      "path": "pipelines.custom.release[0].variables",
+      "reason": "prompted variables of custom pipelines have no equivalent"
+    }
+  ]
+}

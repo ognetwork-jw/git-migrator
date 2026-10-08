@@ -1,0 +1,10 @@
+pipelines:
+  default:
+    - step:
+        name: Notify
+        script:
+          - make build
+          - pipe: atlassian/slack-notify:2.0.0
+            variables:
+              WEBHOOK_URL: $SLACK_URL
+          - make finish

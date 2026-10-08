@@ -1,0 +1,19 @@
+definitions:
+  services:
+    mysql:
+      image: mysql:8.0
+      variables:
+        MYSQL_DATABASE: app
+        MYSQL_ROOT_PASSWORD: $DB_PASSWORD
+    cache:
+      image: redis:7
+pipelines:
+  default:
+    - step:
+        name: Integration tests
+        script:
+          - make integration
+        services:
+          - mysql
+          - cache
+          - docker

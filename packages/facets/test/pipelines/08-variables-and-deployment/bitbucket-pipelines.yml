@@ -1,0 +1,11 @@
+pipelines:
+  branches:
+    main:
+      - step:
+          name: Deploy
+          deployment: production
+          script:
+            - 'curl -H "Authorization: $TOKEN" "$API_URL/deploy?region=${REGION}"'
+            - echo "$token" | wc -c
+            - echo "//registry//:_authToken=$NPM_TOKEN" > .npmrc
+            - echo "$HOME is not a managed variable"

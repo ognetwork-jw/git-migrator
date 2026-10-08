@@ -1,0 +1,15 @@
+image: node:20
+pipelines:
+  default:
+    - step:
+        name: Public image
+        script:
+          - node --version
+    - step:
+        name: Private registry
+        image:
+          name: registry.example.test/team/builder:2.1
+          username: $REGISTRY_USER
+          password: $REGISTRY_PASSWORD
+        script:
+          - build-tool run

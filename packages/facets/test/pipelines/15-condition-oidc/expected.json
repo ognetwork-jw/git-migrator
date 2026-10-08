@@ -1,0 +1,13 @@
+{
+  "files": [".github/workflows/ci.yml"],
+  "unsupported": [
+    {
+      "path": "pipelines.default[0].step.oidc",
+      "reason": "OIDC has no equivalent in the translated subset"
+    },
+    {
+      "path": "pipelines.default[1].step.condition",
+      "reason": "manual triggers and conditions have no equivalent; the step is not generated, so it never runs unconditionally"
+    }
+  ]
+}

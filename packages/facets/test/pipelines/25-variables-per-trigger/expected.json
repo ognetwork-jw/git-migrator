@@ -1,0 +1,26 @@
+{
+  "files": [
+    ".github/workflows/branch-main.yml",
+    ".github/workflows/ci.yml",
+    ".github/workflows/custom-manual-run.yml",
+    ".github/workflows/tag-v.yml"
+  ],
+  "unsupported": [
+    {
+      "path": "pipelines.default[0].step.script[0]",
+      "reason": "BITBUCKET_TAG is unset in this trigger"
+    },
+    {
+      "path": "pipelines.branches.main[0].step.script[0]",
+      "reason": "BITBUCKET_TAG is unset in this trigger"
+    },
+    {
+      "path": "pipelines.tags['v*'][0].step.script[0]",
+      "reason": "BITBUCKET_BRANCH is unset in this trigger"
+    },
+    {
+      "path": "pipelines.custom.manual-run[0].step.script[0]",
+      "reason": "BITBUCKET_BRANCH is unset in this trigger"
+    }
+  ]
+}

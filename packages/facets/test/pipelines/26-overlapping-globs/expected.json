@@ -1,0 +1,36 @@
+{
+  "files": [
+    ".github/workflows/branch-feat.yml",
+    ".github/workflows/branch-fix.yml",
+    ".github/workflows/branch-main.yml",
+    ".github/workflows/branch-pipeline.yml",
+    ".github/workflows/branch-release-hotfix.yml",
+    ".github/workflows/branch-release.yml"
+  ],
+  "unsupported": [
+    {
+      "path": "pipelines.branches['**']",
+      "reason": "the broader pattern is listed before the narrower one and the source may resolve the overlap by file order; confirm which pipeline should run: main"
+    },
+    {
+      "path": "pipelines.branches.main",
+      "reason": "the broader pattern is listed before the narrower one and the source may resolve the overlap by file order; confirm which pipeline should run: **"
+    },
+    {
+      "path": "pipelines.branches['release/**']",
+      "reason": "the broader pattern is listed before the narrower one and the source may resolve the overlap by file order; confirm which pipeline should run: **"
+    },
+    {
+      "path": "pipelines.branches['release/hotfix-*']",
+      "reason": "the broader pattern is listed before the narrower one and the source may resolve the overlap by file order; confirm which pipeline should run: **"
+    },
+    {
+      "path": "pipelines.branches['feat*']",
+      "reason": "the broader pattern is listed before the narrower one and the source may resolve the overlap by file order; confirm which pipeline should run: **"
+    },
+    {
+      "path": "pipelines.branches['*fix']",
+      "reason": "the broader pattern is listed before the narrower one and the source may resolve the overlap by file order; confirm which pipeline should run: **"
+    }
+  ]
+}

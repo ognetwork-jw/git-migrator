@@ -1,0 +1,4 @@
+pipelines:
+  default:
+    - step:
+        script: [unclosed

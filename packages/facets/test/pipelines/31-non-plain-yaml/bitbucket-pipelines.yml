@@ -1,0 +1,5 @@
+pipelines:
+  default: !!omap
+    - step:
+        script:
+          - make

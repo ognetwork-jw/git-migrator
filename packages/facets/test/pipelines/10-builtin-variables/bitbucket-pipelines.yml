@@ -1,0 +1,10 @@
+pipelines:
+  default:
+    - step:
+        name: Info
+        deployment: staging
+        script:
+          - echo "$BITBUCKET_BRANCH $BITBUCKET_COMMIT"
+          - echo "build $BITBUCKET_BUILD_NUMBER of $BITBUCKET_REPO_SLUG in ${BITBUCKET_CLONE_DIR}"
+          - echo "PR $BITBUCKET_PR_ID into $BITBUCKET_PR_DESTINATION_BRANCH"
+          - echo "env $BITBUCKET_DEPLOYMENT_ENVIRONMENT"

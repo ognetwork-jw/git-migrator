@@ -1,0 +1,17 @@
+{
+  "files": [".github/workflows/branch-main.yml"],
+  "unsupported": [
+    {
+      "path": "pipelines.branches.main[1].step.trigger",
+      "reason": "manual triggers and conditions have no equivalent; the step is not generated, so it never runs unconditionally"
+    },
+    {
+      "path": "pipelines.branches.main[2]",
+      "reason": "it follows a step that waits for approval, so it is not generated"
+    },
+    {
+      "path": "pipelines.branches.main[3]",
+      "reason": "it follows a step that waits for approval, so it is not generated"
+    }
+  ]
+}

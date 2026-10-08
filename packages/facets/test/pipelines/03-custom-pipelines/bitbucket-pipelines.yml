@@ -1,0 +1,14 @@
+pipelines:
+  custom:
+    deploy-staging:
+      - step:
+          name: Deploy to staging
+          script:
+            - ./deploy.sh staging
+    nightly:
+      - step:
+          script:
+            - make nightly
+      - step:
+          script:
+            - make report

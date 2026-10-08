@@ -1,0 +1,20 @@
+pipelines:
+  default:
+    - step:
+        script:
+          - echo default
+  branches:
+    main:
+      - step:
+          name: Release build
+          script:
+            - make release
+    'feature/*':
+      - step:
+          script:
+            - make test
+  tags:
+    'v*':
+      - step:
+          script:
+            - make publish-check

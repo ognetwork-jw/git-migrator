@@ -1,0 +1,17 @@
+pipelines:
+  default:
+    - step:
+        name: Full history
+        max-time: 30
+        clone:
+          depth: full
+        script:
+          - git describe --tags
+        after-script:
+          - echo "cleanup"
+    - step:
+        name: Shallow
+        clone:
+          depth: 5
+        script:
+          - make

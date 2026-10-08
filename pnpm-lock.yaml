@@ -272,6 +272,9 @@ importers:
       '@git-migrator/core':
         specifier: workspace:*
         version: link:../../core
+      yaml:
+        specifier: 2.9.1
+        version: 2.9.1
 
   packages/api:
     dependencies:
@@ -513,6 +516,9 @@ importers:
 
   testing/integration:
     dependencies:
+      '@git-migrator/adapter-github':
+        specifier: workspace:*
+        version: link:../../packages/adapters/github
       '@git-migrator/canonical':
         specifier: workspace:*
         version: link:../../packages/canonical

@@ -1,0 +1,20 @@
+pipelines:
+  default:
+    - step:
+        script:
+          - echo "$BITBUCKET_BRANCH $BITBUCKET_TAG"
+  branches:
+    main:
+      - step:
+          script:
+            - echo "$BITBUCKET_BRANCH $BITBUCKET_TAG"
+  tags:
+    'v*':
+      - step:
+          script:
+            - echo "$BITBUCKET_TAG $BITBUCKET_BRANCH"
+  custom:
+    manual-run:
+      - step:
+          script:
+            - echo "$BITBUCKET_BRANCH $BITBUCKET_TAG"

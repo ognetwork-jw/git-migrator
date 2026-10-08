@@ -1,0 +1,18 @@
+pipelines:
+  branches:
+    main:
+      - step:
+          script:
+            - make main
+    'release/hotfix-*':
+      - step:
+          script:
+            - make hotfix
+    'release/**':
+      - step:
+          script:
+            - make release
+    '**':
+      - step:
+          script:
+            - make any

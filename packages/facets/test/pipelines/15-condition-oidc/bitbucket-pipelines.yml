@@ -1,0 +1,15 @@
+pipelines:
+  default:
+    - step:
+        name: Cloud login
+        oidc: true
+        script:
+          - ./login.sh
+    - step:
+        name: Only when sources change
+        condition:
+          changesets:
+            includePaths:
+              - "src/**"
+        script:
+          - make sources

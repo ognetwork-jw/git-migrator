@@ -1,0 +1,4 @@
+{
+  "files": [".github/workflows/custom-deploy-staging.yml", ".github/workflows/custom-nightly.yml"],
+  "unsupported": []
+}

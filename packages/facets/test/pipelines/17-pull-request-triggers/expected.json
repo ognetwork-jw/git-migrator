@@ -1,0 +1,9 @@
+{
+  "files": [".github/workflows/ci.yml"],
+  "unsupported": [
+    {
+      "path": "pipelines.pull-requests",
+      "reason": "pull request triggers filter by source branch, the target filters by base branch"
+    }
+  ]
+}

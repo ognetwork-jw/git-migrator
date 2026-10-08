@@ -1,0 +1,12 @@
+pipelines:
+  default:
+    - stage:
+        name: Build stage
+        steps:
+          - step:
+              script:
+                - make build
+    - step:
+        name: After the stage
+        script:
+          - make finish

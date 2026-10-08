@@ -1,0 +1,6 @@
+pipelines:
+  default:
+    - step:
+        name: Only a pipe
+        script:
+          - pipe: atlassian/aws-s3-deploy:1.0.0

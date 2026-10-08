@@ -1,0 +1,9 @@
+{
+  "files": [
+    ".github/workflows/branch-feature.yml",
+    ".github/workflows/branch-main.yml",
+    ".github/workflows/ci.yml",
+    ".github/workflows/tag-v.yml"
+  ],
+  "unsupported": []
+}

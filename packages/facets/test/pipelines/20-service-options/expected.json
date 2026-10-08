@@ -1,0 +1,17 @@
+{
+  "files": [".github/workflows/ci.yml"],
+  "unsupported": [
+    {
+      "path": "pipelines.default[0].step.services[0]",
+      "reason": "the service uses options that are not translated"
+    },
+    {
+      "path": "definitions.services.db.memory",
+      "reason": "the service uses options that are not translated"
+    },
+    {
+      "path": "pipelines.default[0].step.services[1]",
+      "reason": "the service is not defined in definitions.services"
+    }
+  ]
+}

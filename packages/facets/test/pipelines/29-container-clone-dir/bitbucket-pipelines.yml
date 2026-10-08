@@ -1,0 +1,12 @@
+image: node:20
+pipelines:
+  default:
+    - step:
+        script:
+          - cd "$BITBUCKET_CLONE_DIR" && ls
+        after-script:
+          - echo "$BITBUCKET_CLONE_DIR"
+    - step:
+        image: ubuntu:24.04
+        script:
+          - echo "$BITBUCKET_CLONE_DIR $BITBUCKET_COMMIT"

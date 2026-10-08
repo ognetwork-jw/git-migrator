@@ -1,0 +1,19 @@
+pipelines:
+  default:
+    - step:
+        name: Build
+        script:
+          - make dist
+        artifacts:
+          - dist/**
+    - step:
+        name: Test
+        script:
+          - make test
+    - step:
+        name: Package
+        script:
+          - make package
+        artifacts:
+          paths:
+            - pkg/*.zip

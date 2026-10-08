@@ -1,0 +1,8 @@
+{
+  "secrets": [
+    {
+      "scope": "environment:production",
+      "name": "API_TOKEN"
+    }
+  ]
+}

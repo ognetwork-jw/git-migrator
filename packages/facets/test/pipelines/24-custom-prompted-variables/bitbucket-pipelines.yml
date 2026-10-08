@@ -1,0 +1,8 @@
+pipelines:
+  custom:
+    release:
+      - variables:
+          - name: VERSION
+      - step:
+          script:
+            - ./release.sh

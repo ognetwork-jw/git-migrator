@@ -1,0 +1,10 @@
+pipelines:
+  branches:
+    '**':
+      - step:
+          script:
+            - make any
+    '2024':
+      - step:
+          script:
+            - make year

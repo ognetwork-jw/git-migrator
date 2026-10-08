@@ -1,0 +1,21 @@
+pipelines:
+  branches:
+    main:
+      - step:
+          name: Build
+          script:
+            - make build
+      - step:
+          name: Approve
+          trigger: manual
+          script:
+            - echo approved
+      - step:
+          name: Deploy
+          deployment: production
+          script:
+            - ./deploy.sh "$API_TOKEN"
+      - parallel:
+          - step:
+              script:
+                - make notify

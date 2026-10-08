@@ -1,0 +1,33 @@
+pipelines:
+  default:
+    - step:
+        name: Install
+        script:
+          - make deps
+    - parallel:
+        - step:
+            name: Lint
+            script:
+              - make lint
+        - step:
+            name: Unit
+            script:
+              - make unit
+        - step:
+            name: Integration
+            script:
+              - make integration
+    - step:
+        name: Publish
+        script:
+          - make publish
+    - parallel:
+        steps:
+          - step:
+              name: Smoke A
+              script:
+                - make smoke-a
+          - step:
+              name: Smoke B
+              script:
+                - make smoke-b

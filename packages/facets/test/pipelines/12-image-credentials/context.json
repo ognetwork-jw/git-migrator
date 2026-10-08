@@ -1,0 +1,14 @@
+{
+  "variables": [
+    {
+      "scope": "repository",
+      "name": "REGISTRY_USER"
+    }
+  ],
+  "secrets": [
+    {
+      "scope": "repository",
+      "name": "REGISTRY_PASSWORD"
+    }
+  ]
+}

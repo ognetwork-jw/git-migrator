@@ -1,0 +1,8 @@
+pipelines:
+  default:
+    - step:
+        name: Uses unsupported variables
+        script:
+          - echo "$BITBUCKET_STEP_UUID"
+          - echo "$BITBUCKET_WORKSPACE $BITBUCKET_BRANCH"
+          - echo "fine"

