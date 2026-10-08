@@ -18,9 +18,16 @@
     "@git-migrator/adapter-github": "workspace:*",
     "@git-migrator/adapter-sdk": "workspace:*",
     "@git-migrator/canonical": "workspace:*",
+    "@git-migrator/config": "workspace:*",
     "@git-migrator/core": "workspace:*",
+    "@git-migrator/db": "workspace:*",
     "@git-migrator/facets": "workspace:*",
+    "@git-migrator/fixtures": "workspace:*",
     "@git-migrator/guidance": "workspace:*",
-    "@git-migrator/provider-fakes": "workspace:*"
+    "@git-migrator/jobs": "workspace:*",
+    "@git-migrator/observability": "workspace:*",
+    "@git-migrator/provider-fakes": "workspace:*",
+    "@git-migrator/quota": "workspace:*",
+    "@git-migrator/registry": "workspace:*"
   }
 }

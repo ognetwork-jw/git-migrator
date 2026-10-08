@@ -647,18 +647,39 @@ importers:
       '@git-migrator/canonical':
         specifier: workspace:*
         version: link:../../packages/canonical
+      '@git-migrator/config':
+        specifier: workspace:*
+        version: link:../../packages/config
       '@git-migrator/core':
         specifier: workspace:*
         version: link:../../packages/core
+      '@git-migrator/db':
+        specifier: workspace:*
+        version: link:../../packages/db
       '@git-migrator/facets':
         specifier: workspace:*
         version: link:../../packages/facets
+      '@git-migrator/fixtures':
+        specifier: workspace:*
+        version: link:../fixtures
       '@git-migrator/guidance':
         specifier: workspace:*
         version: link:../../packages/guidance
+      '@git-migrator/jobs':
+        specifier: workspace:*
+        version: link:../../packages/jobs
+      '@git-migrator/observability':
+        specifier: workspace:*
+        version: link:../../packages/observability
       '@git-migrator/provider-fakes':
         specifier: workspace:*
         version: link:../provider-fakes
+      '@git-migrator/quota':
+        specifier: workspace:*
+        version: link:../../packages/quota
+      '@git-migrator/registry':
+        specifier: workspace:*
+        version: link:../../packages/registry
 
   testing/provider-fakes:
     dependencies:

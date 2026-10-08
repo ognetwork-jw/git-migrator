@@ -82,7 +82,6 @@ describe('maintenance handlers', () => {
       'maintenance.scratch-cleanup',
       'maintenance.run-reaper',
       'analysis.feeder',
-      'inventory.endpoint',
       'drift.sweep',
       'parity.migration',
     ] as const) {

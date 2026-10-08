@@ -16,6 +16,27 @@ export {
   type HealthServerOptions,
   startHealthServer,
 } from './health.ts';
+export {
+  adapterConfigFor,
+  type ConnectOptions,
+  createEndpointConnector,
+  type EndpointConnector,
+  type EndpointConnectorOptions,
+  noGitClient,
+} from './inventory/connector.ts';
+export {
+  type InventoryDeps,
+  InventoryInterruptedError,
+  type InventoryResult,
+  type InventoryRunOptions,
+  inventoryHandlers,
+  runInventory,
+} from './inventory/inventory.ts';
+export {
+  matchGroup,
+  matchIdentity,
+  normalizeDisplayName,
+} from './inventory/matching.ts';
 export { LEADER_LOCK_NAME, LeaderElection, type LeaderElectionOptions } from './leader.ts';
 export {
   createPruner,

@@ -1,13 +1,16 @@
 import { type Config, loadConfigOrExit } from '@git-migrator/config';
 import { createDb } from '@git-migrator/db';
 import {
+  createEndpointConnector,
   createProviderEnvironment,
   HEALTH_PORT,
   type HealthServer,
+  inventoryHandlers,
   type JobHandlers,
   JobRuntime,
   LeaderElection,
   maintenanceHandlers,
+  noGitClient,
   type QueueName,
   queuesForRole,
   resetQueueCounts,
@@ -29,6 +32,7 @@ import {
   type TracingHandle,
 } from '@git-migrator/observability';
 import { QuotaLeases, QuotaService } from '@git-migrator/quota';
+import { createBuiltinRegistry } from '@git-migrator/registry';
 import { connectionStringFor } from './db-commands.ts';
 import { type WaitForDatabaseOptions, waitForDatabase } from './wait-for-database.ts';
 
@@ -187,10 +191,10 @@ export async function startWorker(options: StartWorkerOptions): Promise<WorkerHa
     checkpoint();
 
     db = createDb({ connectionString, poolMax: config.postgres.pool.app });
-    const { registry, recorders } = createMetrics();
+    const { registry: metricsRegistry, recorders } = createMetrics();
     const metricsPort = options.metricsPort ?? config.metrics.port;
     if (metricsPort !== false) {
-      metricsServer = await startMetricsServer({ registry, port: metricsPort });
+      metricsServer = await startMetricsServer({ registry: metricsRegistry, port: metricsPort });
     }
     // `maintenance.prune` calls QuotaService.prune(); MetricRecorders is the metrics sink (JOB-046).
     const quota = new QuotaService({
@@ -219,6 +223,7 @@ export async function startWorker(options: StartWorkerOptions): Promise<WorkerHa
     await jobs.waitUntilReady();
     checkpoint();
 
+    const registry = createBuiltinRegistry();
     const handlers = {
       ...maintenanceHandlers({
         appPool: db.pool,
@@ -227,6 +232,21 @@ export async function startWorker(options: StartWorkerOptions): Promise<WorkerHa
         log,
         scratchRoot: scratchRoot(env),
         metrics: recorders,
+      }),
+      // Adapters are reached only through the registry (ARC-012); inventory uses no git transport.
+      ...inventoryHandlers({
+        db: db.privileged,
+        appPool: db.pool,
+        connector: createEndpointConnector({
+          config,
+          registry,
+          env,
+          environment: providerEnvironment,
+          git: noGitClient,
+        }),
+        registry,
+        config,
+        log,
       }),
       ...(options.handlers ?? {}),
     };

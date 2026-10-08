@@ -53,15 +53,14 @@ export function createPruner(deps: MaintenanceDeps): () => Promise<PruneResult> 
 
 /** Scheduler-driven jobs whose processors arrive with later tasks (ADR-0212). */
 const PENDING: ReadonlyArray<readonly [name: PendingJob, task: string]> = [
-  ['inventory.endpoint', 'T-060'],
   ['analysis.feeder', 'T-061'],
   ['drift.sweep', 'T-089'],
   ['parity.migration', 'T-072'],
 ];
-type PendingJob = 'inventory.endpoint' | 'analysis.feeder' | 'drift.sweep' | 'parity.migration';
+type PendingJob = 'analysis.feeder' | 'drift.sweep' | 'parity.migration';
 
 /**
- * The handlers this task provides: `maintenance.prune`, `maintenance.scratch-cleanup` and
+ * The handlers this module provides: `maintenance.prune`, `maintenance.scratch-cleanup` and
  * `maintenance.run-reaper`. Scheduler-driven jobs whose processors belong to later tasks complete
  * as skipped with a warning, so the schedulers (JOB-050) do not fill the failed set every minute.
  */
