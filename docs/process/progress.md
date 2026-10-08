@@ -26,7 +26,7 @@ The orchestrator maintains this table (see [workflow](workflow.md)). Integration
 | T-032 | todo |  | | | |
 | T-033 | todo |  | | | |
 | T-034 | todo |  | | | |
-| T-040 | in_review | task/T-040-fake-git-server | [#8](https://github.com/ognetwork-jw/git-migrator/pull/8) | 1 | |
+| T-040 | in_review | task/T-040-fake-git-server | [#8](https://github.com/ognetwork-jw/git-migrator/pull/8) | 2 | r1: 1 MAJOR (argv test tautological) in fix pass |
 | T-041 | in_review | task/T-041-fake-bitbucket | [#5](https://github.com/ognetwork-jw/git-migrator/pull/5) | 2 | r2 ACCEPTABLE (both); merging |
 | T-042 | in_progress | task/T-042-fake-github | | | |
 | T-043 | todo |  | | | |
