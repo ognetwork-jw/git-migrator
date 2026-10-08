@@ -93,12 +93,14 @@ export const MAX_REPLACE_PATTERN_LENGTH = 200;
 export const MAX_REPLACE_WITH_LENGTH = 200;
 
 class PipelineError extends Error {
-  constructor(
-    message: string,
-    readonly cause_: PipelineCause,
-    readonly extra: Record<string, string | number> = {},
-  ) {
+  // Plain fields, not parameter properties: Node runs this file with type stripping only.
+  readonly cause_: PipelineCause;
+  readonly extra: Record<string, string | number>;
+
+  constructor(message: string, cause_: PipelineCause, extra: Record<string, string | number> = {}) {
     super(message);
+    this.cause_ = cause_;
+    this.extra = extra;
   }
 }
 
