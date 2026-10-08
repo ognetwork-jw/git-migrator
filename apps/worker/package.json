@@ -15,6 +15,7 @@
     "dev": "node --watch src/dev-worker.ts --role all"
   },
   "dependencies": {
+    "@git-migrator/auth": "workspace:*",
     "@git-migrator/config": "workspace:*",
     "@git-migrator/db": "workspace:*",
     "@git-migrator/jobs": "workspace:*",
