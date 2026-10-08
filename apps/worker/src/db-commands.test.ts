@@ -6,6 +6,7 @@ import { fileURLToPath } from 'node:url';
 import { type Config, resolveConfig } from '@git-migrator/config';
 import { createDb } from '@git-migrator/db';
 import { createTestDatabase, type TestDatabase } from '@git-migrator/db/testing';
+import { migrateBullmqSchema } from '@git-migrator/jobs';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import {
   connectionStringFor,
@@ -112,6 +113,18 @@ describe('migrate entrypoint (DATA-030)', () => {
       'verification',
     ]);
   });
+
+  it('[DATA-030] step 4 creates the BullMQ backend tables in schema bullmq, before step 5', async () => {
+    const tables = await t.db.pool.query<{ table_name: string }>(
+      `SELECT table_name FROM information_schema.tables WHERE table_schema = 'bullmq'`,
+    );
+    expect(tables.rows.length).toBeGreaterThan(0);
+    // Idempotent: running the step again leaves the schema at the same version.
+    const before = await migrateBullmqSchema(t.connectionString);
+    await runMigrate(configFor(t), envFor(t));
+    expect(await migrateBullmqSchema(t.connectionString)).toBe(before);
+    expect(before).toBeGreaterThan(0);
+  }, 120_000);
 
   it('[DATA-040] seeds dev data after the migrate and refuses production', async () => {
     const seeded = await runSeed(configFor(t), envFor(t));
@@ -240,6 +253,35 @@ describe('the db CLI under plain node (DATA-030, DATA-040, DEV-040)', () => {
     const result = run(['migrate']);
     expect(result.status, result.stderr).toBe(0);
     expect(result.stdout).toMatch(/^migrate: \{.*"routes":\{"created":1/m);
+  }, 120_000);
+
+  it('[DEP-002] the migrate entrypoint runs every DATA-030 step and exits 0', () => {
+    const entry = join(dirname(cli), 'migrate.ts');
+    const result = spawnSync(process.execPath, [entry], {
+      encoding: 'utf8',
+      env: {
+        PATH: process.env.PATH ?? '',
+        GM_CONFIG_FILE: file,
+        POSTGRES_PASSWORD: decodeURIComponent(new URL(cliDb.connectionString).password),
+      },
+    });
+    expect(result.status, result.stderr).toBe(0);
+    expect(result.stdout).toMatch(/^migrate: \{/m);
+  }, 120_000);
+
+  it('[DEP-002] the migrate entrypoint exits non-zero on the first failure', () => {
+    const entry = join(dirname(cli), 'migrate.ts');
+    const result = spawnSync(process.execPath, [entry], {
+      encoding: 'utf8',
+      env: {
+        PATH: process.env.PATH ?? '',
+        GM_CONFIG_FILE: file,
+        POSTGRES_PASSWORD: 'wrong-password',
+      },
+    });
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain('migrate failed');
+    expect(result.stderr).not.toContain('wrong-password');
   }, 120_000);
 
   it('[DATA-040] "seed" exits 0', () => {

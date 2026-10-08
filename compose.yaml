@@ -55,6 +55,7 @@ services:
       - pnpm-store:/pnpm-store
 
   # `pnpm dev` (web on port 3000, and the worker) from the checkout. Nothing is installed here.
+  # The worker waits (logging why) until the database is migrated: run `docker compose exec dev pnpm db:migrate`.
   dev:
     build: *dev-build
     user: *host-user
@@ -71,6 +72,10 @@ services:
       - "127.0.0.1:3000:3000"
     environment:
       GM_ENVIRONMENT: development
+      NODE_ENV: development
+      # The compose Postgres has no TLS; production keeps the default `postgres.sslmode: require`.
+      GM_POSTGRES_HOST: postgres
+      GM_POSTGRES_SSLMODE: disable
       POSTGRES_HOST: postgres
       POSTGRES_PORT: "5432"
       POSTGRES_DB: git_migrator

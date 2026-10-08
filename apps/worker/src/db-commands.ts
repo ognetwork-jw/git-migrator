@@ -18,6 +18,7 @@ import {
   seedDev,
   syncConfig,
 } from '@git-migrator/db';
+import { migrateBullmqSchema } from '@git-migrator/jobs';
 import { createLogger } from '@git-migrator/observability';
 import pg from 'pg';
 
@@ -95,8 +96,7 @@ export function toConfigSnapshot(config: Config): ConfigSnapshot {
 
 /**
  * The `migrate` entrypoint (DATA-030), in order. Each step is idempotent and the first failure
- * throws. Step 3 (Better Auth, AUTH-001) runs between steps 2 and 5. Step 4 (BullMQ) is added at
- * the same place by the task that owns that schema.
+ * throws. Step 3 is Better Auth (AUTH-001) and step 4 is the BullMQ backend schema (JOB-010).
  */
 export async function runMigrate(config: Config, env: Env): Promise<SyncResult> {
   const connectionString = connectionStringFor(config, env);
@@ -108,6 +108,7 @@ export async function runMigrate(config: Config, env: Env): Promise<SyncResult> 
       connectionString,
       createLogger({ level: config.observability.logLevel }),
     ); // step 3
+    await migrateBullmqSchema(connectionString); // step 4
     return await syncConfig(handle.privileged, toConfigSnapshot(config)); // step 5
   } finally {
     await handle.close();

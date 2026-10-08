@@ -13,6 +13,7 @@
     { "path": "../../packages/config" },
     { "path": "../../packages/observability" },
     { "path": "../../packages/db" },
-    { "path": "../../packages/registry" }
+    { "path": "../../packages/registry" },
+    { "path": "../../packages/quota" }
   ]
 }

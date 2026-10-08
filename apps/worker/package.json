@@ -12,7 +12,7 @@
     "typecheck": "tsc -b",
     "lint": "biome check .",
     "test": "vitest run --root ../.. --project unit apps/worker",
-    "dev": "node --watch src/dev-worker.ts --role all"
+    "dev": "node --watch src/worker.ts --role all"
   },
   "dependencies": {
     "@git-migrator/auth": "workspace:*",
@@ -20,6 +20,7 @@
     "@git-migrator/db": "workspace:*",
     "@git-migrator/jobs": "workspace:*",
     "@git-migrator/observability": "workspace:*",
+    "@git-migrator/quota": "workspace:*",
     "@git-migrator/registry": "workspace:*",
     "pg": "8.23.1"
   },

@@ -80,7 +80,7 @@ describe('development environment files', () => {
     const worker = JSON.parse(read('apps/worker/package.json')) as {
       scripts: Record<string, string>;
     };
-    expect(worker.scripts.dev).toBe('node --watch src/dev-worker.ts --role all');
+    expect(worker.scripts.dev).toBe('node --watch src/worker.ts --role all');
   });
 
   it('[DEV-020] the dev image sets GM_INSTALL_ORIGIN=container so the install guard records container', () => {
@@ -121,14 +121,25 @@ describe('development environment files', () => {
     expect(postgres).toContain('.devenv_initialized');
     expect(postgres).not.toContain('127.0.0.1');
     expect(postgres).toMatch(/timeout = \d+;/);
-    // web: HTTP GET on the placeholder port. worker: a process check. Both bounded.
+    // web: HTTP GET on the placeholder port. worker: HTTP GET on its health server (DEP-030). Both bounded.
     const web = nix.slice(nix.indexOf('    web = {'), nix.indexOf('    worker = {'));
     expect(web).toContain('http.get = {');
     expect(web).toContain('host = "127.0.0.1";');
     expect(web).toContain('port = 3000;');
     expect(web).toMatch(/timeout = \d+;/);
     const worker = nix.slice(nix.indexOf('    worker = {'), nix.indexOf('enterTest = '));
-    expect(worker).toContain('pgrep -f');
+    expect(worker).toContain('http.get = {');
+    expect(worker).toContain('port = 8081;');
+    expect(worker).toContain('path = "/readyz";');
+    expect(worker).not.toContain('pgrep');
+    expect(worker).toContain('pnpm db:migrate');
+    expect(worker).toContain('[ $i -ge 60 ] && exit 1');
+    expect(worker).toContain('NODE_ENV=development');
+    // The devenv Postgres has no TLS: migrate and the worker must not use the default `require`.
+    expect(worker).toContain('export GM_POSTGRES_SSLMODE=disable;');
+    expect(worker.indexOf('GM_POSTGRES_SSLMODE=disable')).toBeLessThan(
+      worker.indexOf('pnpm db:migrate'),
+    );
     expect(worker).toMatch(/timeout = \d+;/);
     // The one-shot has no readiness probe and never restarts, so devenv does not wait on it.
     const oneShot = nix.slice(nix.indexOf('    postgres-password = {'), nix.indexOf('    web = {'));
@@ -256,6 +267,12 @@ describe('development environment files', () => {
     // biome-ignore lint/suspicious/noTemplateCurlyInString: Compose variable substitution, not a JS template
     expect(dev.user).toBe('${UID:-1000}:${GID:-1000}');
     expect(dev.profiles).toBeUndefined();
+    // The compose Postgres has no TLS and is reached by its service name (the config defaults are
+    // `localhost` and `require`, for production).
+    expect((dev as { environment?: Record<string, string> }).environment).toMatchObject({
+      GM_POSTGRES_HOST: 'postgres',
+      GM_POSTGRES_SSLMODE: 'disable',
+    });
 
     const fakes = c.services.fakes as Service;
     expect(fakes.profiles).toEqual(['test']);

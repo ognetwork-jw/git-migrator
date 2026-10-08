@@ -113,10 +113,18 @@ in
       };
     };
     worker = {
-      exec = "secretspec run -- pnpm --filter @git-migrator/worker dev -- --role all";
-      # The worker listens on no port: ready once its dev entry point is running.
+      # Migrate first (idempotent, retried every 2 s, at most 60 times, until the password is set and
+      # Postgres is up), then start the worker. NODE_ENV=development makes the worker wait for ever for
+      # the database instead of exiting after 3 minutes (ADR-0213). The devenv Postgres has no TLS, so
+      # this dev process overrides the production default `postgres.sslmode: require`.
+      exec = "secretspec run -- sh -c 'export GM_POSTGRES_SSLMODE=disable; i=0; until pnpm db:migrate; do i=$((i+1)); [ $i -ge 60 ] && exit 1; sleep 2; done; export NODE_ENV=development; exec pnpm --filter @git-migrator/worker dev -- --role all'";
+      # The worker's health server (DEP-030) answers /readyz with 200 once the queue workers run.
       ready = {
-        exec = "${pkgs.procps}/bin/pgrep -f 'src/dev-worker.ts' > /dev/null";
+        http.get = {
+          host = "127.0.0.1";
+          port = 8081;
+          path = "/readyz";
+        };
         period = 2;
         timeout = 120;
       };
