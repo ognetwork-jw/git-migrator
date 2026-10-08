@@ -2,6 +2,8 @@
   "extends": "../../tsconfig.base.json",
   "compilerOptions": {
     "rootDir": ".",
+    "lib": ["ES2024", "DOM"],
+    "jsx": "react-jsx",
     "outDir": "dist",
     "tsBuildInfoFile": "dist/.tsbuildinfo"
   },
@@ -10,6 +12,9 @@
   "references": [
     {
       "path": "../../packages/api"
+    },
+    {
+      "path": "../../packages/core"
     },
     {
       "path": "../../packages/auth"

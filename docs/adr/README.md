@@ -131,5 +131,6 @@
 | [0250](0250-adapter-contract-suite.md) | Adapter contract suite: shape, placement and normalisations | agent-decided |
 | [0260](0260-capability-matrix-shape.md) | Capability matrix shape, registry ownership, dynamic overlay | agent-decided |
 | [0261](0261-capability-matrix-vs-mapping-tables.md) | Adapter capabilities aligned to the 05-facets mapping tables | agent-decided |
+| [0270](0270-events-topics-and-sse-details.md) | Event payload `ids`, topics, authorization, heartbeat, gap handling and stream bounds for SSE | agent-decided |
 
 New ADRs continue from 0028. Implementor decisions use `status: agent-decided` (PROC-005). T-002 uses 0065–0069.
