@@ -251,6 +251,18 @@ describe('display and copy of webhook URLs (UI-040, ADR-0092)', () => {
     expect(renderGuidance('webhooks.set-secret', params).steps).toHaveLength(1);
   });
 
+  it('[FAC-WEB-002] recreate-manually tells the operator to set a new secret only when the source hook had one', () => {
+    for (const code of ['webhooks.recreate-manually', 'org-webhooks.recreate-manually']) {
+      const base = { targetUrl: 'https://hooks.example.test/h', events: ['push'] };
+      const without = renderGuidance(code, base).steps;
+      const withSecret = renderGuidance(code, { ...base, hasSecret: true }).steps;
+      expect(without).toHaveLength(2);
+      expect(withSecret).toHaveLength(3);
+      expect(JSON.stringify(without)).not.toContain('secret step');
+      expect(withSecret[2]?.text).toMatch(/new secret/);
+    }
+  });
+
   it('[UI-040] non-http(s) URLs show the marker, never "null/…" or the raw URL', () => {
     for (const url of ['javascript:alert(1)', 'data:text/html,hi', 'mailto:ops@example.test']) {
       const rendered = renderGuidance('webhooks.set-secret', { targetUrl: url });

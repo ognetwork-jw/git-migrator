@@ -212,13 +212,16 @@ export function translateHookSet(
       postTasks.push({
         code: codes.recreateManually,
         paths: [hookPath(h.key)],
-        params: { targetUrl: h.url, events },
+        // `hasSecret` is a flag only: the guidance tells the operator to set a new secret.
+        params: { targetUrl: h.url, events, ...(h.hasSecret ? { hasSecret: true } : {}) },
       });
     }
-    if (h.hasSecret) {
+    // A hook that is not created appears only as the recreate task, whose guidance covers its
+    // secret (FAC-WEB-002, T-053 review).
+    if (h.hasSecret && allowed) {
       postTasks.push({
         code: codes.setSecret,
-        paths: [allowed ? hookPath(h.key, 'hasSecret') : hookPath(h.key)],
+        paths: [hookPath(h.key, 'hasSecret')],
         // No full URL: it may carry the credential (ADR-0141).
         params: {
           key: h.key,

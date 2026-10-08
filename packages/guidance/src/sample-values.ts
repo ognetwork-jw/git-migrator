@@ -28,4 +28,5 @@ export const SAMPLE_VALUES: ParamValues = {
   keyName: 'deploy-payments',
   unsupported: ['/image/pipe'],
   activateAfterSecret: true,
+  hasSecret: true,
 };

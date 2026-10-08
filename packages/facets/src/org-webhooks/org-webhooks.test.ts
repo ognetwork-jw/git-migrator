@@ -174,12 +174,10 @@ describe('org-webhooks facet', () => {
       expect(t.postTasks[0]?.params).toMatchObject({ activateAfterSecret: false });
     });
 
-    it('[FAC-WEB-003] a hook with a secret outside the allowlist raises both tasks', () => {
+    it('[FAC-WEB-002] a hook with a secret outside the allowlist raises only the recreate task', () => {
       const t = translate(doc(hook(URL_A, { hasSecret: true })), { allowlist: [] });
-      expect(t.postTasks.map((p) => p.code).sort()).toEqual([
-        'org-webhooks.recreate-manually',
-        'org-webhooks.set-secret',
-      ]);
+      expect(t.postTasks.map((p) => p.code)).toEqual(['org-webhooks.recreate-manually']);
+      expect(t.postTasks[0]?.params).toMatchObject({ hasSecret: true });
     });
 
     it('[FAC-WEB-003] a hook without a secret raises no set-secret task', () => {

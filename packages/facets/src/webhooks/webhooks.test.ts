@@ -237,12 +237,12 @@ describe('webhooks secrets (FAC-WEB-003)', () => {
     );
   });
 
-  it('[FAC-WEB-003] a non-allowlisted hook with a secret gets both tasks', () => {
+  it('[FAC-WEB-002] a non-allowlisted hook with a secret appears only as the recreate task', () => {
     const t = translate([hook(URL_OTHER, { hasSecret: true })]);
-    expect(t.postTasks.map((p) => p.code).sort()).toEqual([
-      'webhooks.recreate-manually',
-      'webhooks.set-secret',
-    ]);
+    expect(t.postTasks.map((p) => p.code)).toEqual(['webhooks.recreate-manually']);
+    // The guidance asks for a new secret; the flag is all that is carried.
+    expect(t.postTasks[0]?.params).toMatchObject({ hasSecret: true });
+    expect(translate([hook(URL_OTHER)]).postTasks[0]?.params).not.toHaveProperty('hasSecret');
   });
 
   it('[FAC-WEB-003] a hook without a secret gets no set-secret task and no active decision', () => {

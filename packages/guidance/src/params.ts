@@ -44,6 +44,11 @@ export const PARAMS = {
   branch: { kind: 'text', description: 'Branch that holds a generated change.' },
   keyName: { kind: 'text', description: 'Deploy key title or file name.' },
   unsupported: { kind: 'list', description: 'YAML paths of unsupported pipeline constructs.' },
+  hasSecret: {
+    kind: 'flag',
+    description:
+      'True when the hook had a secret on the source. The value is never read or carried.',
+  },
   activateAfterSecret: {
     kind: 'flag',
     description:
