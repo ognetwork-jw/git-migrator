@@ -126,6 +126,15 @@ const NON_CODE_NAMES: readonly string[] = [
   'translation.unsupported',
 ];
 
+/**
+ * Codes that implementors added where the spec is silent (PROC-005). They are in `codes.ts` and have
+ * guidance, but the spec does not name them yet. Each one is recorded in an agent-decided ADR.
+ */
+const AGENT_DECIDED_CODES: Readonly<Record<string, string>> = {
+  'environments.name-collision': 'ADR-0145',
+  'secrets.name-invalid': 'ADR-0145',
+};
+
 const SEVERITY_BY_MARK: Record<string, Severity> = {
   B: 'blocker',
   pre: 'pre',
@@ -203,11 +212,9 @@ describe('finding code list matches the facets spec (FAC-002)', () => {
   it('[FAC-002] the spec names every facet code in codes.ts, except the FAC-006 generic ones', () => {
     const mentioned = new Set(specNames().map((n) => n.name));
     const generic = /\.(unmapped-principal|pending-invitation|team-missing)$/;
-    // Agent-decided codes the orchestrator has not folded into the spec yet.
-    const agentDecided: string[] = [];
     for (const spec of FINDING_SPECS) {
       if (spec.facet === 'lifecycle' || generic.test(spec.code)) continue;
-      if (agentDecided.includes(spec.code)) continue;
+      if (spec.code in AGENT_DECIDED_CODES) continue;
       expect(mentioned.has(spec.code), `${spec.code} is not named in docs/spec/05-facets.md`).toBe(
         true,
       );
@@ -239,6 +246,14 @@ describe('finding code list matches the facets spec (FAC-002)', () => {
           `${name} is information only and must not be a finding code`,
         ).toBe(false);
       }
+    }
+  });
+
+  it('[FAC-002] every agent-decided code is listed and not yet named in the spec', () => {
+    const mentioned = new Set(specNames().map((n) => n.name));
+    for (const code of Object.keys(AGENT_DECIDED_CODES)) {
+      expect(FINDING_CODES.includes(code as never), `${code} is not in codes.ts`).toBe(true);
+      expect(mentioned.has(code), `${code} is in the spec now: drop the exemption`).toBe(false);
     }
   });
 

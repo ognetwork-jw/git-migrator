@@ -175,10 +175,14 @@ export const GUIDANCE: Readonly<Record<FindingCode, Guidance>> = {
 
   // environments
   'environments.accept-lossy': acceptLossy('environments.accept-lossy'),
+  'environments.name-collision': plain('environments.name-collision', [
+    step('environments.name-collision', 1),
+  ]),
 
   // variables and secrets
   'variables.accept-lossy': acceptLossy('variables.accept-lossy'),
   'variables.name-invalid': plain('variables.name-invalid', [step('variables.name-invalid', 1)]),
+  'secrets.name-invalid': plain('secrets.name-invalid', [step('secrets.name-invalid', 1)]),
   'secrets.set-value': plain(
     'secrets.set-value',
     [

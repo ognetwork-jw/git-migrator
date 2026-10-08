@@ -180,6 +180,13 @@ export const FINDING_SPECS = [
     verifiable: false,
     ref: 'FAC-ENV',
   },
+  {
+    code: 'environments.name-collision',
+    facet: 'environments',
+    severity: 'pre',
+    verifiable: false,
+    ref: 'ADR-0145',
+  },
   // variables and secrets
   {
     code: 'variables.accept-lossy',
@@ -194,6 +201,13 @@ export const FINDING_SPECS = [
     severity: 'pre',
     verifiable: false,
     ref: 'FAC-VAR-003',
+  },
+  {
+    code: 'secrets.name-invalid',
+    facet: 'secrets',
+    severity: 'pre',
+    verifiable: false,
+    ref: 'ADR-0145',
   },
   {
     code: 'secrets.set-value',
