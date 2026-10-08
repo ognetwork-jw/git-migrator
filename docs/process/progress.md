@@ -10,7 +10,7 @@ The orchestrator maintains this table (see [workflow](workflow.md)). Integration
 | T-004 | in_review | task/T-004-config-observability | [#7](https://github.com/ognetwork-jw/git-migrator/pull/7) | 4 | r3: BLOCKER (decode-before-delimit leak) + MAJOR; escalated implementor haiku→sonnet (PROC-008); fix pass running |
 | T-010 | todo |  | | | |
 | T-011 | merged | task/T-011-core-primitives | [#6](https://github.com/ognetwork-jw/git-migrator/pull/6) | 2 | merged to ai-main 1c654ab; ADR-0058 folded into LIF-002; 0055-0057, 0059 accepted |
-| T-012 | in_review | task/T-012-facet-engine | [#10](https://github.com/ognetwork-jw/git-migrator/pull/10) | 1 | |
+| T-012 | in_review | task/T-012-facet-engine | [#10](https://github.com/ognetwork-jw/git-migrator/pull/10) | 2 | r1: 4 MAJOR (opus adversarial); fix pass queued (implementor cap) |
 | T-013 | todo |  | | | |
 | T-014 | in_progress | task/T-014-guidance | | | |
 | T-015 | in_review | task/T-015-canonical-schemas | [#11](https://github.com/ognetwork-jw/git-migrator/pull/11) | 1 | |
