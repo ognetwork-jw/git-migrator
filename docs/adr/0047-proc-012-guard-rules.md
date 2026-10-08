@@ -1,6 +1,6 @@
 # ADR-0047: PROC-012 guard rules under ADR-0045, and the fail-closed policy
 
-- Status: agent-decided
+- Status: accepted (no spec change needed)
 - Date: 2026-10-08
 
 ## Context

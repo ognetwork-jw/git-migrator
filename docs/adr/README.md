@@ -37,10 +37,10 @@
 | [0040](0040-force-push-fail-closed.md) | Force-push exemptions follow the spec pairing and fail closed on GitHub | accepted (spec updated) |
 | [0041](0041-blocks-creations-follows-push-restriction.md) | `blocksCreations` follows `restrictsPushes` | accepted (spec updated) |
 | [0045](0045-ai-main-integration-branch.md) | Agents integrate into `ai-main`; the human merges into `main` | accepted (user decision) |
-| [0046](0046-hook-test-harness.md) | Hooks are tested by running them in bash against real temporary repositories | agent-decided |
-| [0047](0047-proc-012-guard-rules.md) | PROC-012 guard rules under ADR-0045, and the fail-closed policy | agent-decided |
-| [0048](0048-proc-013-014-stop-hooks.md) | Scope, triggers and loop guard of the SubagentStop and Stop hooks | agent-decided |
-| [0049](0049-ci-pinning-and-gitleaks.md) | CI jobs, action pinning and the gitleaks scan | agent-decided |
+| [0046](0046-hook-test-harness.md) | Hooks are tested by running them in bash against real temporary repositories | accepted (no spec change needed) |
+| [0047](0047-proc-012-guard-rules.md) | PROC-012 guard rules under ADR-0045, and the fail-closed policy | accepted (no spec change needed) |
+| [0048](0048-proc-013-014-stop-hooks.md) | Scope, triggers and loop guard of the SubagentStop and Stop hooks | accepted (no spec change needed) |
+| [0049](0049-ci-pinning-and-gitleaks.md) | CI jobs, action pinning and the gitleaks scan | accepted (no spec change needed) |
 | [0055](0055-core-pure-sha256-and-jcs.md) | Pure SHA-256 in `core`, and a strict RFC 8785 serializer | accepted (no spec change needed) |
 | [0056](0056-field-path-and-pattern-syntax.md) | Field path escaping and Expected Difference pattern semantics | accepted (no spec change needed) |
 | [0057](0057-collection-normalization.md) | Declaring and normalizing keyed collections | accepted (no spec change needed) |

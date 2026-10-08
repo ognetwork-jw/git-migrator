@@ -1,6 +1,6 @@
 # ADR-0049: CI jobs, action pinning and the gitleaks scan
 
-- Status: agent-decided
+- Status: accepted (no spec change needed)
 - Date: 2026-10-08
 
 ## Context

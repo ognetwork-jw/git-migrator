@@ -1,6 +1,6 @@
 # ADR-0048: Scope, triggers and loop guard of the SubagentStop and Stop hooks
 
-- Status: agent-decided
+- Status: accepted (no spec change needed)
 - Date: 2026-10-08
 
 ## Context

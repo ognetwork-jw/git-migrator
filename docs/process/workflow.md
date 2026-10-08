@@ -2,6 +2,8 @@
 
 This is how the orchestrator, implementor, reviewer and merge agents build git-migrator. The human does not review code along the way (Q70). The human validates at the end, starting with the live e2e test.
 
+> **Integration branch (ADR-0045, user decision):** agents integrate into `ai-main`, never `main`. Wherever this document says `main` or `origin/main` for agent work (worktree base, rebase target, merge target, hooks), read `ai-main` / `origin/ai-main`. The human merges `ai-main` into `main`.
+
 ## Roles (PROC-001)
 
 | Role | Responsibilities | Edits |

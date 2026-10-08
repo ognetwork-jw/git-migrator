@@ -1,6 +1,6 @@
 # ADR-0046: Hooks are tested by running them in bash against real temporary repositories
 
-- Status: agent-decided
+- Status: accepted (no spec change needed)
 - Date: 2026-10-08
 
 ## Context
