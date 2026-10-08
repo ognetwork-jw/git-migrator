@@ -6,6 +6,7 @@
   "description": "Better Auth configuration, role mapping, Actor provisioning.",
   "exports": {
     ".": "./src/index.ts",
+    "./capabilities": "./src/capabilities.ts",
     "./testing": "./src/testing/index.ts"
   },
   "scripts": {

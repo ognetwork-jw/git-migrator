@@ -5,8 +5,13 @@ packages:
   - testing/*
 minimumReleaseAgeExclude:
   - '@hono/node-server@2.1.4'
+  - '@playwright/test@1.64.0'
+  - playwright-core@1.64.0
+  - playwright@1.64.0
 allowBuilds:
   protobufjs: false
   prisma: true
   '@prisma/engines': true
   msgpackr-extract: false
+  '@parcel/watcher': false
+  '@swc/core': false

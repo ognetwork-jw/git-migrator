@@ -5,10 +5,16 @@
     "lib": ["ES2024", "DOM"],
     "jsx": "react-jsx",
     "outDir": "dist",
-    "tsBuildInfoFile": "dist/.tsbuildinfo"
+    "tsBuildInfoFile": "dist/.tsbuildinfo",
+    "plugins": [
+      {
+        "name": "next"
+      }
+    ],
+    "types": ["node"]
   },
-  "include": ["src", "app"],
-  "exclude": ["src/**/*.test.*", "src/**/*.spec.*", "app/**/*.test.*"],
+  "include": ["next-env.d.ts", "src", "app", "i18n", "messages/*.json", "next.config.ts"],
+  "exclude": ["src/**/*.test.*", "src/**/*.spec.*", "app/**/*.test.*", "src/test-render.tsx"],
   "references": [
     {
       "path": "../../packages/api"

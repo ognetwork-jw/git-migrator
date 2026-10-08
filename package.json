@@ -22,6 +22,7 @@
     "test": "vitest run --coverage",
     "test:integration": "node tools/not-implemented.ts test:integration T-075",
     "test:e2e": "node tools/not-implemented.ts test:e2e T-083",
+    "test:visual": "pnpm --filter @git-migrator/web build && pnpm --filter @git-migrator/e2e test:visual",
     "test:e2e:live": "node tools/not-implemented.ts test:e2e:live T-095",
     "e2e:live:reset": "node tools/not-implemented.ts e2e:live:reset T-095",
     "helm:check": "node tools/helm-check.ts",

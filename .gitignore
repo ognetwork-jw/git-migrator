@@ -24,3 +24,6 @@ test-results/
 
 # ZenStack temporary Prisma schema (written next to a schema file by zen migrate)
 ~schema*.prisma
+
+# Next.js
+next-env.d.ts

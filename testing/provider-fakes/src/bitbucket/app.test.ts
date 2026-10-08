@@ -98,7 +98,8 @@ async function get(
   path: string,
   headers: Record<string, string | undefined> = HEADERS,
 ) {
-  const res = await fake.app.request(path, { headers });
+  // The cast only satisfies the DOM typings of tsconfig.tests.json; behavior is unchanged.
+  const res = await fake.app.request(path, { headers: headers as Record<string, string> });
   const text = await res.text();
   let body: unknown = text;
   try {
