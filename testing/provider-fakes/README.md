@@ -6,7 +6,7 @@ Stateful HTTP fakes of the provider APIs plus a git http-backend server (TST-010
 |---|---|---|---|
 | Fake Bitbucket Cloud | T-041 | 4010 | implemented |
 | Fake GitHub | T-042 | 4020 | later |
-| Git http-backend + LFS | T-040 | 4030 | later |
+| Git http-backend + LFS | T-040 | 4030 | implemented |
 
 ```sh
 pnpm --filter @git-migrator/provider-fakes start      # all available fakes
@@ -72,5 +72,28 @@ Seam to the git server (T-040): `FakeRepository.gitRoot` is the bare repository 
 ### Validation against Atlassian's OpenAPI
 
 `src/bitbucket/spec-validation.ts` (`validateAgainstSpec(method, pathTemplate, status, body)`) validates a response with `openapi-response-validator` (pinned exactly) against `specs/bitbucket-cloud.openapi.json`. The fake's tests run every endpoint through it. Exemptions are limited to what the provider doc says is not in the schema: `default_branch_deletion` and null `mainbranch` (see ADR-0061). `/downloads` has no response schema and `/issues` is absent from the document, so those two are asserted by hand.
+
+## Fake git and LFS server (TST-013)
+
+Code in `src/git/`. A small Node HTTP server runs `git http-backend` as CGI over bare repositories, plus a minimal Git LFS server.
+
+- URLs: `http://127.0.0.1:4030/{source|target}/{repoPath}.git` (ADR-0070). `source` and `target` have separate repository directories and LFS stores under `rootDir`. LFS lives at `{repoUrl}/info/lfs`.
+- `source` is read-only by default (`allowPush: false`); `target` accepts pushes. Both use `transfer.fsckObjects=true`. `publicUrl` sets the base for LFS links (default: the listening address). `startFakes` starts this server on 4030 (env `FAKE_GIT_PORT`, `FAKE_GIT_ROOT`, `FAKE_GIT_PUBLIC_URL`; `git: false` skips it) and points the fake Bitbucket's clone links at `/source`.
+- Auth: HTTP Basic on every request. Passwords default to `fake-token` (`tokens`), usernames to any (`usernames`), or pass `authenticate`.
+- LFS: batch API (`download`, `upload`), object PUT/GET and `verify`, basic transfer only. A missing object on `download` is a per-object `error.code` 404. Batches over 100 objects get 413.
+- Rejections (ADR-0071): the `target` side defaults to a 100 MiB max blob (pre-receive hook, GitHub's "Large files detected" text) and a 2 GiB max push (counted by the server while streaming, answered with a fixed `413`, nothing applied). Tests lower them with `setLimits` or the `maxBlobBytes` / `maxPushBytes` options; `null` disables a limit.
+- Seeding (ADR-0072): `createBareRepo` and `seedBareRepo(path, { commits, bytesPerCommit, branches, tags, lfsFiles, bigBlobs }, { store, repo })` build repositories without a server.
+- Test helpers: `isolatedGitEnv`, `basicAuthEnv` (credentials via `GIT_CONFIG_*` environment, never argv) and `runGit`.
+
+```ts
+import { startFakeGitServer, createBareRepo, seedBareRepo } from '@git-migrator/provider-fakes';
+
+const git = await startFakeGitServer({ rootDir, port: 0, target: { maxBlobBytes: 1024 * 1024 } });
+await createBareRepo(git.repoDir('source', 'acme/app'));
+await seedBareRepo(git.repoDir('source', 'acme/app'), { commits: 10, tags: [{ name: 'v1', annotated: true }] });
+git.repoUrl('source', 'acme/app'); // http://127.0.0.1:<port>/source/acme/app.git
+```
+
+Standalone: `pnpm --filter @git-migrator/provider-fakes start:git` (env `GM_FAKE_GIT_PORT`, `GM_FAKE_GIT_ROOT`, `GM_FAKE_GIT_TOKEN`). The server needs git >= 2.31 (`assertGitPrerequisites` fails clearly); the tests also need `git-lfs`. The fake GitHub (T-042) must `createBareRepo` on `target` whenever a repository is created.
 
 Declared internal dependencies (ARC-012, checked by `pnpm lint`): none.

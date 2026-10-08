@@ -12,7 +12,8 @@
     "typecheck": "tsc -b",
     "lint": "biome check .",
     "test": "vitest run --root ../.. --project unit testing/provider-fakes",
-    "start": "node src/main.ts"
+    "start": "node src/main.ts",
+    "start:git": "node src/git/main.ts"
   },
   "dependencies": {
     "@hono/node-server": "2.1.4",
