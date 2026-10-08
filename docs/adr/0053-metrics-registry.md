@@ -1,6 +1,6 @@
 # ADR-0053: Prometheus registry, metric labels and the metrics server
 
-- Status: agent-decided
+- Status: accepted (spec updated)
 - Date: 2026-10-08
 - Affects: DEP-050, ADP-060, JOB-047, AUTH-020
 

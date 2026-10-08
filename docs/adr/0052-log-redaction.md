@@ -1,6 +1,6 @@
 # ADR-0052: Log redaction: keys, values, arguments and bounded scanning
 
-- Status: agent-decided
+- Status: accepted (spec updated)
 - Date: 2026-10-08
 - Affects: DEP-050, ARC-030, ADP-071, LIF-044
 

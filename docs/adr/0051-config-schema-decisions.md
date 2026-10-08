@@ -1,6 +1,6 @@
 # ADR-0051: Configuration schema decisions where DEP-040 is silent
 
-- Status: agent-decided
+- Status: accepted (spec updated)
 - Date: 2026-10-08
 - Affects: DEP-040, ARC-030, AUTH-010, AUTH-012, FAC-005, JOB-043, JOB-050, LIF-030, LIF-044, ADP-071
 

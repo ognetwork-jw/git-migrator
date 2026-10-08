@@ -208,17 +208,26 @@ schedules: { inventory: "0 */6 * * *", analysisFeeder: "* * * * *", analysisStal
              driftReadsSource: false }
 ```
 
+Loading rules (ADR-0050, ADR-0051):
+
+- The example is a template: `roleMappings: [ ... ]` and the empty `tenantId` are placeholders and are rejected as written; production requires a non-empty Entra tenant. `appId: 0`, `installationId: 0` and `orgId: ""` are accepted placeholders that the adapter treats as unset.
+- Every scalar leaf can be overridden by an environment variable named `GM_` plus the key path in SCREAMING_SNAKE_CASE (`quota.safetyFactor` → `GM_QUOTA_SAFETY_FACTOR`). Lists and maps cannot. Overrides apply after the file and before validation; an empty variable is ignored; unknown `GM_*` variables are ignored. Decimal literals become numbers and `true`/`false` booleans.
+- Every object is strict (unknown keys are errors). URL settings must be http(s) without credentials, query or fragment. Unspecified keys default to the values in the spec text that uses them (ADR-0051 lists them); `environment` defaults to `development`, with a warning when production-only guards depend on that default.
+- A missing `GM_CONFIG_FILE` means defaults plus overrides. An invalid configuration exits with status 78 (`EX_CONFIG`) after reporting every problem, one line each with its path and the overriding variable.
+
 ## Observability (DEP-050)
 
-- **Logs:** pino JSON to stdout. Fields include `level`, `time`, `msg`, `component`, `runId`, `migrationId`, `jobId` and `traceId`. Secrets are redacted with pino `redact` paths. This is the first-day signal (Q42).
-- **Traces:** the OpenTelemetry Node SDK, exporting only when `observability.otlpEndpoint` is set. HTTP server, outgoing HTTP, pg and BullMQ jobs are instrumented.
+- **Logs:** pino JSON to stdout. Fields include `level`, `time`, `msg`, `component`, `runId`, `migrationId`, `jobId` and `traceId`. Secrets are redacted with pino `redact` paths. This is the first-day signal (Q42). A second layer scrubs every log call (messages, fields, errors and their causes) for credentials: header values, credential schemes, token shapes, base64 `user:secret` pairs, URL userinfo and sensitive key-value pairs, including percent-encoded forms; input is capped at 64 KiB and scanning is linear (ADR-0052).
+- **Traces:** the OpenTelemetry Node SDK, exporting only when `observability.otlpEndpoint` is set. HTTP server, outgoing HTTP, pg and BullMQ jobs are instrumented. The SDK always starts (so logs carry `traceId`); without an endpoint spans are discarded. Only traces are exported through OpenTelemetry; `OTEL_*` exporter variables are ignored (ADR-0054).
 - **Metrics:** `prom-client` on port 9464 path `/metrics`. Includes the default Node metrics plus:
-  - `gm_provider_requests_total`
-  - `gm_provider_request_duration_seconds`
+  - `gm_provider_requests_total{provider,endpoint,bucket,status}`
+  - `gm_provider_request_duration_seconds{provider,endpoint,bucket,status}`
   - `gm_quota_used{bucket,pool}`, `gm_quota_limit{bucket}`
   - `gm_runs_total{kind,status}`, `gm_run_duration_seconds{kind}`
   - `gm_migrations{route,status,readiness}`
   - `gm_queue_jobs{queue,state}`
+
+  Application code writes metrics only through typed recorders; the metrics server is a plain HTTP server serving only `GET /metrics` (ADR-0053).
 
 ## CI/CD (DEP-060)
 

@@ -1,6 +1,6 @@
 # ADR-0054: Tracing starts without export; OTLP export only when configured
 
-- Status: agent-decided
+- Status: accepted (spec updated)
 - Date: 2026-10-08
 - Affects: DEP-050, JOB-010
 

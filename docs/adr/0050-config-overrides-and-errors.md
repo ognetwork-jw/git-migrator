@@ -1,6 +1,6 @@
 # ADR-0050: Configuration environment overrides and error reporting
 
-- Status: agent-decided
+- Status: accepted (spec updated)
 - Date: 2026-10-08
 - Affects: ARC-030, DEP-040
 
