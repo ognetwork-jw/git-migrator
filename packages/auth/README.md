@@ -32,4 +32,11 @@ Internal dependencies (ARC-012): `@git-migrator/db`, `@git-migrator/config`, `@g
 
 UI and API code take the display name and email from the Actor, never from `session.user`: Better Auth stores a synthetic `<oid>@entra.invalid` address for Entra users (ADR-0171), and the session response replaces it with the Actor's email.
 
-Not in this package yet: the sign-in and `/auth/error` pages (UI tasks), the Hono mount (T-021), request-time resolution of a session or API key to an Actor (T-021).
+## API keys and capabilities (T-021)
+
+- `issueApiKey(db, { actorId, name, expiresAt?, issuedBy })` creates a key for a `service` Actor (`gm_<8>_<32>`, base62, CSPRNG) and returns the full key once; only `sha256(key)` is stored. It writes the `AuditEvent` in the same transaction. `revokeApiKey(db, id, revokedBy)` sets `revokedAt` and audits it.
+- `verifyApiKey(db, key)` looks the key up by prefix, compares hashes in constant time and returns the service Actor, or `{ status: 'invalid' }` for every failure (malformed, unknown, wrong secret, revoked, expired, disabled or human Actor). `lastUsedAt` is written at most once a minute. These functions take the privileged client: the hash is not readable through RPC.
+- `can(actor, capability)` is the shared AUTH-020 check for custom endpoints (`CAPABILITY_MIN_ROLE`); a disabled or absent Actor holds nothing.
+- Request-time resolution of a session or API key to an Actor lives in `@git-migrator/api` (`resolvePrincipal`). The Hono mount calls `AuthService.handle`.
+
+Not in this package yet: the sign-in and `/auth/error` pages (UI tasks).

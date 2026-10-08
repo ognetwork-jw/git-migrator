@@ -7,6 +7,22 @@ export {
   provisionMappedActor,
 } from './actors.ts';
 export {
+  API_KEY_PATTERN,
+  ApiKeyError,
+  type ApiKeyErrorCode,
+  type ApiKeyVerification,
+  AUDIT_API_KEY_ISSUED,
+  AUDIT_API_KEY_REVOKED,
+  generateApiKey,
+  hashApiKey,
+  type IssueApiKeyInput,
+  type IssuedApiKey,
+  issueApiKey,
+  LAST_USED_INTERVAL_MS,
+  revokeApiKey,
+  verifyApiKey,
+} from './api-keys.ts';
+export {
   AUTH_BASE_PATH,
   AUTH_ERROR_CODES,
   type AuthErrorCode,
@@ -24,6 +40,12 @@ export {
   SESSION_UPDATE_AGE_SECONDS,
   syntheticEmail,
 } from './auth.ts';
+export {
+  type Authorizable,
+  CAPABILITY_MIN_ROLE,
+  type Capability,
+  can,
+} from './capabilities.ts';
 export { betterAuthLogger, scrubEmails } from './logger.ts';
 export { methodHasMappings, outranks, type Role, type RoleMapping, resolveRole } from './roles.ts';
 export { createAuthPool, migrateAuthSchema } from './storage.ts';
