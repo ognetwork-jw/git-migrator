@@ -1,6 +1,6 @@
 # ADR-0095: Naming pipeline semantics, validation and collision keys
 
-- Status: agent-decided
+- Status: accepted (spec updated)
 - Date: 2026-10-08
 - Task: T-013
 - Affects: LIF-030, LIF-031

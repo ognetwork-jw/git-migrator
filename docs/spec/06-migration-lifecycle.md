@@ -80,7 +80,7 @@ An Analysis runs in an analysis job (JOB-020):
 
 1. Load the Route, mappings, naming rules, allowlist, overlays and Expected Differences.
 2. Read every in-scope Facet from the source, storing Snapshots. Remove resources created by the framework's own source-side Mutations before translation (LIF-045). Endpoint dependencies apply only to principals referenced in this repository's own documents (FAC-006). Unrelated workspace membership never affects a repository's readiness.
-3. Resolve the planned target name (LIF-030). Find the target by `Migration.targetRepositoryId` if set, otherwise by name. If it exists, read all target Facets too. A target whose ID equals `targetRepositoryId` is **owned** by this Migration and never raises `target.exists-*` blockers.
+3. Resolve the planned target name (LIF-030). Find the target by `Migration.targetRepositoryId` if set, otherwise by name. If it exists, read all target Facets too. A target whose ID equals `targetRepositoryId` is **owned** by this Migration and never raises `target.exists-*` blockers, unless a *different* target repository holds the planned name, which raises `target.exists-nonempty` (ADR-0095). A target claimed by another Migration raises `target.owned-by-other-migration` (LIF-031).
 4. For each Facet, run `normalize` → `translate`, with Route policies applied (FAC-005).
 5. Compute the Plan:
    - Steps (LIF-040 order).
@@ -101,6 +101,7 @@ type NamingStep =
   | { var: string; op: 'replace'; pattern: string; with: string };
 ```
 
+- `replace` patterns are RE2 (linear time; no back references or lookarounds). `with` uses RE2J replacement syntax: `$1`, `$<name>` and `$$`; unresolved references are rejected. Patterns and `with` are at most 200 characters, and every variable is capped at 256 code points after each step. Pipeline faults become `naming.invalid` findings; the pipeline never throws. `.`, `..` and a trailing `.git` (judged after NFKC) are always invalid (ADR-0095).
 - The default pipeline for Bitbucket → GitHub routes is: `namespace = projectKey | lowercase`, `repository = slug | kebab`, `template = "{namespace}-{repository}"`.
 - Rule precedence: repository-scope `override` > repository-scope pipeline > namespace-scope pipeline > Route default (`routes[].defaults.naming` in config; there is no database row for it).
 - Team slugs use `routes[].defaults.teamNaming`, a pipeline over the variable `group`.

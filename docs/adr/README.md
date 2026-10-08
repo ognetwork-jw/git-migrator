@@ -58,6 +58,6 @@
 | [0086](0086-scoped-collection-key.md) | `variables` and `secrets` carry a derived `key` field | accepted (spec updated) |
 | [0087](0087-org-facet-schemas-and-strictness.md) | Endpoint-level secrets/variables/webhooks schemas; strict objects | accepted (spec updated) |
 | [0088](0088-parse-validation-and-webhook-keys.md) | Parse-time key validation, webhook keys, URL and text rules, schema versions | accepted (spec updated) |
-| [0095](0095-naming-semantics.md) | Naming pipeline semantics, validation and collision keys | agent-decided |
+| [0095](0095-naming-semantics.md) | Naming pipeline semantics, validation and collision keys | accepted (spec updated) |
 
 New ADRs continue from 0028. Implementor decisions use `status: agent-decided` (PROC-005).
