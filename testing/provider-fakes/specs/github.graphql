@@ -1,0 +1,638 @@
+# Trimmed subset of the GitHub GraphQL schema for git-migrator (T-031, TST-011).
+# Source: octokit/graphql-schema @ 82ff2d4780080e6929ebb95608cefa22dfa05ac7 (schema.graphql), retrieved 2026-10-08.
+# Only the branch-protection query/mutations and the types they reach are kept. Large types
+# (Query, Mutation, Repository, BranchProtectionRule, User, Team, App, Organization) are cut to
+# the listed fields and implement only Node. All other definitions are verbatim from the source.
+# Regenerate with testing/provider-fakes/specs/README.md instructions.
+schema {
+  query: Query
+  mutation: Mutation
+}
+
+"""A GitHub App."""
+type App implements Node {
+  """Identifies the primary key from the database."""
+  databaseId: Int
+  """The Node ID of the App object"""
+  id: ID!
+  """The name of the app."""
+  name: String!
+  """A slug based on the name of the app for use in URLs."""
+  slug: String!
+}
+
+"""Types which can be actors for `BranchActorAllowance` objects."""
+union BranchActorAllowanceActor = App | Team | User
+
+"""A branch protection rule."""
+type BranchProtectionRule implements Node {
+  """Can this branch be deleted."""
+  allowsDeletions: Boolean!
+  """Are force pushes allowed on this branch."""
+  allowsForcePushes: Boolean!
+  """Is branch creation a protected operation."""
+  blocksCreations: Boolean!
+  """A list of actors able to force push for this branch protection rule."""
+  bypassForcePushAllowances(
+    """Returns the elements in the list that come after the specified cursor."""
+    after: String
+    """
+    Returns the elements in the list that come before the specified cursor.
+    """
+    before: String
+    """Returns the first _n_ elements from the list."""
+    first: Int
+    """Returns the last _n_ elements from the list."""
+    last: Int
+  ): BypassForcePushAllowanceConnection!
+  """A list of actors able to bypass PRs for this branch protection rule."""
+  bypassPullRequestAllowances(
+    """Returns the elements in the list that come after the specified cursor."""
+    after: String
+    """
+    Returns the elements in the list that come before the specified cursor.
+    """
+    before: String
+    """Returns the first _n_ elements from the list."""
+    first: Int
+    """Returns the last _n_ elements from the list."""
+    last: Int
+  ): BypassPullRequestAllowanceConnection!
+  """Identifies the primary key from the database."""
+  databaseId: Int
+  """
+  Will new commits pushed to matching branches dismiss pull request review approvals.
+  """
+  dismissesStaleReviews: Boolean!
+  """The Node ID of the BranchProtectionRule object"""
+  id: ID!
+  """Can admins override branch protection."""
+  isAdminEnforced: Boolean!
+  """
+  Whether users can pull changes from upstream when the branch is locked. Set to
+  `true` to allow fork syncing. Set to `false` to prevent fork syncing.
+  """
+  lockAllowsFetchAndMerge: Boolean!
+  """
+  Whether to set the branch as read-only. If this is true, users will not be able to push to the branch.
+  """
+  lockBranch: Boolean!
+  """Identifies the protection rule pattern."""
+  pattern: String!
+  """A list push allowances for this branch protection rule."""
+  pushAllowances(
+    """Returns the elements in the list that come after the specified cursor."""
+    after: String
+    """
+    Returns the elements in the list that come before the specified cursor.
+    """
+    before: String
+    """Returns the first _n_ elements from the list."""
+    first: Int
+    """Returns the last _n_ elements from the list."""
+    last: Int
+  ): PushAllowanceConnection!
+  """The repository associated with this branch protection rule."""
+  repository: Repository
+  """
+  Whether the most recent push must be approved by someone other than the person who pushed it
+  """
+  requireLastPushApproval: Boolean!
+  """Number of approving reviews required to update matching branches."""
+  requiredApprovingReviewCount: Int
+  """
+  List of required deployment environments that must be deployed successfully to update matching branches
+  """
+  requiredDeploymentEnvironments: [String]
+  """
+  List of required status check contexts that must pass for commits to be accepted to matching branches.
+  """
+  requiredStatusCheckContexts: [String]
+  """
+  List of required status checks that must pass for commits to be accepted to matching branches.
+  """
+  requiredStatusChecks: [RequiredStatusCheckDescription!]
+  """Are approving reviews required to update matching branches."""
+  requiresApprovingReviews: Boolean!
+  """Are reviews from code owners required to update matching branches."""
+  requiresCodeOwnerReviews: Boolean!
+  """Are commits required to be signed."""
+  requiresCommitSignatures: Boolean!
+  """Are conversations required to be resolved before merging."""
+  requiresConversationResolution: Boolean!
+  """
+  Does this branch require deployment to specific environments before merging
+  """
+  requiresDeployments: Boolean!
+  """Are merge commits prohibited from being pushed to this branch."""
+  requiresLinearHistory: Boolean!
+  """Are status checks required to update matching branches."""
+  requiresStatusChecks: Boolean!
+  """Are branches required to be up to date before merging."""
+  requiresStrictStatusChecks: Boolean!
+  """Is pushing to matching branches restricted."""
+  restrictsPushes: Boolean!
+  """Is dismissal of pull request reviews restricted."""
+  restrictsReviewDismissals: Boolean!
+}
+
+"""The connection type for BranchProtectionRule."""
+type BranchProtectionRuleConnection {
+  """A list of edges."""
+  edges: [BranchProtectionRuleEdge]
+  """A list of nodes."""
+  nodes: [BranchProtectionRule]
+  """Information to aid in pagination."""
+  pageInfo: PageInfo!
+  """Identifies the total count of items in the connection."""
+  totalCount: Int!
+}
+
+"""An edge in a connection."""
+type BranchProtectionRuleEdge {
+  """A cursor for use in pagination."""
+  cursor: String!
+  """The item at the end of the edge."""
+  node: BranchProtectionRule
+}
+
+"""
+A user, team, or app who has the ability to bypass a force push requirement on a protected branch.
+"""
+type BypassForcePushAllowance implements Node {
+  """The actor that can force push."""
+  actor: BranchActorAllowanceActor
+  """
+  Identifies the branch protection rule associated with the allowed user, team, or app.
+  """
+  branchProtectionRule: BranchProtectionRule
+  """The Node ID of the BypassForcePushAllowance object"""
+  id: ID!
+}
+
+"""The connection type for BypassForcePushAllowance."""
+type BypassForcePushAllowanceConnection {
+  """A list of edges."""
+  edges: [BypassForcePushAllowanceEdge]
+  """A list of nodes."""
+  nodes: [BypassForcePushAllowance]
+  """Information to aid in pagination."""
+  pageInfo: PageInfo!
+  """Identifies the total count of items in the connection."""
+  totalCount: Int!
+}
+
+"""An edge in a connection."""
+type BypassForcePushAllowanceEdge {
+  """A cursor for use in pagination."""
+  cursor: String!
+  """The item at the end of the edge."""
+  node: BypassForcePushAllowance
+}
+
+"""
+A user, team, or app who has the ability to bypass a pull request requirement on a protected branch.
+"""
+type BypassPullRequestAllowance implements Node {
+  """The actor that can bypass."""
+  actor: BranchActorAllowanceActor
+  """
+  Identifies the branch protection rule associated with the allowed user, team, or app.
+  """
+  branchProtectionRule: BranchProtectionRule
+  """The Node ID of the BypassPullRequestAllowance object"""
+  id: ID!
+}
+
+"""The connection type for BypassPullRequestAllowance."""
+type BypassPullRequestAllowanceConnection {
+  """A list of edges."""
+  edges: [BypassPullRequestAllowanceEdge]
+  """A list of nodes."""
+  nodes: [BypassPullRequestAllowance]
+  """Information to aid in pagination."""
+  pageInfo: PageInfo!
+  """Identifies the total count of items in the connection."""
+  totalCount: Int!
+}
+
+"""An edge in a connection."""
+type BypassPullRequestAllowanceEdge {
+  """A cursor for use in pagination."""
+  cursor: String!
+  """The item at the end of the edge."""
+  node: BypassPullRequestAllowance
+}
+
+"""Autogenerated input type of CreateBranchProtectionRule"""
+input CreateBranchProtectionRuleInput {
+  """Can this branch be deleted."""
+  allowsDeletions: Boolean
+  """Are force pushes allowed on this branch."""
+  allowsForcePushes: Boolean
+  """Is branch creation a protected operation."""
+  blocksCreations: Boolean
+  """
+  A list of User, Team, or App IDs allowed to bypass force push targeting matching branches.
+  """
+  bypassForcePushActorIds: [ID!]
+  """
+  A list of User, Team, or App IDs allowed to bypass pull requests targeting matching branches.
+  """
+  bypassPullRequestActorIds: [ID!]
+  """A unique identifier for the client performing the mutation."""
+  clientMutationId: String
+  """
+  Will new commits pushed to matching branches dismiss pull request review approvals.
+  """
+  dismissesStaleReviews: Boolean
+  """Can admins override branch protection."""
+  isAdminEnforced: Boolean
+  """
+  Whether users can pull changes from upstream when the branch is locked. Set to
+  `true` to allow fork syncing. Set to `false` to prevent fork syncing.
+  """
+  lockAllowsFetchAndMerge: Boolean
+  """
+  Whether to set the branch as read-only. If this is true, users will not be able to push to the branch.
+  """
+  lockBranch: Boolean
+  """The glob-like pattern used to determine matching branches."""
+  pattern: String!
+  """A list of User, Team, or App IDs allowed to push to matching branches."""
+  pushActorIds: [ID!]
+  """
+  The global relay id of the repository in which a new branch protection rule should be created in.
+  """
+  repositoryId: ID!
+  """
+  Whether the most recent push must be approved by someone other than the person who pushed it
+  """
+  requireLastPushApproval: Boolean
+  """Number of approving reviews required to update matching branches."""
+  requiredApprovingReviewCount: Int
+  """The list of required deployment environments"""
+  requiredDeploymentEnvironments: [String!]
+  """
+  List of required status check contexts that must pass for commits to be accepted to matching branches.
+  """
+  requiredStatusCheckContexts: [String!]
+  """The list of required status checks"""
+  requiredStatusChecks: [RequiredStatusCheckInput!]
+  """Are approving reviews required to update matching branches."""
+  requiresApprovingReviews: Boolean
+  """Are reviews from code owners required to update matching branches."""
+  requiresCodeOwnerReviews: Boolean
+  """Are commits required to be signed."""
+  requiresCommitSignatures: Boolean
+  """Are conversations required to be resolved before merging."""
+  requiresConversationResolution: Boolean
+  """Are successful deployments required before merging."""
+  requiresDeployments: Boolean
+  """Are merge commits prohibited from being pushed to this branch."""
+  requiresLinearHistory: Boolean
+  """Are status checks required to update matching branches."""
+  requiresStatusChecks: Boolean
+  """Are branches required to be up to date before merging."""
+  requiresStrictStatusChecks: Boolean
+  """Is pushing to matching branches restricted."""
+  restrictsPushes: Boolean
+  """Is dismissal of pull request reviews restricted."""
+  restrictsReviewDismissals: Boolean
+  """
+  A list of User, Team, or App IDs allowed to dismiss reviews on pull requests targeting matching branches.
+  """
+  reviewDismissalActorIds: [ID!]
+}
+
+"""Autogenerated return type of CreateBranchProtectionRule."""
+type CreateBranchProtectionRulePayload {
+  """The newly created BranchProtectionRule."""
+  branchProtectionRule: BranchProtectionRule
+  """A unique identifier for the client performing the mutation."""
+  clientMutationId: String
+}
+
+"""An ISO-8601 encoded UTC date string."""
+scalar DateTime
+
+"""Autogenerated input type of DeleteBranchProtectionRule"""
+input DeleteBranchProtectionRuleInput {
+  """The global relay id of the branch protection rule to be deleted."""
+  branchProtectionRuleId: ID!
+  """A unique identifier for the client performing the mutation."""
+  clientMutationId: String
+}
+
+"""Autogenerated return type of DeleteBranchProtectionRule."""
+type DeleteBranchProtectionRulePayload {
+  """A unique identifier for the client performing the mutation."""
+  clientMutationId: String
+}
+
+"""The root query for implementing GraphQL mutations."""
+type Mutation {
+  """Create a new branch protection rule"""
+  createBranchProtectionRule(
+    """Parameters for CreateBranchProtectionRule"""
+    input: CreateBranchProtectionRuleInput!
+  ): CreateBranchProtectionRulePayload
+  """Delete a branch protection rule"""
+  deleteBranchProtectionRule(
+    """Parameters for DeleteBranchProtectionRule"""
+    input: DeleteBranchProtectionRuleInput!
+  ): DeleteBranchProtectionRulePayload
+  """Update a branch protection rule"""
+  updateBranchProtectionRule(
+    """Parameters for UpdateBranchProtectionRule"""
+    input: UpdateBranchProtectionRuleInput!
+  ): UpdateBranchProtectionRulePayload
+}
+
+"""An object with an ID."""
+interface Node {
+  """ID of the object."""
+  id: ID!
+}
+
+"""
+An account on GitHub, with one or more owners, that has repositories, members and teams.
+"""
+type Organization implements Node {
+  """Identifies the primary key from the database."""
+  databaseId: Int
+  """The Node ID of the Organization object"""
+  id: ID!
+  """The organization's login name."""
+  login: String!
+}
+
+"""Information about pagination in a connection."""
+type PageInfo {
+  """When paginating forwards, the cursor to continue."""
+  endCursor: String
+  """When paginating forwards, are there more items?"""
+  hasNextPage: Boolean!
+  """When paginating backwards, are there more items?"""
+  hasPreviousPage: Boolean!
+  """When paginating backwards, the cursor to continue."""
+  startCursor: String
+}
+
+"""
+A team, user, or app who has the ability to push to a protected branch.
+"""
+type PushAllowance implements Node {
+  """The actor that can push."""
+  actor: PushAllowanceActor
+  """
+  Identifies the branch protection rule associated with the allowed user, team, or app.
+  """
+  branchProtectionRule: BranchProtectionRule
+  """The Node ID of the PushAllowance object"""
+  id: ID!
+}
+
+"""Types that can be an actor."""
+union PushAllowanceActor = App | Team | User
+
+"""The connection type for PushAllowance."""
+type PushAllowanceConnection {
+  """A list of edges."""
+  edges: [PushAllowanceEdge]
+  """A list of nodes."""
+  nodes: [PushAllowance]
+  """Information to aid in pagination."""
+  pageInfo: PageInfo!
+  """Identifies the total count of items in the connection."""
+  totalCount: Int!
+}
+
+"""An edge in a connection."""
+type PushAllowanceEdge {
+  """A cursor for use in pagination."""
+  cursor: String!
+  """The item at the end of the edge."""
+  node: PushAllowance
+}
+
+"""The query root of GitHub's GraphQL interface."""
+type Query {
+  """Fetches an object given its ID."""
+  node(
+    """ID of the object."""
+    id: ID!
+  ): Node
+  """Lookup a organization by login."""
+  organization(
+    """The organization's login."""
+    login: String!
+  ): Organization
+  """The client's rate limit information."""
+  rateLimit(
+    """If true, calculate the cost for the query without evaluating it"""
+    dryRun: Boolean = false
+  ): RateLimit
+  """Lookup a given repository by the owner and repository name."""
+  repository(
+    """
+    Follow repository renames. If disabled, a repository referenced by its old name will return an error.
+    """
+    followRenames: Boolean = true
+    """The name of the repository"""
+    name: String!
+    """The login field of a user or organization"""
+    owner: String!
+  ): Repository
+  """Lookup a user by login."""
+  user(
+    """The user's login."""
+    login: String!
+  ): User
+}
+
+"""Represents the client's rate limit."""
+type RateLimit {
+  """The point cost for the current query counting against the rate limit."""
+  cost: Int!
+  """
+  The maximum number of points the client is permitted to consume in a 60 minute window.
+  """
+  limit: Int!
+  """The maximum number of nodes this query may return"""
+  nodeCount: Int!
+  """The number of points remaining in the current rate limit window."""
+  remaining: Int!
+  """
+  The time at which the current rate limit window resets in UTC epoch seconds.
+  """
+  resetAt: DateTime!
+  """The number of points used in the current rate limit window."""
+  used: Int!
+}
+
+"""A repository contains the content for a project."""
+type Repository implements Node {
+  """A list of branch protection rules for this repository."""
+  branchProtectionRules(
+    """Returns the elements in the list that come after the specified cursor."""
+    after: String
+    """
+    Returns the elements in the list that come before the specified cursor.
+    """
+    before: String
+    """Returns the first _n_ elements from the list."""
+    first: Int
+    """Returns the last _n_ elements from the list."""
+    last: Int
+  ): BranchProtectionRuleConnection!
+  """Identifies the primary key from the database."""
+  databaseId: Int
+  """The Node ID of the Repository object"""
+  id: ID!
+  """Returns whether or not this repository is empty."""
+  isEmpty: Boolean!
+  """Identifies if the repository is private or internal."""
+  isPrivate: Boolean!
+  """The name of the repository."""
+  name: String!
+  """The repository's name with owner."""
+  nameWithOwner: String!
+}
+
+"""
+Represents a required status check for a protected branch, but not any specific run of that check.
+"""
+type RequiredStatusCheckDescription {
+  """The App that must provide this status in order for it to be accepted."""
+  app: App
+  """The name of this status."""
+  context: String!
+}
+
+"""Specifies the attributes for a new or updated required status check."""
+input RequiredStatusCheckInput {
+  """
+  The ID of the App that must set the status in order for it to be accepted.
+  Omit this value to use whichever app has recently been setting this status, or
+  use "any" to allow any app to set the status.
+  """
+  appId: ID
+  """
+  Status check context that must pass for commits to be accepted to the matching branch.
+  """
+  context: String!
+}
+
+"""A team of users in an organization."""
+type Team implements Node {
+  """The slug corresponding to the organization and team."""
+  combinedSlug: String!
+  """Identifies the primary key from the database."""
+  databaseId: Int
+  """The Node ID of the Team object"""
+  id: ID!
+  """The name of the team."""
+  name: String!
+  """The slug corresponding to the team."""
+  slug: String!
+}
+
+"""Autogenerated input type of UpdateBranchProtectionRule"""
+input UpdateBranchProtectionRuleInput {
+  """Can this branch be deleted."""
+  allowsDeletions: Boolean
+  """Are force pushes allowed on this branch."""
+  allowsForcePushes: Boolean
+  """Is branch creation a protected operation."""
+  blocksCreations: Boolean
+  """The global relay id of the branch protection rule to be updated."""
+  branchProtectionRuleId: ID!
+  """
+  A list of User, Team, or App IDs allowed to bypass force push targeting matching branches.
+  """
+  bypassForcePushActorIds: [ID!]
+  """
+  A list of User, Team, or App IDs allowed to bypass pull requests targeting matching branches.
+  """
+  bypassPullRequestActorIds: [ID!]
+  """A unique identifier for the client performing the mutation."""
+  clientMutationId: String
+  """
+  Will new commits pushed to matching branches dismiss pull request review approvals.
+  """
+  dismissesStaleReviews: Boolean
+  """Can admins override branch protection."""
+  isAdminEnforced: Boolean
+  """
+  Whether users can pull changes from upstream when the branch is locked. Set to
+  `true` to allow fork syncing. Set to `false` to prevent fork syncing.
+  """
+  lockAllowsFetchAndMerge: Boolean
+  """
+  Whether to set the branch as read-only. If this is true, users will not be able to push to the branch.
+  """
+  lockBranch: Boolean
+  """The glob-like pattern used to determine matching branches."""
+  pattern: String
+  """A list of User, Team, or App IDs allowed to push to matching branches."""
+  pushActorIds: [ID!]
+  """
+  Whether the most recent push must be approved by someone other than the person who pushed it
+  """
+  requireLastPushApproval: Boolean
+  """Number of approving reviews required to update matching branches."""
+  requiredApprovingReviewCount: Int
+  """The list of required deployment environments"""
+  requiredDeploymentEnvironments: [String!]
+  """
+  List of required status check contexts that must pass for commits to be accepted to matching branches.
+  """
+  requiredStatusCheckContexts: [String!]
+  """The list of required status checks"""
+  requiredStatusChecks: [RequiredStatusCheckInput!]
+  """Are approving reviews required to update matching branches."""
+  requiresApprovingReviews: Boolean
+  """Are reviews from code owners required to update matching branches."""
+  requiresCodeOwnerReviews: Boolean
+  """Are commits required to be signed."""
+  requiresCommitSignatures: Boolean
+  """Are conversations required to be resolved before merging."""
+  requiresConversationResolution: Boolean
+  """Are successful deployments required before merging."""
+  requiresDeployments: Boolean
+  """Are merge commits prohibited from being pushed to this branch."""
+  requiresLinearHistory: Boolean
+  """Are status checks required to update matching branches."""
+  requiresStatusChecks: Boolean
+  """Are branches required to be up to date before merging."""
+  requiresStrictStatusChecks: Boolean
+  """Is pushing to matching branches restricted."""
+  restrictsPushes: Boolean
+  """Is dismissal of pull request reviews restricted."""
+  restrictsReviewDismissals: Boolean
+  """
+  A list of User, Team, or App IDs allowed to dismiss reviews on pull requests targeting matching branches.
+  """
+  reviewDismissalActorIds: [ID!]
+}
+
+"""Autogenerated return type of UpdateBranchProtectionRule."""
+type UpdateBranchProtectionRulePayload {
+  """The newly created BranchProtectionRule."""
+  branchProtectionRule: BranchProtectionRule
+  """A unique identifier for the client performing the mutation."""
+  clientMutationId: String
+}
+
+"""
+A user is an individual's account on GitHub that owns repositories and can make new content.
+"""
+type User implements Node {
+  """Identifies the primary key from the database."""
+  databaseId: Int
+  """The Node ID of the User object"""
+  id: ID!
+  """The username used to login."""
+  login: String!
+}
