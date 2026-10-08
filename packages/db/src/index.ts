@@ -48,3 +48,4 @@ export {
   seedDev,
   TEST_ACTORS,
 } from './seed.ts';
+export { markAnalysesStale, type StaleScope } from './staleness.ts';

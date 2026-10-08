@@ -17,7 +17,7 @@ import {
   resolveRoutePolicies,
   transition,
 } from '@git-migrator/core';
-import type { Db } from '@git-migrator/db';
+import { type Db, markAnalysesStale, type StaleScope } from '@git-migrator/db';
 import type { Logger } from '@git-migrator/observability';
 import type { ProviderRegistry } from '@git-migrator/registry';
 import type pg from 'pg';
@@ -516,26 +516,14 @@ export async function runInventory(
       });
     }
     return {
-      stale: await markStale({ sourceRepositoryId: { in: staleRepositoryIds } }),
+      stale: await markStale({ sourceRepositoryIds: staleRepositoryIds }),
       reappeared,
     };
   }
 
-  /** Sets `analysisStaleAt` on Migrations that have an Analysis and are not already stale. */
-  async function markStale(where: Record<string, unknown>): Promise<number> {
-    if (
-      Object.values(where).some(
-        (v) =>
-          Array.isArray((v as { in?: unknown[] })?.in) && (v as { in: unknown[] }).in.length === 0,
-      )
-    ) {
-      return 0;
-    }
-    const result = await db.migration.updateMany({
-      where: { ...where, latestAnalysisId: { not: null }, analysisStaleAt: null },
-      data: { analysisStaleAt: now() },
-    });
-    return result.count;
+  /** Marks Analyses stale (LIF-021): a still-fresh one becomes stale now (ADR-0310). */
+  function markStale(scope: StaleScope): Promise<number> {
+    return markAnalysesStale(db, scope, now());
   }
 
   /**

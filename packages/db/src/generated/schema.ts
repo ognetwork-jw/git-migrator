@@ -388,6 +388,12 @@ export class SchemaType implements SchemaDef {
                     optional: true,
                     attributes: [{ name: "@map", args: [{ name: "name", value: ExpressionUtils.literal("retired_at") }] }, { name: "@db.Timestamptz", args: [{ name: "x", value: ExpressionUtils.literal(3) }] }] as readonly AttributeApplication[]
                 },
+                avgCallsPerAnalysis: {
+                    name: "avgCallsPerAnalysis",
+                    type: "Float",
+                    attributes: [{ name: "@default", args: [{ name: "value", value: ExpressionUtils.literal(30) }] }, { name: "@map", args: [{ name: "name", value: ExpressionUtils.literal("avg_calls_per_analysis") }] }] as readonly AttributeApplication[],
+                    default: 30 as FieldDefault
+                },
                 createdAt: {
                     name: "createdAt",
                     type: "DateTime",

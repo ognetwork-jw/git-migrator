@@ -141,6 +141,7 @@ model Route {
     configHash          String                  @map("config_hash") // change marks analyses stale (LIF-021)
     sourcePostAction    String                  @map("source_post_action") // "read-only" | "none" (LIF-070)
     retiredAt           DateTime?               @map("retired_at") @db.Timestamptz(3) // set when config sync no longer sees the Route (ADR-0121)
+    avgCallsPerAnalysis Float                   @default(30) @map("avg_calls_per_analysis") // rolling mean of provider calls per Analysis (JOB-020, ADR-0310)
     createdAt           DateTime                @default(now()) @map("created_at") @db.Timestamptz(3)
     updatedAt           DateTime                @updatedAt @map("updated_at") @db.Timestamptz(3)
 
