@@ -1,0 +1,15 @@
+{
+  "auth": {
+    "error": {
+      "title": "Sign-in was not completed",
+      "role_assignment_required": "You are not assigned an app role for git-migrator. Ask a tenant administrator to assign you one of the git-migrator app roles in Microsoft Entra ID, then sign in again.",
+      "tenant_not_allowed": "This account belongs to a different Microsoft Entra ID tenant than the one git-migrator is configured for. Sign in with an account from the configured tenant.",
+      "actor_disabled": "Your account has been disabled in git-migrator. Contact an administrator.",
+      "actor_not_found": "No git-migrator account exists for this user. Contact an administrator.",
+      "sign_in_method_not_allowed": "This sign-in method is not available.",
+      "sign_in_failed": "Sign-in could not be completed because of a problem on our side. Try again, or contact an administrator if it keeps happening.",
+      "account_not_linked": "This sign-in could not be matched to a git-migrator account. Contact an administrator.",
+      "unknown": "Sign-in failed. Try again, or contact an administrator if it keeps happening."
+    }
+  }
+}

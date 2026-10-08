@@ -10,7 +10,6 @@
   "references": [
     { "path": "../../packages/db" },
     { "path": "../../packages/config" },
-    { "path": "../../packages/observability" },
-    { "path": "../../packages/core" }
+    { "path": "../../packages/observability" }
   ]
 }
