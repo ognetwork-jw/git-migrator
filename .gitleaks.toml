@@ -1,0 +1,14 @@
+# gitleaks configuration for CI (DEP-060). Extends the default rules.
+title = "git-migrator"
+
+[extend]
+useDefault = true
+
+# Whole files that hold GitHub's published example tokens and the test-only fake GitHub App key.
+[[allowlists]]
+description = "GitHub's published example tokens (public documentation, not credentials)"
+paths = ['''^testing/provider-fakes/specs/github\.openapi\.json$''']
+
+[[allowlists]]
+description = "Test-only fake GitHub App private key (T-002)"
+paths = ['''^testing/fixtures/fake-github-app\.pem$''']

@@ -1,0 +1,7 @@
+# Documented example strings that gitleaks flags. Each entry is one exact finding (commit:file:rule:line),
+# so a new secret in the same file is still reported. See docs/adr/0049-ci-pinning-and-gitleaks.md.
+# GitHub's documentation example token quoted in the fakes README (provider-fakes/specs/README.md:32).
+033bd88cf84a4247e6d49a18f5a5b0f290572849:testing/provider-fakes/specs/README.md:github-app-token:32
+# Bitbucket's documentation curl placeholders in the published OpenAPI description.
+ceb5463922d6b74a7c20f3be3d6c7047127e2da7:testing/provider-fakes/specs/bitbucket-cloud.openapi.json:curl-auth-user:9034
+ceb5463922d6b74a7c20f3be3d6c7047127e2da7:testing/provider-fakes/specs/bitbucket-cloud.openapi.json:curl-auth-user:27001
