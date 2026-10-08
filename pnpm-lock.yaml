@@ -475,6 +475,12 @@ importers:
 
   testing/integration:
     dependencies:
+      '@git-migrator/canonical':
+        specifier: workspace:*
+        version: link:../../packages/canonical
+      '@git-migrator/core':
+        specifier: workspace:*
+        version: link:../../packages/core
       '@git-migrator/facets':
         specifier: workspace:*
         version: link:../../packages/facets

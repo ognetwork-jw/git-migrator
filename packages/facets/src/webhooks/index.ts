@@ -13,6 +13,7 @@ import {
   webhooksFacet,
 } from '@git-migrator/canonical';
 import {
+  type DocumentSchema,
   diffDocuments,
   type FacetDefinition,
   type FacetTaskRef,
@@ -144,17 +145,35 @@ function supportedEvents(ctx: TranslateContext): ReadonlySet<string> | undefined
 
 // -- translate ---------------------------------------------------------------------------------
 
-export function translateWebhooks(
-  source: Webhooks,
+/** The finding code and policy key names of one hook-bearing facet (`webhooks`, `org-webhooks`). */
+export interface HookSetCodes {
+  readonly eventDropped: string;
+  readonly recreateManually: string;
+  readonly setSecret: string;
+}
+
+const WEBHOOK_CODES: HookSetCodes = {
+  eventDropped: EVENT_DROPPED,
+  recreateManually: RECREATE_MANUALLY,
+  setSecret: SET_SECRET,
+};
+
+/**
+ * The FAC-WEB translation of a list of hooks, shared with `org-webhooks` (FAC-END): allowlist,
+ * event support, secret handling and the findings, under the facet's own codes.
+ */
+export function translateHookSet(
+  sourceHooks: readonly Webhook[],
   ctx: TranslateContext,
-): TranslationResult<Webhooks> {
+  codes: HookSetCodes,
+): { hooks: Webhook[]; decisions: FieldDecision[]; postTasks: Finding[] } {
   const allowlist = ctx.policies.webhookAllowlistEnabled ? routeWebhookAllowlist(ctx.route) : null;
   const supported = supportedEvents(ctx);
   const hooks: Webhook[] = [];
   const decisions: FieldDecision[] = [];
   const postTasks: Finding[] = [];
 
-  for (const h of source.hooks) {
+  for (const h of sourceHooks) {
     const events = sortedEvents(h.events).filter(
       (e) => supported === undefined || supported.has(e),
     );
@@ -171,7 +190,7 @@ export function translateWebhooks(
         decisions.push({
           path: hookPath(h.key, 'events'),
           fidelity: 'lossy',
-          policyKey: EVENT_DROPPED,
+          policyKey: codes.eventDropped,
           accepted: false,
         });
       } else if (events.some((e) => COARSE_EVENTS.has(e))) {
@@ -191,14 +210,14 @@ export function translateWebhooks(
       }
     } else {
       postTasks.push({
-        code: RECREATE_MANUALLY,
+        code: codes.recreateManually,
         paths: [hookPath(h.key)],
         params: { targetUrl: h.url, events },
       });
     }
     if (h.hasSecret) {
       postTasks.push({
-        code: SET_SECRET,
+        code: codes.setSecret,
         paths: [allowed ? hookPath(h.key, 'hasSecret') : hookPath(h.key)],
         // No full URL: it may carry the credential (ADR-0141).
         params: {
@@ -210,6 +229,14 @@ export function translateWebhooks(
     }
   }
 
+  return { hooks, decisions, postTasks };
+}
+
+export function translateWebhooks(
+  source: Webhooks,
+  ctx: TranslateContext,
+): TranslationResult<Webhooks> {
+  const { hooks, decisions, postTasks } = translateHookSet(source.hooks, ctx, WEBHOOK_CODES);
   return {
     desired: { hooks },
     decisions,
@@ -291,11 +318,15 @@ const withoutUrl = (d: Webhooks) => ({ hooks: d.hooks.map(({ url: _url, ...rest 
  * desired inactive, but the human activates it after setting the secret, so its `active` is not
  * compared. Hooks only on the target are not drift (ADR-0141).
  */
-export function compareWebhooks(desired: Webhooks, actual: Webhooks): FieldDiff[] {
-  const actualByKey = new Map(actual.hooks.map((h) => [h.key, h]));
-  const wanted = new Set(desired.hooks.map((h) => h.key));
+export function compareHookSet(
+  desiredHooks: readonly Webhook[],
+  actualHooks: readonly Webhook[],
+  schema: DocumentSchema,
+): FieldDiff[] {
+  const actualByKey = new Map(actualHooks.map((h) => [h.key, h]));
+  const wanted = new Set(desiredHooks.map((h) => h.key));
   const effective: Webhooks = {
-    hooks: desired.hooks.map((d) => {
+    hooks: desiredHooks.map((d) => {
       const a = actualByKey.get(d.key);
       if (a === undefined) return d;
       const covered = d.events.every((e) => a.events.includes(e));
@@ -306,8 +337,12 @@ export function compareWebhooks(desired: Webhooks, actual: Webhooks): FieldDiff[
       };
     }),
   };
-  const comparable: Webhooks = { hooks: actual.hooks.filter((h) => wanted.has(h.key)) };
-  return diffDocuments(withoutUrl(effective), withoutUrl(comparable), {
+  const comparable: Webhooks = { hooks: actualHooks.filter((h) => wanted.has(h.key)) };
+  return diffDocuments(withoutUrl(effective), withoutUrl(comparable), schema);
+}
+
+export function compareWebhooks(desired: Webhooks, actual: Webhooks): FieldDiff[] {
+  return compareHookSet(desired.hooks, actual.hooks, {
     collections: webhooksFacet.collections,
     sets: webhooksFacet.sets ?? [],
   });
@@ -323,7 +358,7 @@ function paramString(params: unknown, name: string): string | undefined {
   return typeof v === 'string' ? v : undefined;
 }
 
-function targetHook(task: FacetTaskRef, target: Webhooks): Webhook | undefined {
+function targetHook(task: FacetTaskRef, target: readonly Webhook[]): Webhook | undefined {
   let key = paramString(task.params, 'key');
   if (key === undefined) {
     const url = paramString(task.params, 'targetUrl');
@@ -334,19 +369,23 @@ function targetHook(task: FacetTaskRef, target: Webhooks): Webhook | undefined {
       return undefined;
     }
   }
-  return target.hooks.find((h) => h.key === key);
+  return target.find((h) => h.key === key);
 }
 
 /** FAC-WEB-002/003 completion. */
-export function isWebhookTaskSatisfied(task: FacetTaskRef, target: Webhooks): boolean {
+export function isHookSetTaskSatisfied(
+  task: FacetTaskRef,
+  target: readonly Webhook[],
+  codes: HookSetCodes,
+): boolean {
   const hook = targetHook(task, target);
   if (hook === undefined) return false;
-  if (task.code === SET_SECRET) {
+  if (task.code === codes.setSecret) {
     // A hook that was inactive on the source stays inactive (activateAfterSecret: false).
     const activate = (task.params as { activateAfterSecret?: unknown }).activateAfterSecret;
     return hook.hasSecret && (hook.active || activate === false);
   }
-  if (task.code === RECREATE_MANUALLY) {
+  if (task.code === codes.recreateManually) {
     const events = (task.params as { events?: unknown }).events;
     return (
       Array.isArray(events) &&
@@ -354,6 +393,10 @@ export function isWebhookTaskSatisfied(task: FacetTaskRef, target: Webhooks): bo
     );
   }
   return false;
+}
+
+export function isWebhookTaskSatisfied(task: FacetTaskRef, target: Webhooks): boolean {
+  return isHookSetTaskSatisfied(task, target.hooks, WEBHOOK_CODES);
 }
 
 export const webhooksDefinition: FacetDefinition<Webhooks> = {

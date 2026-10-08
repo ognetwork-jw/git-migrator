@@ -91,5 +91,8 @@
 | [0145](0145-environments-variables-secrets-facets.md) | environments, variables and secrets facet semantics | accepted (spec updated) |
 | [0155](0155-change-requests-facet.md) | change-requests facet: blocker parameters, list cap and desired state | accepted (no spec change needed) |
 | [0156](0156-extras-facet.md) | extras facet: detect-only warnings and desired state | accepted (no spec change needed) |
+| [0150](0150-endpoint-facets-members-teams.md) | members and teams facets: planned slug contract, skipped members, invitation candidates, target-only parity | agent-decided |
+| [0151](0151-org-variables-secrets-facets.md) | org-variables and org-secrets facets: names, lossy key, one set-value task | agent-decided |
+| [0152](0152-org-webhooks-facet.md) | org-webhooks facet: FAC-WEB rules under org codes and policy key | agent-decided |
 
 New ADRs continue from 0028. Implementor decisions use `status: agent-decided` (PROC-005). T-002 uses 0065–0069.
