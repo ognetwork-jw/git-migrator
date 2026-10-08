@@ -1,0 +1,40 @@
+{
+  "name": "git-migrator",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Provider-neutral framework and web app for migrating repositories between git providers.",
+  "packageManager": "pnpm@12.10.1",
+  "engines": {
+    "node": "24.x"
+  },
+  "scripts": {
+    "dev": "node tools/not-implemented.ts dev T-002",
+    "build": "turbo run build",
+    "db:migrate": "node tools/not-implemented.ts db:migrate T-010",
+    "db:seed": "node tools/not-implemented.ts db:seed T-010",
+    "db:reset": "node tools/not-implemented.ts db:reset T-010",
+    "generate": "node tools/not-implemented.ts generate T-010",
+    "lint": "biome check . && node tools/check-deps.ts",
+    "format": "biome format --write .",
+    "typecheck": "tsc -b && tsc -p tsconfig.tests.json",
+    "test": "vitest run --coverage",
+    "test:integration": "node tools/not-implemented.ts test:integration T-075",
+    "test:e2e": "node tools/not-implemented.ts test:e2e T-083",
+    "test:e2e:live": "node tools/not-implemented.ts test:e2e:live T-095",
+    "e2e:live:reset": "node tools/not-implemented.ts e2e:live:reset T-095",
+    "helm:check": "node tools/not-implemented.ts helm:check T-090",
+    "spec:coverage": "node tools/spec-coverage.ts",
+    "spec:must-test": "node tools/spec-coverage.ts --generate",
+    "check:packages": "turbo run lint typecheck test"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "2.5.15",
+    "@types/node": "24.19.1",
+    "@vitest/coverage-v8": "5.0.3",
+    "oxc-parser": "0.153.0",
+    "turbo": "2.11.7",
+    "typescript": "7.0.2",
+    "vitest": "5.0.3"
+  }
+}

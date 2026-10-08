@@ -1,0 +1,74 @@
+{
+  "files": [],
+  "references": [
+    {
+      "path": "apps/web"
+    },
+    {
+      "path": "apps/worker"
+    },
+    {
+      "path": "packages/adapter-sdk"
+    },
+    {
+      "path": "packages/adapters/bitbucket-cloud"
+    },
+    {
+      "path": "packages/adapters/github"
+    },
+    {
+      "path": "packages/api"
+    },
+    {
+      "path": "packages/auth"
+    },
+    {
+      "path": "packages/canonical"
+    },
+    {
+      "path": "packages/config"
+    },
+    {
+      "path": "packages/core"
+    },
+    {
+      "path": "packages/db"
+    },
+    {
+      "path": "packages/facets"
+    },
+    {
+      "path": "packages/git"
+    },
+    {
+      "path": "packages/guidance"
+    },
+    {
+      "path": "packages/jobs"
+    },
+    {
+      "path": "packages/observability"
+    },
+    {
+      "path": "packages/quota"
+    },
+    {
+      "path": "packages/registry"
+    },
+    {
+      "path": "testing/e2e"
+    },
+    {
+      "path": "testing/fixtures"
+    },
+    {
+      "path": "testing/integration"
+    },
+    {
+      "path": "testing/provider-fakes"
+    },
+    {
+      "path": "tools"
+    }
+  ]
+}

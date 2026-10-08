@@ -1,0 +1,31 @@
+{
+  "extends": "./tsconfig.base.json",
+  "compilerOptions": {
+    "composite": false,
+    "declaration": false,
+    "emitDeclarationOnly": false,
+    "noEmit": true,
+    "jsx": "react-jsx"
+  },
+  "include": [
+    "vitest.config.ts",
+    "apps/*/src/**/*.test.ts",
+    "apps/*/src/**/*.test.tsx",
+    "apps/*/src/**/*.test.mts",
+    "packages/*/src/**/*.test.ts",
+    "packages/*/src/**/*.test.tsx",
+    "packages/*/src/**/*.test.mts",
+    "packages/adapters/*/src/**/*.test.ts",
+    "packages/adapters/*/src/**/*.test.tsx",
+    "packages/adapters/*/src/**/*.test.mts",
+    "testing/*/src/**/*.test.ts",
+    "testing/*/src/**/*.test.tsx",
+    "testing/*/src/**/*.test.mts",
+    "testing/integration/**/*.test.ts",
+    "testing/e2e/**/*.spec.ts",
+    "testing/integration/**/*.test.tsx",
+    "testing/e2e/**/*.spec.tsx",
+    "testing/integration/**/*.test.mts",
+    "testing/e2e/**/*.spec.mts"
+  ]
+}
