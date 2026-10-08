@@ -56,6 +56,9 @@
 | [0070](0070-fake-git-url-layout-and-auth.md) | Fake git server URL layout and authentication | accepted (no spec change needed) |
 | [0071](0071-fake-git-rejection-mechanisms.md) | How the fake target rejects oversized blobs and pushes | accepted (no spec change needed) |
 | [0072](0072-fake-git-seeding.md) | Seeding fake git repositories with `git fast-import` | accepted (no spec change needed) |
+| [0075](0075-fake-github-structure.md) | Fake GitHub structure, control plane and git server wiring | agent-decided |
+| [0076](0076-fake-github-unspecified-behavior.md) | Fake GitHub behavior where the provider doc and OpenAPI description are silent | agent-decided |
+| [0077](0077-fake-github-rate-limit-model.md) | Fake GitHub rate limit model | agent-decided |
 | [0080](0080-facet-engine-contract.md) | Facet engine contract in `core`: structural types, registry validation, enforced purity | accepted (no spec change needed) |
 | [0081](0081-expected-differences-in-the-engine.md) | Expected Difference generation and subtraction (LIF-063 masking, `unreadable_defaulted`, migration-scoped accepts) | accepted (no spec change needed) |
 | [0082](0082-plan-aggregation.md) | Plan aggregation: identity, deterministic order, step templates | accepted (no spec change needed) |
