@@ -86,7 +86,16 @@ export function effectiveFieldSupport(
   const merged: Record<string, FieldSupport> = { ...staticFields };
   for (const [path, support] of Object.entries(dynamic ?? {})) {
     const current = merged[path];
-    if (current === undefined || SUPPORT_RANK[support.kind] >= SUPPORT_RANK[current.kind]) {
+    if (current === undefined) {
+      merged[path] = support;
+      continue;
+    }
+    const rank = SUPPORT_RANK[support.kind];
+    const currentRank = SUPPORT_RANK[current.kind];
+    // On a tie between different kinds (readOnly and unreadable are rank-equal but mean different
+    // things per side in `fieldFidelity`) the static declaration stays: a read can add a limit,
+    // never swap one the adapter declares for a different one.
+    if (rank > currentRank || (rank === currentRank && support.kind === current.kind)) {
       merged[path] = support;
     }
   }

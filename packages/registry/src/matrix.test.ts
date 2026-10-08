@@ -100,4 +100,12 @@ describe('effectiveFieldSupport', () => {
     expect(merged['/b']).toEqual(limit);
     expect(merged['/c']).toEqual({ kind: 'unreadable' });
   });
+
+  it('[ADP-014] rank-equal readOnly and unreadable never swap, in either direction', () => {
+    const ro: FieldSupport = { kind: 'readOnly' };
+    const un: FieldSupport = { kind: 'unreadable' };
+    expect(effectiveFieldSupport({ '/a': ro }, { '/a': un })['/a']).toEqual(ro);
+    expect(effectiveFieldSupport({ '/a': un }, { '/a': ro })['/a']).toEqual(un);
+    expect(effectiveFieldSupport({ '/a': ro }, { '/a': ro })['/a']).toEqual(ro);
+  });
 });
