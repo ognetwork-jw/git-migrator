@@ -97,3 +97,7 @@ Per repository 17 REST calls when project data is cached: repository, permission
 A missing or null `repository.mainbranch` (empty repository) makes the merge-settings strategies and the pipelines file `unreadable` and skips those two calls. Branch names in request paths are percent-encoded.
 
 At 1,000 per hour per account, × 0.9 for background, one account analyzes about 40 repositories per hour. **2,000 repositories take about 50 hours with one account, or about 17 hours with three accounts.** T-030 derives the per-repository call count from the adapter's endpoint list. Real measurements happen after handoff (`avgCallsPerAnalysis` adapts automatically, JOB-020).
+
+## Pipelines: which pattern wins (unconfirmed)
+
+The documentation we read does not say how a ref that matches several `branches` or `tags` patterns is assigned to a pipeline (the most specific pattern, or the first one in the file). The pipelines translation (FAC-PIP-002) keeps one workflow per pattern and excludes the more specific ones from the broader one. When the broader pattern is listed first, both patterns are reported in `translation.unsupported` so a reviewer confirms the intended pipeline (ADR-0162).

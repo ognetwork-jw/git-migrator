@@ -102,5 +102,9 @@
 | [0121](0121-schema-decisions.md) | Domain model details: `Route.retiredAt`, endpoint-scope Migration, timestamptz, plain Json | accepted (spec updated) |
 | [0122](0122-policy-decisions.md) | Access policy decisions: roles, hash and body denial, field-level narrowing | accepted (spec updated) |
 | [0123](0123-migrations-tests-and-entrypoint.md) | Raw-SQL indexes, database tests in the unit tier, migrate entrypoint location | accepted (no spec change needed) |
+| [0160](0160-pipelines-facet.md) | pipelines facet and where the pair override lives | agent-decided |
+| [0161](0161-pipelines-translation-safety.md) | Safety rules of the generated workflows | agent-decided |
+| [0162](0162-pipelines-translation-structure.md) | Shape of the generated workflows | agent-decided |
+| [0163](0163-pipelines-corpus-and-test-layout.md) | Where the pipelines corpus and its tests live | agent-decided |
 
 New ADRs continue from 0028. Implementor decisions use `status: agent-decided` (PROC-005). T-002 uses 0065–0069.
