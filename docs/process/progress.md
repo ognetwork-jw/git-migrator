@@ -26,8 +26,8 @@ The orchestrator maintains this table (see [workflow](workflow.md)). Integration
 | T-032 | todo |  | | | |
 | T-033 | todo |  | | | |
 | T-034 | todo |  | | | |
-| T-040 | todo |  | | | |
-| T-041 | in_progress | task/T-041-fake-bitbucket | | | |
+| T-040 | in_progress | task/T-040-fake-git-server | | | |
+| T-041 | in_review | task/T-041-fake-bitbucket | [#5](https://github.com/ognetwork-jw/git-migrator/pull/5) | 1 | |
 | T-042 | todo |  | | | |
 | T-043 | todo |  | | | |
 | T-050 | todo |  | | | |
