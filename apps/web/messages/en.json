@@ -109,10 +109,156 @@
     "payload_too_large": "The request is too large.",
     "validation_failed": "Some of the values you entered are not valid.",
     "too_many_streams": "Too many live update connections are open. Close other tabs or try again shortly.",
+    "busy": "Another change to the same Route is in progress. Try again in a few seconds.",
     "not_ready": "The service is starting or temporarily unavailable. Try again shortly.",
     "internal_error": "Something went wrong on our side. Try again, or contact an administrator if it keeps happening.",
     "bad_request": "The request could not be understood. Reload the page and try again.",
     "unsupported_media_type": "The request was sent in a format the service does not accept.",
     "last_admin": "This change would leave the system without an enabled administrator. Make another account an administrator first."
+  },
+  "mapping": {
+    "route": "Route",
+    "noRoutes": "There are no Routes yet. Mappings appear once a Route is configured and its endpoints have been inventoried.",
+    "empty": "No mappings match.",
+    "loadMore": "Load more",
+    "reasonLabel": "Reason: {reason}",
+    "confidence": "Confidence {value}%",
+    "decidedBy": "{when} by {who}",
+    "filter": {
+      "status": "Filter by status",
+      "allStatuses": "All statuses",
+      "search": "Search source identities",
+      "searchPlaceholder": "Search by name, login or email"
+    },
+    "status": {
+      "unmapped": "Unmapped",
+      "suggested": "Suggested",
+      "confirmed": "Confirmed",
+      "pending_invite": "Invitation pending",
+      "excluded": "Excluded"
+    },
+    "method": {
+      "email": "Email",
+      "login": "Login",
+      "name": "Display name",
+      "csv": "CSV import",
+      "manual": "Manual",
+      "invite": "Invitation"
+    },
+    "column": {
+      "source": "Source identity",
+      "status": "Status",
+      "method": "Method",
+      "target": "Target",
+      "decided": "Decided",
+      "actions": "Actions"
+    },
+    "action": {
+      "confirm": "Confirm",
+      "changeTarget": "Change target",
+      "exclude": "Exclude",
+      "unmap": "Unmap"
+    },
+    "exclude": {
+      "title": "Exclude from the migration",
+      "body": "{name} will not be migrated and will not count against parity. A reason is required.",
+      "reason": "Reason",
+      "reasonPlaceholder": "Why is this person excluded?",
+      "submit": "Exclude",
+      "cancel": "Cancel"
+    },
+    "changeTarget": {
+      "title": "Change target",
+      "body": "Choose the target identity for {name}.",
+      "target": "Target identity",
+      "targetPlaceholder": "Search target identities",
+      "none": "No matching identities",
+      "submit": "Confirm target",
+      "cancel": "Cancel"
+    },
+    "csv": {
+      "open": "Import CSV",
+      "title": "Import identity mappings",
+      "close": "Close the import panel",
+      "help": "Upload a CSV file or paste its text. Check it first: every row is validated and nothing is changed until you apply a file without errors.",
+      "format": "source,target,action",
+      "file": "CSV file",
+      "tooLarge": "The file is larger than 1 MiB.",
+      "text": "CSV text",
+      "textPlaceholder": "source,target,action",
+      "check": "Check file",
+      "apply": "Apply",
+      "rejected": "The file was rejected and nothing was changed. Check it again to see why.",
+      "checkedOk": "{count, plural, one {# row is valid.} other {# rows are valid.}} Nothing has been changed yet.",
+      "checkedErrors": "{count, plural, one {# problem found.} other {# problems found.}} Fix the file and check it again.",
+      "applied": "Applied: {mapped} mapped, {invited} invited, {excluded} excluded, {unchanged} unchanged, {replaced} replacing an earlier decision.",
+      "column": {
+        "line": "Line",
+        "source": "Source",
+        "target": "Target",
+        "action": "Action",
+        "result": "Result"
+      },
+      "action": {
+        "map": "Map",
+        "invite": "Invite",
+        "exclude": "Exclude"
+      },
+      "outcome": {
+        "replaces_decision": "Replaces an earlier decision",
+        "mapped": "Will map",
+        "invited": "Will record email",
+        "excluded": "Will exclude",
+        "unchanged": "No change"
+      },
+      "error": {
+        "file_empty": "The file is empty.",
+        "header_invalid": "The first line must be exactly: source,target,action.",
+        "too_many_rows": "The file has more than 5,000 rows.",
+        "unterminated_quote": "A quoted value is never closed.",
+        "column_count": "The row must have exactly three columns.",
+        "source_missing": "The source is empty.",
+        "action_invalid": "The action must be map, invite or exclude.",
+        "target_missing": "This action needs a target.",
+        "target_not_allowed": "An exclusion takes no target.",
+        "target_not_email": "An invitation needs an email address as its target.",
+        "cell_too_long": "A value is longer than 320 characters.",
+        "control_characters": "A value contains control characters.",
+        "formula_prefix": "The target starts with =, +, - or @.",
+        "source_not_found": "No source identity matches.",
+        "source_ambiguous": "Several source identities match. Use the account id.",
+        "target_not_found": "No target identity matches.",
+        "target_ambiguous": "Several target identities match.",
+        "duplicate_source": "This source appears more than once.",
+        "target_taken": "This target is already mapped to another source.",
+        "email_conflict": "The source already has a different email from its provider.",
+        "already_decided": "This identity is already confirmed or excluded. Unmap it first."
+      }
+    },
+    "groups": {
+      "empty": "No team mappings yet.",
+      "members": "{count, plural, one {# member} other {# members}}",
+      "collision": "Slug collision",
+      "toCreate": "Team will be created",
+      "column": {
+        "source": "Source group",
+        "plannedSlug": "Planned team slug",
+        "status": "Status",
+        "target": "Target team",
+        "actions": "Actions"
+      },
+      "action": {
+        "confirm": "Confirm",
+        "rename": "Edit slug"
+      },
+      "rename": {
+        "title": "Edit the planned team slug",
+        "body": "Lowercase letters, digits and single hyphens. If a team with this slug exists, it is suggested.",
+        "slug": "Team slug",
+        "invalid": "Use lowercase letters, digits and single hyphens, at most 100 characters.",
+        "submit": "Save",
+        "cancel": "Cancel"
+      }
+    }
   }
 }

@@ -31,3 +31,7 @@ Declared internal dependencies (ARC-012, checked by `pnpm lint`): @git-migrator/
 ## Live updates (JOB-060)
 
 `src/live/`: `createLiveConnection` (framework-free: `EventSource` with reconnect backoff 1 s to 30 s, a 45 s watchdog, polling every 10 s when SSE is silent or unavailable, a catch-up invalidation after every reconnect) and the `useLiveInvalidation({ topics, queryKeysFor? })` hook, which invalidates the TanStack Query keys of the topics that changed (default key `liveQueryKey(topic)` = `['live', topic]`) and returns the mode (`connecting`, `sse`, `polling`). Views pass `queryKeysFor` to map topics onto their ZenStack or API query keys. The server side is `GET /api/v1/events`; `src/server/api.ts` builds the one event hub of the process and closes it on shutdown.
+
+## Mapping pages (UI-027, UI-028, T-084)
+
+`/people/identities` (`src/mapping/identity-mapping-view.tsx`, with the CSV import Drawer in `csv-import-drawer.tsx`) and `/people/teams` (`group-mapping-view.tsx`). Data comes only from `/api/v1` through `src/mapping/api.ts` and `src/api/http.ts` (`ApiError` carries the problem `code`). The pages are gated on the server by `authorizePage` (`src/server/authorize.ts`, ADR-0321): it resolves the Actor through the API in process with the caller's cookie and redirects to `/signin` or `/denied` before rendering. Later data pages call it the same way. Strings are under `mapping.*` in `messages/en.json`; CSV error codes render from `mapping.csv.error.<code>`.

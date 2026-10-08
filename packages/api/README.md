@@ -39,3 +39,16 @@ Publish with `publishEvent(pool, event)` or, inside a ZenStack transaction, `pub
 - `src/redact.ts` redacts Facet data for the diff: strings under sensitive keys, webhook URLs and URL credentials; booleans, numbers and secret names stay (ADR-0331).
 - The quota ETA is `backlog x avgCallsPerAnalysis / backgroundRatePerSecond`; the backlog is the Endpoint's queued background analyses (ADR-0332).
 - The naming preview takes the target's name limits from `registry.repositoryNameLimits`, so it needs no connection.
+
+## Identity and Group mapping (AUTH-050, T-084)
+
+`src/mapping/` holds the mapping endpoints (decisions in ADR-0320):
+
+| Endpoint | |
+|---|---|
+| `GET /routes`, `GET /routes/{id}/identity-mappings` (`status`, `q`, cursor), `GET /routes/{id}/group-mappings`, `GET /routes/{id}/target-identities` | reads for the mapping pages (`read`) |
+| `POST /routes/{id}/identity-mappings/{mappingId}/{confirm\|exclude\|unmap}` | `decideMappings`; exclusion needs `reason` |
+| `POST /routes/{id}/identity-mappings/import[?dryRun=true]` | CSV `source,target,action` as `text/csv`; validated in full, reported per row, applied only when every row is valid |
+| `POST /routes/{id}/group-mappings/{mappingId}/{confirm\|rename}` | `decideMappings` |
+
+`csv.ts` parses and checks rows (pure), `resolve.ts` resolves them against Identities (pure), `expected-differences.ts` builds the eight `identity_excluded` patterns of an exclusion, `service.ts` runs the decisions inside one transaction under a per-Route advisory lock, with audit events, and `stale.ts` (`markRouteAnalysesStale`) marks the Route's Analyses stale on every write (swap for T-061's `markAnalysesStale` when it lands). Cells echoed in reports are neutralized against spreadsheet formulas (`neutralizeCell`).
