@@ -5,7 +5,7 @@ The orchestrator maintains this table (see [workflow](workflow.md)). Integration
 | Task | Status | Branch | PR | Review rounds | Notes |
 |---|---|---|---|---|---|
 | T-001 | merged | task/T-001-bootstrap | [#1](https://github.com/ognetwork-jw/git-migrator/pull/1) | 5 | merged to ai-main 26d7246; ADR-0028..0030 folded into spec |
-| T-002 | in_review | task/T-002-dev-environment | [#9](https://github.com/ognetwork-jw/git-migrator/pull/9) | 3 | r2: 4 MAJOR (UID setpriv, root-owned mount points, devenv pg trust auth); fix pass queued (implementor cap) |
+| T-002 | in_review | task/T-002-dev-environment | [#9](https://github.com/ognetwork-jw/git-migrator/pull/9) | 3 | r2: 4 MAJOR (UID setpriv, root-owned mount points, devenv pg trust auth); in fix pass |
 | T-003 | in_review | task/T-003-agent-tooling-ci | [#4](https://github.com/ognetwork-jw/git-migrator/pull/4) | 5 | r4: spec ACCEPTABLE; adversarial 1 MAJOR + late r3-spec 2 MAJOR; round-5 review (final) on 83dfc1e |
 | T-004 | in_review | task/T-004-config-observability | [#7](https://github.com/ognetwork-jw/git-migrator/pull/7) | 5 | r4: 3 BLOCKER (redaction); escalated implementor sonnet→opus (PROC-008); round-5 review (final) on 83dfc1e |
 | T-010 | todo |  | | | |
@@ -13,7 +13,7 @@ The orchestrator maintains this table (see [workflow](workflow.md)). Integration
 | T-012 | merged | task/T-012-facet-engine | [#10](https://github.com/ognetwork-jw/git-migrator/pull/10) | 2 | merged to ai-main 6182a5a; ADR-0080..0082 accepted |
 | T-013 | in_review | task/T-013-naming | [#13](https://github.com/ognetwork-jw/git-migrator/pull/13) | 2 | r1: 3 MAJOR (adoption, owned-masks-collision, ReDoS) in fix pass |
 | T-014 | in_review | task/T-014-guidance | [#14](https://github.com/ognetwork-jw/git-migrator/pull/14) | 2 | r1: 3 MAJOR (next-intl ICU, keygen path from provider data, translation.unsupported); in fix pass |
-| T-015 | in_review | task/T-015-canonical-schemas | [#11](https://github.com/ognetwork-jw/git-migrator/pull/11) | 3 | r2 fixed (a44a062); round-3 review |
+| T-015 | in_review | task/T-015-canonical-schemas | [#11](https://github.com/ognetwork-jw/git-migrator/pull/11) | 3 | r3 ACCEPTABLE (both); merging |
 | T-020 | todo |  | | | |
 | T-021 | todo |  | | | |
 | T-022 | todo |  | | | |
