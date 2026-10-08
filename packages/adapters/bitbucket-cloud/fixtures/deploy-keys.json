@@ -1,0 +1,24 @@
+{
+  "pagelen": 100,
+  "page": 1,
+  "size": 1,
+  "values": [
+    {
+      "type": "deploy_key",
+      "id": 1,
+      "key": "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIOMqqnkVzrm0SdG6UOoqKLsabgH5C9okWi0dh2l9GKJl deploy@build",
+      "label": "build agent",
+      "comment": "deploy@build",
+      "added_on": "2025-05-01T00:00:00.000000+00:00",
+      "repository": {
+        "type": "repository",
+        "full_name": "acme/auto-ok"
+      },
+      "links": {
+        "self": {
+          "href": "https://api.bitbucket.org/2.0/repositories/acme/auto-ok/deploy-keys/1"
+        }
+      }
+    }
+  ]
+}

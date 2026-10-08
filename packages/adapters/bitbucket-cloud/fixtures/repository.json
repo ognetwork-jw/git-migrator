@@ -1,0 +1,67 @@
+{
+  "type": "repository",
+  "uuid": "{bbbb2222-0000-0000-0000-000000000002}",
+  "full_name": "acme/auto-ok",
+  "name": "auto-ok",
+  "slug": "auto-ok",
+  "description": "Automatic migration candidate",
+  "is_private": true,
+  "scm": "git",
+  "fork_policy": "no_public_forks",
+  "language": "typescript",
+  "has_issues": true,
+  "has_wiki": false,
+  "size": 482113,
+  "created_on": "2024-03-01T10:00:00.000000+00:00",
+  "updated_on": "2026-09-30T08:15:42.123456+00:00",
+  "website": "https://example.com/auto-ok",
+  "mainbranch": {
+    "type": "branch",
+    "name": "main"
+  },
+  "project": {
+    "type": "project",
+    "uuid": "{aaaa1111-0000-0000-0000-000000000001}",
+    "key": "PLAT",
+    "name": "Platform",
+    "links": {
+      "html": {
+        "href": "https://bitbucket.org/acme/workspace/projects/PLAT"
+      }
+    }
+  },
+  "workspace": {
+    "type": "workspace",
+    "uuid": "{cccc3333-0000-0000-0000-000000000003}",
+    "name": "Acme",
+    "slug": "acme",
+    "links": {
+      "html": {
+        "href": "https://bitbucket.org/acme/"
+      }
+    }
+  },
+  "owner": {
+    "type": "team",
+    "uuid": "{cccc3333-0000-0000-0000-000000000003}",
+    "display_name": "Acme"
+  },
+  "links": {
+    "self": {
+      "href": "https://api.bitbucket.org/2.0/repositories/acme/auto-ok"
+    },
+    "html": {
+      "href": "https://bitbucket.org/acme/auto-ok"
+    },
+    "clone": [
+      {
+        "name": "https",
+        "href": "https://bitbucket.org/acme/auto-ok.git"
+      },
+      {
+        "name": "ssh",
+        "href": "git@bitbucket.org:acme/auto-ok.git"
+      }
+    ]
+  }
+}

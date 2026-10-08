@@ -1,0 +1,19 @@
+{
+  "pagelen": 100,
+  "page": 1,
+  "size": 1,
+  "values": [
+    {
+      "type": "deployment_environment",
+      "uuid": "{ffff6666-0000-0000-0000-000000000006}",
+      "name": "Production",
+      "slug": "production",
+      "rank": 2,
+      "environment_type": {
+        "type": "deployment_environment_type",
+        "name": "Production",
+        "rank": 2
+      }
+    }
+  ]
+}

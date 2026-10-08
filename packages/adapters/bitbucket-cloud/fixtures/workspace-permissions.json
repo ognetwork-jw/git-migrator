@@ -1,0 +1,61 @@
+{
+  "pagelen": 100,
+  "page": 1,
+  "size": 2,
+  "values": [
+    {
+      "type": "workspace_membership",
+      "permission": "owner",
+      "user": {
+        "type": "user",
+        "uuid": "{11111111-aaaa-bbbb-cccc-000000000001}",
+        "account_id": "557058:11111111-aaaa-bbbb-cccc-000000000001",
+        "nickname": "alice",
+        "display_name": "Alice",
+        "links": {
+          "self": {
+            "href": "https://api.bitbucket.org/2.0/users/{11111111-aaaa-bbbb-cccc-000000000001}"
+          },
+          "html": {
+            "href": "https://bitbucket.org/%7B11111111-aaaa-bbbb-cccc-000000000001%7D/"
+          },
+          "avatar": {
+            "href": "https://secure.gravatar.com/avatar/x"
+          }
+        }
+      },
+      "workspace": {
+        "type": "workspace",
+        "slug": "acme"
+      },
+      "links": {}
+    },
+    {
+      "type": "workspace_membership",
+      "permission": "member",
+      "user": {
+        "type": "user",
+        "uuid": "{22222222-aaaa-bbbb-cccc-000000000002}",
+        "account_id": "557058:22222222-aaaa-bbbb-cccc-000000000002",
+        "nickname": "bob",
+        "display_name": "Bob",
+        "links": {
+          "self": {
+            "href": "https://api.bitbucket.org/2.0/users/{22222222-aaaa-bbbb-cccc-000000000002}"
+          },
+          "html": {
+            "href": "https://bitbucket.org/%7B22222222-aaaa-bbbb-cccc-000000000002%7D/"
+          },
+          "avatar": {
+            "href": "https://secure.gravatar.com/avatar/x"
+          }
+        }
+      },
+      "workspace": {
+        "type": "workspace",
+        "slug": "acme"
+      },
+      "links": {}
+    }
+  ]
+}

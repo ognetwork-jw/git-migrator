@@ -1,0 +1,27 @@
+{
+  "type": "branching_model_settings",
+  "branch_types": [
+    {
+      "kind": "feature",
+      "prefix": "feature/",
+      "enabled": true
+    }
+  ],
+  "development": {
+    "is_valid": true,
+    "name": "develop",
+    "use_mainbranch": false
+  },
+  "production": {
+    "enabled": true,
+    "is_valid": true,
+    "name": "main",
+    "use_mainbranch": true
+  },
+  "default_branch_deletion": "true",
+  "links": {
+    "self": {
+      "href": "https://api.bitbucket.org/2.0/repositories/acme/auto-ok/branching-model/settings"
+    }
+  }
+}

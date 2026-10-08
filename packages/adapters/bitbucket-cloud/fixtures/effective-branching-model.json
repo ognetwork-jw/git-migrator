@@ -1,0 +1,22 @@
+{
+  "type": "effective_repository_branching_model",
+  "branch_types": [
+    {
+      "kind": "feature",
+      "prefix": "feature/"
+    },
+    {
+      "kind": "hotfix",
+      "prefix": "hotfix/"
+    }
+  ],
+  "development": {
+    "name": "develop",
+    "use_mainbranch": false
+  },
+  "production": {
+    "name": "main",
+    "use_mainbranch": true
+  },
+  "links": {}
+}

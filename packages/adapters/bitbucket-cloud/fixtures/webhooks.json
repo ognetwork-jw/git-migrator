@@ -1,0 +1,42 @@
+{
+  "pagelen": 100,
+  "values": [
+    {
+      "type": "webhook_subscription",
+      "uuid": "{dddd4444-0000-0000-0000-000000000004}",
+      "url": "https://ci.example.com/hooks/bitbucket",
+      "description": "CI",
+      "subject_type": "repository",
+      "subject": {
+        "type": "repository",
+        "full_name": "acme/auto-ok"
+      },
+      "active": true,
+      "created_at": "2025-01-02T03:04:05.000000Z",
+      "events": [
+        "repo:push",
+        "pullrequest:created",
+        "pullrequest:fulfilled",
+        "pullrequest:comment_created",
+        "repo:commit_status_updated",
+        "project:updated"
+      ],
+      "secret_set": true
+    },
+    {
+      "type": "webhook_subscription",
+      "uuid": "{dddd4444-0000-0000-0000-000000000005}",
+      "url": "https://chat.example.com/hook",
+      "description": "",
+      "subject_type": "repository",
+      "subject": {
+        "type": "repository",
+        "full_name": "acme/auto-ok"
+      },
+      "active": false,
+      "created_at": "2025-01-02T03:04:05.000000Z",
+      "events": ["issue:created", "repo:fork"],
+      "secret_set": false
+    }
+  ]
+}

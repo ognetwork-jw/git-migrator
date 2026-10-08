@@ -1,0 +1,20 @@
+[
+  {
+    "name": "Developers",
+    "slug": "developers",
+    "permission": "write",
+    "auto_add": false,
+    "owner": {
+      "username": "acme",
+      "display_name": "Acme"
+    },
+    "members": [
+      {
+        "username": "bob",
+        "display_name": "Bob",
+        "uuid": "{22222222-aaaa-bbbb-cccc-000000000002}",
+        "account_id": "557058:22222222-aaaa-bbbb-cccc-000000000002"
+      }
+    ]
+  }
+]

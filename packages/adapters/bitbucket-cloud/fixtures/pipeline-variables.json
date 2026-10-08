@@ -1,0 +1,20 @@
+{
+  "pagelen": 100,
+  "page": 1,
+  "size": 2,
+  "values": [
+    {
+      "type": "pipeline_variable",
+      "uuid": "{eeee5555-0000-0000-0000-000000000005}",
+      "key": "NODE_ENV",
+      "value": "production",
+      "secured": false
+    },
+    {
+      "type": "pipeline_variable",
+      "uuid": "{eeee5555-0000-0000-0000-000000000006}",
+      "key": "NPM_TOKEN",
+      "secured": true
+    }
+  ]
+}

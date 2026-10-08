@@ -1,0 +1,168 @@
+{
+  "pagelen": 100,
+  "page": 1,
+  "size": 8,
+  "values": [
+    {
+      "type": "branchrestriction",
+      "id": 1,
+      "kind": "push",
+      "pattern": "main",
+      "branch_match_kind": "glob",
+      "users": [
+        {
+          "type": "user",
+          "uuid": "{11111111-aaaa-bbbb-cccc-000000000001}",
+          "account_id": "557058:11111111-aaaa-bbbb-cccc-000000000001",
+          "nickname": "alice",
+          "display_name": "Alice",
+          "links": {
+            "self": {
+              "href": "https://api.bitbucket.org/2.0/users/{11111111-aaaa-bbbb-cccc-000000000001}"
+            },
+            "html": {
+              "href": "https://bitbucket.org/%7B11111111-aaaa-bbbb-cccc-000000000001%7D/"
+            },
+            "avatar": {
+              "href": "https://secure.gravatar.com/avatar/x"
+            }
+          }
+        }
+      ],
+      "groups": [
+        {
+          "type": "group",
+          "name": "Developers",
+          "slug": "developers",
+          "full_slug": "acme:developers"
+        }
+      ],
+      "links": {
+        "self": {
+          "href": "https://api.bitbucket.org/2.0/repositories/acme/auto-ok/branch-restrictions/1"
+        }
+      }
+    },
+    {
+      "type": "branchrestriction",
+      "id": 2,
+      "kind": "force",
+      "pattern": "*",
+      "branch_match_kind": "glob",
+      "users": [],
+      "groups": [],
+      "links": {
+        "self": {
+          "href": "https://api.bitbucket.org/2.0/repositories/acme/auto-ok/branch-restrictions/2"
+        }
+      }
+    },
+    {
+      "type": "branchrestriction",
+      "id": 3,
+      "kind": "require_approvals_to_merge",
+      "pattern": "main",
+      "branch_match_kind": "glob",
+      "users": [],
+      "groups": [],
+      "links": {
+        "self": {
+          "href": "https://api.bitbucket.org/2.0/repositories/acme/auto-ok/branch-restrictions/3"
+        }
+      },
+      "value": 2
+    },
+    {
+      "type": "branchrestriction",
+      "id": 4,
+      "kind": "require_passing_builds_to_merge",
+      "pattern": "main",
+      "branch_match_kind": "glob",
+      "users": [],
+      "groups": [],
+      "links": {
+        "self": {
+          "href": "https://api.bitbucket.org/2.0/repositories/acme/auto-ok/branch-restrictions/4"
+        }
+      },
+      "value": 1
+    },
+    {
+      "type": "branchrestriction",
+      "id": 5,
+      "kind": "enforce_merge_checks",
+      "pattern": "main",
+      "branch_match_kind": "glob",
+      "users": [],
+      "groups": [],
+      "links": {
+        "self": {
+          "href": "https://api.bitbucket.org/2.0/repositories/acme/auto-ok/branch-restrictions/5"
+        }
+      }
+    },
+    {
+      "type": "branchrestriction",
+      "id": 6,
+      "kind": "delete",
+      "pattern": "release/*",
+      "branch_match_kind": "glob",
+      "users": [
+        {
+          "type": "user",
+          "uuid": "{22222222-aaaa-bbbb-cccc-000000000002}",
+          "account_id": "557058:22222222-aaaa-bbbb-cccc-000000000002",
+          "nickname": "bob",
+          "display_name": "Bob",
+          "links": {
+            "self": {
+              "href": "https://api.bitbucket.org/2.0/users/{22222222-aaaa-bbbb-cccc-000000000002}"
+            },
+            "html": {
+              "href": "https://bitbucket.org/%7B22222222-aaaa-bbbb-cccc-000000000002%7D/"
+            },
+            "avatar": {
+              "href": "https://secure.gravatar.com/avatar/x"
+            }
+          }
+        }
+      ],
+      "groups": [],
+      "links": {
+        "self": {
+          "href": "https://api.bitbucket.org/2.0/repositories/acme/auto-ok/branch-restrictions/6"
+        }
+      }
+    },
+    {
+      "type": "branchrestriction",
+      "id": 7,
+      "kind": "require_commits_behind",
+      "pattern": "",
+      "branch_match_kind": "branching_model",
+      "users": [],
+      "groups": [],
+      "links": {
+        "self": {
+          "href": "https://api.bitbucket.org/2.0/repositories/acme/auto-ok/branch-restrictions/7"
+        }
+      },
+      "branch_type": "feature",
+      "value": 0
+    },
+    {
+      "type": "branchrestriction",
+      "id": 8,
+      "kind": "smart_reset_pullrequest_approvals",
+      "pattern": "main",
+      "branch_match_kind": "glob",
+      "users": [],
+      "groups": [],
+      "links": {
+        "self": {
+          "href": "https://api.bitbucket.org/2.0/repositories/acme/auto-ok/branch-restrictions/8"
+        }
+      }
+    }
+  ]
+}
