@@ -13,7 +13,7 @@ The orchestrator maintains this table (see [workflow](workflow.md)). Integration
 | T-012 | in_review | task/T-012-facet-engine | [#10](https://github.com/ognetwork-jw/git-migrator/pull/10) | 2 | r1: 4 MAJOR (opus adversarial) in fix pass |
 | T-013 | todo |  | | | |
 | T-014 | in_progress | task/T-014-guidance | | | |
-| T-015 | in_review | task/T-015-canonical-schemas | [#11](https://github.com/ognetwork-jw/git-migrator/pull/11) | 1 | |
+| T-015 | in_review | task/T-015-canonical-schemas | [#11](https://github.com/ognetwork-jw/git-migrator/pull/11) | 2 | r1: 2 MAJOR (key uniqueness, webhook url key); fix pass queued (implementor cap) |
 | T-020 | todo |  | | | |
 | T-021 | todo |  | | | |
 | T-022 | todo |  | | | |
