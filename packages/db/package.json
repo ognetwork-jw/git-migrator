@@ -19,6 +19,7 @@
   "dependencies": {
     "@git-migrator/canonical": "workspace:*",
     "@git-migrator/core": "workspace:*",
+    "@zenstackhq/cli": "3.9.7",
     "@zenstackhq/orm": "3.9.7",
     "@zenstackhq/plugin-policy": "3.9.7",
     "@zenstackhq/schema": "3.9.7",
@@ -29,7 +30,6 @@
   },
   "devDependencies": {
     "@types/pg": "8.23.1",
-    "@zenstackhq/cli": "3.9.7",
     "@zenstackhq/server": "3.9.7"
   }
 }

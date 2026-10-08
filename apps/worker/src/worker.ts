@@ -371,7 +371,7 @@ export async function runWorkerProcess(options: WorkerProcessOptions): Promise<v
 }
 
 /** Process entry: `worker --role <standard|large|all>` (DEP-002). */
-async function main(): Promise<void> {
+export async function main(): Promise<void> {
   const role = parseRole(process.argv.slice(2));
   const config = loadConfigOrExit();
   const log = createLogger({ level: config.observability.logLevel, service: 'worker' });
