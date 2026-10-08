@@ -8,7 +8,7 @@ The orchestrator maintains this table (see [workflow](workflow.md)). Integration
 | T-002 | merged | task/T-002-dev-environment | [#9](https://github.com/ognetwork-jw/git-migrator/pull/9) | 5 | merged to ai-main 822c914 at the review cap (open findings in followups.md); ADR-0066..0068 folded into DEV-020, 0065/0069 accepted |
 | T-003 | merged | task/T-003-agent-tooling-ci | [#4](https://github.com/ognetwork-jw/git-migrator/pull/4) | 5 | 5-round cap; merged to ai-main d46ecc4; open findings in docs/followups.md; ADR-0046..0049 accepted |
 | T-004 | merged | task/T-004-config-observability | [#7](https://github.com/ognetwork-jw/git-migrator/pull/7) | 5 | merged to ai-main e8054ea at the review cap (r5 findings in followups.md); ADR-0050..0054 folded into DEP-040/DEP-050 |
-| T-010 | in_review | task/T-010-database | [#20](https://github.com/ognetwork-jw/git-migrator/pull/20) | 2 | r1: 2 BLOCKER (CLI under node, RPC timestamp writes) fixed (37a3974); round-2 review |
+| T-010 | in_review | task/T-010-database | [#20](https://github.com/ognetwork-jw/git-migrator/pull/20) | 3 | r2: MAJOR (locked client escapes via $qbRaw); fix pass |
 | T-011 | merged | task/T-011-core-primitives | [#6](https://github.com/ognetwork-jw/git-migrator/pull/6) | 2 | merged to ai-main 1c654ab; ADR-0058 folded into LIF-002; 0055-0057, 0059 accepted |
 | T-012 | merged | task/T-012-facet-engine | [#10](https://github.com/ognetwork-jw/git-migrator/pull/10) | 2 | merged to ai-main 6182a5a; ADR-0080..0082 accepted |
 | T-013 | merged | task/T-013-naming | [#13](https://github.com/ognetwork-jw/git-migrator/pull/13) | 4 | merged 1df40cb; ADR-0095 folded into spec 06 |
@@ -32,12 +32,12 @@ The orchestrator maintains this table (see [workflow](workflow.md)). Integration
 | T-043 | merged | task/T-043-fixture-world | [#19](https://github.com/ognetwork-jw/git-migrator/pull/19) | 2 | merged to ai-main 7ae06b1; ADR-0130 accepted (fixture internals) |
 | T-050 | merged | task/T-050-facets-git-settings | [#16](https://github.com/ognetwork-jw/git-migrator/pull/16) | 1 | merged to ai-main 3a7d6a2; ADR-0100..0102 folded into 05-facets, 0103 accepted |
 | T-051 | merged | task/T-051-facets-access-codeowners | [#15](https://github.com/ognetwork-jw/git-migrator/pull/15) | 4 | merged to ai-main cd05ef3 (implementor escalated to opus at r4, PROC-008); ADR-0105/0106 folded into FAC-006/FAC-COD |
-| T-052 | in_review | task/T-052-facets-branch-rules | [#17](https://github.com/ognetwork-jw/git-migrator/pull/17) | 4 | r3 BLOCKER (wildcard rule priority: oldest wins); implementor escalated to opus (PROC-008) |
-| T-053 | in_review | task/T-053-facets-webhooks-deploykeys | [#22](https://github.com/ognetwork-jw/git-migrator/pull/22) | 2 | r2 ACCEPTABLE (MINORs → followups.md); merge pending |
+| T-052 | in_review | task/T-052-facets-branch-rules | [#17](https://github.com/ognetwork-jw/git-migrator/pull/17) | 5 | r4: MAJOR (apply order ties); final round-5 fix pass |
+| T-053 | merged | task/T-053-facets-webhooks-deploykeys | [#22](https://github.com/ognetwork-jw/git-migrator/pull/22) | 2 | merged to ai-main c7cc856; ADR-0141 folded into FAC-WEB; 0140/0142 accepted |
 | T-054 | merged | task/T-054-facets-env-vars-secrets | [#21](https://github.com/ognetwork-jw/git-migrator/pull/21) | 1 | merged to ai-main d705ec3; ADR-0145 folded into FAC-ENV/FAC-VAR/FAC-SEC |
 | T-055 | merged | task/T-055-facets-cr-extras | [#23](https://github.com/ognetwork-jw/git-migrator/pull/23) | 2 | merged to ai-main 8cc5d13; ADR-0155/0156 accepted (param formats, no spec change) |
 | T-056 | in_review | task/T-056-facets-members-teams-org | [#24](https://github.com/ognetwork-jw/git-migrator/pull/24) | 2 | r1: 2 BLOCKER (org-webhooks private copy) + AUTH-061 MAJOR; fix pass |
-| T-057 | in_progress | task/T-057-facets-pipelines | | 0 | implementing (ADR range 0160-0164) |
+| T-057 | in_review | task/T-057-facets-pipelines | [#25](https://github.com/ognetwork-jw/git-migrator/pull/25) | 1 | round-1 review |
 | T-058 | todo |  | | | |
 | T-060 | todo |  | | | |
 | T-061 | todo |  | | | |

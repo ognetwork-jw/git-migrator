@@ -1,6 +1,6 @@
 # ADR-0141: webhooks facet semantics
 
-- Status: agent-decided
+- Status: accepted (spec updated)
 - Date: 2026-10-08
 - Task: T-053
 - Affects: FAC-WEB-001, FAC-WEB-002, FAC-WEB-003, FAC-WEB-004, FAC-005, ADR-0088

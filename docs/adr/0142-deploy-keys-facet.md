@@ -1,6 +1,6 @@
 # ADR-0142: deploy-keys facet semantics
 
-- Status: agent-decided
+- Status: accepted (no spec change needed)
 - Date: 2026-10-08
 - Task: T-053
 - Affects: FAC-DKY-001, FAC-DKY-002, FAC-DKY-003

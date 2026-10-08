@@ -1,6 +1,6 @@
 # ADR-0140: the facet translate context must be plain JSON
 
-- Status: agent-decided
+- Status: accepted (no spec change needed)
 - Date: 2026-10-08
 - Task: T-053
 - Affects: ADP-030, ADP-031, FAC-DKY-003
