@@ -21,3 +21,6 @@ test-results/
 
 # devenv git-hooks output (generated at shell entry; never committed)
 .pre-commit-config.yaml
+
+# ZenStack temporary Prisma schema (written next to a schema file by zen migrate)
+~schema*.prisma

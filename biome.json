@@ -11,6 +11,7 @@
       "!**/coverage",
       "!pnpm-lock.yaml",
       "!docs",
+      "!packages/db/src/generated",
       "!testing/provider-fakes/specs"
     ]
   },

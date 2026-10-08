@@ -33,7 +33,13 @@ export default defineConfig({
         'testing/*/src/**/*.{ts,tsx,mts}',
         'tools/*.ts',
       ],
-      exclude: ['**/*.test.{ts,tsx,mts}', '**/*.d.ts', 'tools/not-implemented.ts'],
+      exclude: [
+        '**/*.test.{ts,tsx,mts}',
+        '**/*.d.ts',
+        'tools/not-implemented.ts',
+        'packages/db/src/generated/**',
+        'apps/worker/src/db-cli.ts',
+      ],
       thresholds: {
         'packages/core/src/**': pure,
         'packages/facets/src/**': pure,

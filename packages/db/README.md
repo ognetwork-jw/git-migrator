@@ -1,7 +1,36 @@
 # @git-migrator/db
 
-ZModel schema, generated client, migrations, privileged client factory.
+The ZModel schema (`schema.zmodel`), its generated client, the migrations, the privileged client factory and the database steps of the `migrate` entrypoint. It implements [03-domain-model](../../docs/spec/03-domain-model.md), [11-data](../../docs/spec/11-data.md) and the policies of AUTH-020/API-012. Decisions: ADR-0120 to ADR-0123.
 
-Status: placeholder from T-001; a later task fills it (see `docs/spec/15-work-breakdown.md`).
+Internal dependencies (ARC-012): `@git-migrator/core`, `@git-migrator/canonical`. It cannot import `config`; callers pass plain values.
 
-Declared internal dependencies (ARC-012, checked by `pnpm lint`): @git-migrator/core, @git-migrator/canonical.
+## Clients (AUTH-021, DOM-005)
+
+```ts
+const handle = createDb({ connectionString, poolMax: 10 });
+handle.privileged;            // no policies: server code only, behind a custom endpoint or job
+handle.forActor(actor);       // policies enforced for this Actor: the only client the RPC mount may get
+```
+
+Never hand `privileged` to the RPC handler. The value `forActor` returns is not a ZenStack client but a frozen, null-prototype facade (`PolicyDb`) with the model delegates, a read-only deep-frozen `$schema` and `$transaction` only (an allow-list; the `$transaction` callback receives the same facade). `$schema` is there because the ZenStack RPC handler reads it to validate model names; it is a frozen copy, so a holder cannot edit policy definitions. Delegate calls return opaque thenables, and the array form of `$transaction` (used by the RPC transaction route) accepts only operations that facade issued; a forged `{ then, cb }` is rejected. Delegate arguments must be plain data (objects, arrays, primitives, `Date`, `Decimal`, `Uint8Array`): a function, a class instance, a key named `$expr` (which would give raw SQL beneath the policies), a cycle or nesting beyond 64 levels is refused before any SQL runs. Errors from a facade are sanitized: the reason, model, policy reason code and database error code are kept; `sql`, `sqlParams`, `dbErrorMessage` and `cause` are dropped. See ADR-0122 item 9. `src/rpc.test.ts` drives `RPCApiHandler` with these clients. The query builders (`$qb`, `$qbRaw`, `kysely`, `kyselyRaw`), `withExecutor`, the options, `$setAuth`, `$use`, `$unuse*` and raw SQL do not exist on it, so a holder cannot go around the policies. Every allow rule also requires an enabled Actor. T-021 must give the RPC mount what it needs from this facade, or extend the facade deliberately. Every model denies create, update and delete through `forActor` except the writes in API-012. `Migration` and `ManualTask` are narrowed to `waveId` and `note` by field-level `@deny('update', true)` on every other scalar field, `createdAt` and `updatedAt` included; give a new field the same attribute (a test fails otherwise). Their `updated_at` is set by a database trigger, not `@updatedAt`, because the ORM would otherwise write the denied column on every update.
+
+## Changing the schema
+
+1. Edit `schema.zmodel`, then `pnpm generate` (writes `src/generated`, which is committed; a test checks it is current).
+2. `DATABASE_URL=postgresql://… pnpm --filter @git-migrator/db migrate:dev --name <name>` creates a migration without applying it. Review the SQL. Migrations are forward-only (DATA-031): destructive changes need a two-release expand/contract sequence described in a comment in the migration.
+3. Partial indexes, CHECK constraints and triggers cannot be written in ZModel; add them to a hand-written migration (see `migrations/*_raw_indexes` and `*_integrity_constraints`). Prisma ignores them when diffing. Migrations are applied from a temporary copy, so nothing is written into this directory at run time.
+
+## Commands
+
+| Command | Action |
+|---|---|
+| `pnpm db:migrate` | DATA-030 steps 1, 2 and 5 (steps 3 and 4 arrive with T-020 and T-028). Needs `POSTGRES_PASSWORD` and the config file |
+| `pnpm db:seed` | DATA-040: the three test Actors, a sample Wave and a webhook allowlist sample. Only for an explicitly set `development`, `test` or `e2e` environment |
+| `pnpm db:reset --yes` | Drops and recreates the configured database, then migrates. Only for an explicitly set `development`, `test` or `e2e` environment |
+| `pnpm generate` | ZenStack generate |
+
+## Tests
+
+The tests need PostgreSQL 16 and create databases named `gm_t010_<random>` or `gm_test_<random>`, dropping them afterwards. The admin connection is `GM_TEST_DATABASE_URL` (default `postgresql://git_migrator:git_migrator@127.0.0.1:5432/postgres`; the role needs `CREATEDB`). Other packages use `createTestDatabase` from `@git-migrator/db/testing`.
+
+`src/policy.test.ts` drives every model through every role: reads, plus create, update and delete, expecting a denial for everything outside API-012. The Azure Flexible Server needs `pg_trgm` in `azure.extensions` for step 1.
