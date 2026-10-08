@@ -1,6 +1,6 @@
 # ADR-0152: org-webhooks facet semantics
 
-- Status: agent-decided
+- Status: accepted (spec updated)
 - Date: 2026-10-08
 - Task: T-056
 - Affects: FAC-END (org-webhooks), FAC-WEB-001..004, FAC-005, FAC-002, ADR-0141

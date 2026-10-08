@@ -388,7 +388,8 @@ type Members = { members: { principal: PrincipalRef; role: 'member' | 'admin' }[
 
 - Source: Bitbucket workspace members (`/workspaces/{ws}/members`), plus workspace permission when readable. Target: GitHub org members plus pending invitations.
 - Translation resolves each member through Identity Mappings. Unmapped members with a known email become **invitation candidates**. Members are never added except via approved Invitation Batches (AUTH-060).
-- Parity ignores members with `identity_excluded` Expected Differences, including deselected invitees (Q59).
+- A principal is written as a member only if its resolved target identity is in the Route index's `targetOrgMembers` list (target identities already in the org, filled by Analysis). When the list is absent or invalid, nobody is written (fail closed); everyone else goes the invitation route (ADR-0150).
+- Parity ignores members with `identity_excluded` Expected Differences, including deselected invitees (Q59). Members that exist only on the target are not parity differences (ADR-0150).
 - **Findings:** `members.review-identity-mapping` pre (any `suggested` or `unmapped`) · `members.approve-invitations` post (any candidates not yet in a sent batch) · `members.pending-acceptance` post (v).
 
 ### teams
@@ -399,8 +400,9 @@ type Teams = { teams: { slug: string; name: string; members: PrincipalEntry[] }[
 
 - Source: Bitbucket groups (1.0 groups API, with members). Target: GitHub teams (`privacy: closed`).
 - Team slug = GroupMapping `plannedSlug`, which is the group slug passed through the Route's naming pipeline for teams (default: kebab-case of the group slug).
-- Membership is applied only for principals that are already org members (`PUT /orgs/{org}/teams/{slug}/memberships/{login}` would otherwise invite them, which violates AUTH-061). Excluded, pending and non-member principals are skipped per FAC-006.
-- **Findings:** `teams.slug-collision` B · `teams.set-membership` post (v), only when source membership is unreadable.
+- Membership is applied only for principals that are already org members, as recorded in `targetOrgMembers` (`PUT /orgs/{org}/teams/{slug}/memberships/{login}` would otherwise invite them, which violates AUTH-061). When that list is absent, no membership is applied (fail closed). Excluded, pending and non-member principals are skipped per FAC-006. Team members that exist only on the target are not parity differences (ADR-0150).
+- Planned slugs must be lowercase `[a-z0-9-]`; otherwise blocker `teams.slug-invalid`.
+- **Findings:** `teams.slug-collision` B · `teams.slug-invalid` B · `teams.set-membership` post (v), only when source membership is unreadable (satisfied by any non-empty target team).
 
 ### org-variables, org-secrets, org-webhooks
 
@@ -413,4 +415,6 @@ type OrgWebhooks  = { hooks: Webhook[] };                                       
 (ADR-0087.)
 
 - Workspace pipeline variables (unsecured) become organization variables with `visibility: all`. Secured ones become organization secret post tasks (`org-secrets.set-value`, v), with the same rules as the repository Facets.
-- Workspace webhooks become organization webhooks under the same allowlist, secret and payload rules as FAC-WEB.
+- Workspace webhooks become organization webhooks under the same allowlist, secret, payload, event-drop and parity rules as FAC-WEB, implemented by the same matcher and helpers (ADR-0152).
+- Names follow FAC-VAR-003: lossy `org-variables.uppercase-names`; collisions or a reserved prefix raise `org-variables.name-invalid` / `org-secrets.name-invalid` (ADR-0151). Unmapped webhook events are lossy `org-webhooks.event-dropped`.
+- **Findings:** `org-variables.name-invalid` pre · `org-variables.accept-lossy` pre · `org-secrets.name-invalid` pre · `org-secrets.set-value` post (v) · `org-webhooks.recreate-manually` post (v) · `org-webhooks.set-secret` post (v) · `org-webhooks.accept-lossy` pre.

@@ -56,6 +56,8 @@ function lif031Names(): string[] {
 
 /** Policy keys (FAC-005): lossy decisions named in the spec. Each has a `<facet>.accept-lossy` task. */
 const KNOWN_POLICY_KEYS: readonly string[] = [
+  'org-variables.uppercase-names',
+  'org-webhooks.event-dropped',
   'branch-rules.advisory-enforced',
   'branch-rules.approvals-capped',
   'branch-rules.exemptions-dropped',
@@ -76,24 +78,13 @@ const KNOWN_POLICY_KEYS: readonly string[] = [
  * Codes that implementors added where the spec is silent (PROC-005). They are in `codes.ts` and have
  * guidance, but the spec does not name them yet. Each one is recorded in an agent-decided ADR.
  */
-const AGENT_DECIDED_CODES: Readonly<Record<string, string>> = {
-  'org-secrets.name-invalid': 'ADR-0151',
-  'org-variables.accept-lossy': 'ADR-0151',
-  'org-variables.name-invalid': 'ADR-0151',
-  'org-webhooks.accept-lossy': 'ADR-0152',
-  'org-webhooks.recreate-manually': 'ADR-0152',
-  'org-webhooks.set-secret': 'ADR-0152',
-  'teams.slug-invalid': 'ADR-0150',
-};
+const AGENT_DECIDED_CODES: Readonly<Record<string, string>> = {};
 
 /**
  * Policy keys decided by an implementor (agent-decided ADR) and not yet folded into the spec. They
  * stay out of the list above. Remove an entry once the spec names it.
  */
-const AGENT_DECIDED_POLICY_KEYS: readonly string[] = [
-  'org-variables.uppercase-names', // ADR-0151
-  'org-webhooks.event-dropped', // ADR-0152
-];
+const AGENT_DECIDED_POLICY_KEYS: readonly string[] = [];
 
 /**
  * Dotted names in backticks that are neither finding codes nor policy keys: pipeline YAML and

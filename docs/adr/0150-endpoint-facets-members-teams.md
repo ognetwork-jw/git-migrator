@@ -1,6 +1,6 @@
 # ADR-0150: members and teams facets, and the contract with the facets that read them
 
-- Status: agent-decided
+- Status: accepted (spec updated)
 - Date: 2026-10-08
 - Task: T-056
 - Affects: FAC-END (members, teams), FAC-006, FAC-ACL-004, FAC-COD, AUTH-050, AUTH-060, AUTH-061, LIF-030, LIF-060, LIF-063, FAC-002

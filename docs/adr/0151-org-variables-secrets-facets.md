@@ -1,6 +1,6 @@
 # ADR-0151: org-variables and org-secrets facet semantics
 
-- Status: agent-decided
+- Status: accepted (spec updated)
 - Date: 2026-10-08
 - Task: T-056
 - Affects: FAC-END (org-variables, org-secrets), FAC-VAR-003, FAC-SEC-001, FAC-005, FAC-002, ADR-0087
