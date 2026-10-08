@@ -41,7 +41,15 @@ export function classify(
 ): LimitCategory[] {
   if (/^\/2\.0\/(repositories\/[^/]+\/[^/]+|workspaces\/[^/]+)\/hooks(\/|$)/.test(path))
     return ['webhooks'];
-  if (/^\/2\.0\/(.+\/)?properties(\/|$)/.test(path)) return ['app-properties'];
+  if (
+    [
+      /^\/2\.0\/repositories\/[^/]+\/[^/]+\/properties\/[^/]+\/[^/]+$/,
+      /^\/2\.0\/repositories\/[^/]+\/[^/]+\/commit\/[^/]+\/properties\/[^/]+\/[^/]+$/,
+      /^\/2\.0\/repositories\/[^/]+\/[^/]+\/pullrequests\/[^/]+\/properties\/[^/]+\/[^/]+$/,
+      /^\/2\.0\/users\/[^/]+\/properties\/[^/]+\/[^/]+$/,
+    ].some((re) => re.test(path))
+  )
+    return ['app-properties'];
   if (
     method === 'GET' &&
     /^\/2\.0\/repositories\/[^/]+\/[^/]+\/src\/[^/]+\/.+[^/]$/.test(path) &&

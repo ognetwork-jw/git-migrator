@@ -8,6 +8,7 @@ export const REQUIRED_SCOPES: Readonly<Record<string, readonly string[]>> = {
   'GET /user': ['read:user:bitbucket'],
   'GET /workspaces/{workspace}/projects': ['read:project:bitbucket'],
   'GET /workspaces/{workspace}/members': ['read:workspace:bitbucket'],
+  'GET /workspaces/{workspace}/permissions': ['read:workspace:bitbucket'],
   'GET /workspaces/{workspace}/hooks': ['read:webhook:bitbucket'],
   'GET /workspaces/{workspace}/pipelines-config/variables': ['read:pipeline:bitbucket'],
   'GET /workspaces/{workspace}/permissions/repositories/{repo_slug}': ['read:repository:bitbucket'],
@@ -44,6 +45,7 @@ export const REQUIRED_SCOPES: Readonly<Record<string, readonly string[]>> = {
   'GET /repositories/{workspace}/{repo_slug}/effective-default-reviewers': [
     'read:pullrequest:bitbucket',
   ],
+  'GET /repositories/{workspace}/{repo_slug}/refs/branches': ['read:repository:bitbucket'],
   'GET /repositories/{workspace}/{repo_slug}/refs/branches/{name}': ['read:repository:bitbucket'],
   'GET /repositories/{workspace}/{repo_slug}/branching-model/settings': [
     'admin:repository:bitbucket',

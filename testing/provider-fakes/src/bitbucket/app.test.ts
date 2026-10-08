@@ -133,6 +133,16 @@ const ENDPOINTS: { name: string; url: string; template: string; noSchema?: boole
     template: '/workspaces/{workspace}/members',
   },
   {
+    name: 'workspace permissions (owners)',
+    url: '/2.0/workspaces/acme/permissions',
+    template: '/workspaces/{workspace}/permissions',
+  },
+  {
+    name: 'branches',
+    url: '/2.0/repositories/acme/auto-ok/refs/branches',
+    template: '/repositories/{workspace}/{repo_slug}/refs/branches',
+  },
+  {
     name: 'repo user permissions',
     url: '/2.0/repositories/acme/auto-ok/permissions-config/users',
     template: '/repositories/{workspace}/{repo_slug}/permissions-config/users',

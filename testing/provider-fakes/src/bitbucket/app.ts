@@ -366,6 +366,22 @@ export function createFakeBitbucket(options: FakeBitbucketOptions = {}): FakeBit
     );
   });
 
+  // Workspace memberships with their permission level (`owner`, `member`); owners are the admins.
+  api.get('/2.0/workspaces/:ws/permissions', (c) => {
+    const ws = getWs(c);
+    const s = ser(c);
+    return list(
+      c,
+      ws.members.map((id) => ({
+        type: 'workspace_membership',
+        permission: ws.admins.includes(id) ? 'owner' : 'member',
+        user: s.accountById(id),
+        workspace: s.workspaceRef(ws),
+        links: {},
+      })),
+    );
+  });
+
   api.get('/1.0/groups/:ws', (c) => {
     if (config.groupsEndpoint === 'not-found') throw notFound('Not found');
     if (config.groupsEndpoint === 'gone') throw new HttpError(410, 'Gone');
@@ -752,6 +768,15 @@ export function createFakeBitbucket(options: FakeBitbucketOptions = {}): FakeBit
         const u = state.user(r.accountId);
         return u ? [s.defaultReviewer(r.reviewerType, u)] : [];
       }),
+    );
+  });
+
+  api.get('/2.0/repositories/:ws/:slug/refs/branches', (c) => {
+    const { repo } = getRepo(c);
+    const s = ser(c);
+    return list(
+      c,
+      repo.branches.map((b) => s.branch(b)),
     );
   });
 
