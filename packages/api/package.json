@@ -5,7 +5,8 @@
   "type": "module",
   "description": "Hono app: routes, OpenAPI, SSE, ZenStack RPC mount.",
   "exports": {
-    ".": "./src/index.ts"
+    ".": "./src/index.ts",
+    "./client": "./src/client.ts"
   },
   "scripts": {
     "build": "tsc -b",
@@ -14,16 +15,23 @@
     "test": "vitest run --root ../.. --project unit packages/api"
   },
   "dependencies": {
-    "@git-migrator/core": "workspace:*",
-    "@git-migrator/canonical": "workspace:*",
-    "@git-migrator/db": "workspace:*",
+    "@git-migrator/adapter-sdk": "workspace:*",
     "@git-migrator/auth": "workspace:*",
-    "@git-migrator/jobs": "workspace:*",
-    "@git-migrator/registry": "workspace:*",
-    "@git-migrator/quota": "workspace:*",
+    "@git-migrator/canonical": "workspace:*",
     "@git-migrator/config": "workspace:*",
-    "@git-migrator/observability": "workspace:*",
+    "@git-migrator/core": "workspace:*",
+    "@git-migrator/db": "workspace:*",
     "@git-migrator/guidance": "workspace:*",
-    "@git-migrator/adapter-sdk": "workspace:*"
+    "@git-migrator/jobs": "workspace:*",
+    "@git-migrator/observability": "workspace:*",
+    "@git-migrator/quota": "workspace:*",
+    "@git-migrator/registry": "workspace:*",
+    "@hono/zod-openapi": "1.6.3",
+    "@zenstackhq/server": "3.9.7",
+    "hono": "4.13.13",
+    "zod": "4.6.5"
+  },
+  "devDependencies": {
+    "superjson": "2.2.6"
   }
 }

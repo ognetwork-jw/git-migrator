@@ -18,7 +18,8 @@
     "@git-migrator/api": "workspace:*",
     "@git-migrator/auth": "workspace:*",
     "@git-migrator/config": "workspace:*",
+    "@git-migrator/db": "workspace:*",
     "@git-migrator/observability": "workspace:*",
-    "@git-migrator/db": "workspace:*"
+    "hono": "4.13.13"
   }
 }

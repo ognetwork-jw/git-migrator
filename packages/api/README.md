@@ -2,6 +2,25 @@
 
 Hono app: routes, OpenAPI, SSE, ZenStack RPC mount.
 
-Status: placeholder from T-001; a later task fills it (see `docs/spec/15-work-breakdown.md`).
-
 Declared internal dependencies (ARC-012, checked by `pnpm lint`): @git-migrator/core, @git-migrator/canonical, @git-migrator/db, @git-migrator/auth, @git-migrator/jobs, @git-migrator/registry, @git-migrator/quota, @git-migrator/config, @git-migrator/observability, @git-migrator/guidance, @git-migrator/adapter-sdk.
+
+## What is here (T-021)
+
+`createApiApp(deps)` builds the one Hono app of API-001:
+
+| Path | |
+|---|---|
+| `/api/auth/*` | `AuthService.handle` (never `auth.handler`, or every Entra sign-in is denied) |
+| `/api/model/*` | ZenStack `RPCApiHandler` through `createHonoHandler`, on `db.forActor(actor)` (the allow-list facade) |
+| `/api/v1/*` | `@hono/zod-openapi` endpoints; `/api/v1/openapi.json` is the OpenAPI 3.1 document |
+| `/api/healthz`, `/api/readyz` | liveness (no database) and readiness (`select 1` plus `deps.ready`) |
+
+Every request to `/api/model/*` and `/api/v1/*` resolves to an Actor (`resolvePrincipal`) or gets a 401 problem. An `Authorization: Bearer gm_...` header is an API key and decides alone; otherwise the Better Auth session is mapped to its Actor by `authUserId`. A disabled Actor is rejected on every request. A session-authenticated write must carry `Origin` equal to `publicUrl`. Name and email always come from the Actor, never from `session.user` (ADR-0171). Request bodies are limited to 1 MiB.
+
+Errors are RFC 9457 `application/problem+json` with `type` `https://git-migrator.invalid/problems/<code>` (`problem.ts`); handlers `throw new ProblemError(code)`. The UI maps `code` to `problem.<code>` in `apps/web/messages/en.json`. List endpoints use `PageQuerySchema` and `toPage` (cursor, `limit` at most 200).
+
+The typed client of the custom endpoints is `createApiClient` from `@git-migrator/api/client` (`hc<AppType>`). Endpoints in this task: `GET /me`, `POST /actors`, `PATCH /actors/{id}`, `POST /actors/{id}/api-keys`, `DELETE /api-keys/{id}`; later tasks add the rest of API-020 to `createV1`. Custom endpoints check `can(actor, capability)` from `@git-migrator/auth` and write their `AuditEvent` in the mutation's transaction.
+
+## Error behaviour (ADR-0202)
+
+Every 4xx and 5xx under `/api/v1` is `application/problem+json`: handlers throw `ProblemError`, other `HTTPException`s are mapped by status, and a middleware rewrites any remaining non-problem error (malformed JSON, wrong content type). On `/api/model/*` an operation the facade does not expose (also inside `$transaction/sequential`) is a 404 problem, every 5xx body is a generic `internal_error` problem, and failed database calls are logged as class, reason, model and SQLSTATE only (`safeErrorFields`, wired through `createDb({ onError })`). `PATCH /actors/{id}` refuses (409 `last_admin`) a change that would leave no enabled admin; it serializes Actor changes with an advisory lock under READ COMMITTED, and a serialization failure or deadlock that still occurs is a 409 `conflict`.
