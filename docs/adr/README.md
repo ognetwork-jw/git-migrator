@@ -41,6 +41,11 @@
 | [0047](0047-proc-012-guard-rules.md) | PROC-012 guard rules under ADR-0045, and the fail-closed policy | accepted (no spec change needed) |
 | [0048](0048-proc-013-014-stop-hooks.md) | Scope, triggers and loop guard of the SubagentStop and Stop hooks | accepted (no spec change needed) |
 | [0049](0049-ci-pinning-and-gitleaks.md) | CI jobs, action pinning and the gitleaks scan | accepted (no spec change needed) |
+| [0050](0050-config-overrides-and-errors.md) | Configuration environment overrides and error reporting | agent-decided |
+| [0051](0051-config-schema-decisions.md) | Configuration schema decisions where DEP-040 is silent | agent-decided |
+| [0052](0052-log-redaction.md) | Log redaction: keys, values and arguments | agent-decided |
+| [0053](0053-metrics-registry.md) | Prometheus registry, metric labels and the metrics server | agent-decided |
+| [0054](0054-tracing-export-policy.md) | Tracing starts without export; OTLP export only when configured | agent-decided |
 | [0055](0055-core-pure-sha256-and-jcs.md) | Pure SHA-256 in `core`, and a strict RFC 8785 serializer | accepted (no spec change needed) |
 | [0056](0056-field-path-and-pattern-syntax.md) | Field path escaping and Expected Difference pattern semantics | accepted (no spec change needed) |
 | [0057](0057-collection-normalization.md) | Declaring and normalizing keyed collections | accepted (no spec change needed) |

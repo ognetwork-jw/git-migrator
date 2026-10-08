@@ -2,7 +2,7 @@
 
 - Status: agent-decided
 - Date: 2026-10-08
-- Affects: DEP-040, ARC-030, AUTH-010, AUTH-012, FAC-005, JOB-043, JOB-050, LIF-030, LIF-044
+- Affects: DEP-040, ARC-030, AUTH-010, AUTH-012, FAC-005, JOB-043, JOB-050, LIF-030, LIF-044, ADP-071
 
 ## Context
 
@@ -37,7 +37,15 @@ DEP-040 gives the configuration keys with example values, not a complete schema 
 
 **Placeholders.** The DEP-040 example uses `appId: 0`, `installationId: 0` and `orgId: ""` as placeholders. They are accepted (non-negative integers, any string). The GitHub adapter must treat `0` as unset when it uses the value; that check is part of the adapter task, not of config.
 
+**The example's empty `tenantId` is a placeholder that is invalid in production.** DEP-040 shows `environment: production` with `auth.entra.tenantId: ""`. Production needs an Entra tenant (see the cross-field rules below), so that example is rejected there. The orchestrator will update the spec example. The DEP-040 example is also not loadable verbatim: its `roleMappings: [ ... ]` is an ellipsis, which the schema rejects. The test `spec-example.test.ts` asserts both facts: as written, the load fails at the ellipsis; with it read as an empty list, the only failure is the empty tenant.
+
+**Default environment.** `environment` is `development` by default, as the spec's defaults require. A default is a fail-open choice for production guards, so the loader warns (to standard error, or a `warn` callback) when `environment` is not set by the file or by `GM_ENVIRONMENT`, and either `auth.testSignIn.enabled` is true or `publicUrl` is set explicitly to an http URL. The default `publicUrl` is plain http for local development and does not warn. The chart must set `GM_ENVIRONMENT`; the warning is a second line of defence, not the mechanism.
+
+**URL settings** (`publicUrl`, `endpoints[].baseUrl`, `gitBaseUrl`, `observability.otlpEndpoint`) must be http or https and must not carry a username, password, query string or fragment. A secret in a URL setting would be written into logs and manifests.
+
 **Provider options live in the config package.** `endpoints[].options` is a discriminated union on `provider` (`bitbucket-cloud`: `workspace`; `github`: `org`, `appId`, `installationId`), because DEP-040 is normative and the config package has no dependencies (ARC-012). The glossary terms (GLO-002) are used here as configuration keys mandated by DEP-040, not as core, facet, database or UI vocabulary. A new provider adds a member to the union in the same PR.
+
+**Provider names in the file.** The DEP-040 keys that name providers (`endpoints[].provider`, `options.workspace`, `options.org`, `atlassianAdmin`, the top-level `github` section, and the default secret names) are kept as the spec writes them. They are configuration vocabulary that operators must type, so the GLO-002 rule for core, facets, database and UI code does not apply to this package.
 
 **Quota overrides** are `endpoints[].quota.overrides`: resource group name to a positive whole number. The keys are not validated against the Bitbucket list because JOB-043 says updated numbers need no code change; the adapter decides which names it reads. `quota` is accepted on every endpoint, not only on Bitbucket, so one shape serves all providers.
 
@@ -46,6 +54,12 @@ DEP-040 gives the configuration keys with example values, not a complete schema 
 **Cron** is five fields, numeric only (no names, `L`, `W`, `#` or `?`). A step must be between 1 and the field maximum. A cron with a sixth seconds field is rejected, because BullMQ schedulers in DEP-040 use the five-field form.
 
 **Naming pipelines.** A step's variable must be initialized by an earlier step; the template may only use initialized variables. `replace` patterns must compile as JavaScript regular expressions (flag `u`). Validation of the target name (length, characters) remains LIF-031's job at analysis time.
+
+**Step strictness against LIF-030.** LIF-030 writes the transform step as `{ var, op, arg?: number }`. This schema requires `arg` for `truncate` (a positive integer) and rejects `arg` on `lowercase` and `kebab`, because an ignored argument would hide a mistake in the rule. Every other op takes exactly its own fields (`pattern` and `with` for `replace`). The schema is stricter than the type in LIF-030 on purpose; a rule that LIF-030 would accept with an ignored argument is rejected here.
+
+**Cross-field rules are not always reported together.** Zod skips refinements of an object once one of its fields has failed, so a production-only rule (tenant, https, test sign-in) appears only after the other errors are fixed. This keeps the report free of follow-on noise and is documented here rather than worked around.
+
+**Provider names are an explicit exception to GLO-002.** AGENTS.md states the glossary rule without exceptions. DEP-040 mandates provider-keyed configuration (`provider: bitbucket-cloud`, `options.workspace`, the top-level `github` section, the default secret names), so this package uses those names. This is an explicit exception, recorded here, for configuration keys only; core, facets, database and UI code stay provider-neutral.
 
 **Cross-field rules** checked when the rest of the document is valid: endpoint and route ids are unique; route source and target are defined endpoints and differ; in `production`, `publicUrl` is https, `auth.entra.tenantId` is set, and `auth.testSignIn.enabled` is false (AUTH-012, Q66). A cross-field rule is not reported when an earlier error already stopped validation, which is how Zod works.
 
@@ -59,4 +73,4 @@ DEP-040 gives the configuration keys with example values, not a complete schema 
 
 ## Affected requirements
 
-DEP-040, ARC-030, AUTH-010, AUTH-012, FAC-005, JOB-043, JOB-050, LIF-030, LIF-044, ADR-0020.
+DEP-040, ARC-030, AUTH-010, AUTH-012, FAC-005, JOB-043, JOB-050, LIF-030, FAC-MRG-001, ADR-0020, ADR-0052.
