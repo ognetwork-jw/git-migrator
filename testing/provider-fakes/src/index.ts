@@ -1,2 +1,6 @@
-/** Placeholder. Filled in by a later task (see docs/spec/15-work-breakdown.md). */
 export const PACKAGE_NAME = '@git-migrator/provider-fakes';
+
+export type { FakeBitbucket, FakeBitbucketOptions } from './bitbucket/index.ts';
+export * as bitbucket from './bitbucket/index.ts';
+export { createFakeBitbucket } from './bitbucket/index.ts';
+export { type RunningFakes, type StartOptions, startFakes } from './start.ts';

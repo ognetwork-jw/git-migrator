@@ -11,6 +11,14 @@
     "build": "tsc -b",
     "typecheck": "tsc -b",
     "lint": "biome check .",
-    "test": "vitest run --root ../.. --project unit testing/provider-fakes"
+    "test": "vitest run --root ../.. --project unit testing/provider-fakes",
+    "start": "node src/main.ts"
+  },
+  "dependencies": {
+    "@hono/node-server": "2.1.4",
+    "hono": "4.13.13"
+  },
+  "devDependencies": {
+    "openapi-response-validator": "12.1.3"
   }
 }

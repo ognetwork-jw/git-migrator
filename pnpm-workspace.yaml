@@ -3,3 +3,5 @@ packages:
   - packages/*
   - packages/adapters/*
   - testing/*
+minimumReleaseAgeExclude:
+  - '@hono/node-server@2.1.4'
