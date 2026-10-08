@@ -178,6 +178,9 @@ importers:
       oxc-parser:
         specifier: 0.153.0
         version: 0.153.0
+      smol-toml:
+        specifier: 1.9.0
+        version: 1.9.0
       turbo:
         specifier: 2.11.7
         version: 2.11.7
@@ -187,6 +190,9 @@ importers:
       vitest:
         specifier: 5.0.3
         version: 5.0.3(@opentelemetry/api@1.9.1)(@types/node@24.19.1)(@vitest/coverage-v8@5.0.3)(vite@8.3.3(@types/node@24.19.1)(yaml@2.9.1))
+      yaml:
+        specifier: 2.9.1
+        version: 2.9.1
 
   apps/web:
     dependencies:
@@ -1564,6 +1570,10 @@ packages:
     resolution: {integrity: sha512-b3rppTKm9T+PsVCBEOUR46GWI7fdOs00VKZ1+9c1EWDaDMvjQc6tUwuFyIprgGgTcWoVHSKrU8H31ZHA2e0RHA==}
     engines: {node: '>=10'}
 
+  smol-toml@1.9.0:
+    resolution: {integrity: sha512-hpd+HLON7HdZXqYchMM/+LaTTbdK0AU3NngIJ4KVyWbY9bfQqdL9cD+4yf6dUoU2Ap4VsU0JkQi6FxAI1B2mXQ==}
+    engines: {node: '>= 18'}
+
   sonic-boom@4.2.1:
     resolution: {integrity: sha512-w6AxtubXa2wTXAUsZMMWERrsIRAdrK0Sc+FUytWvYAhBJLyuI4llrMIC1DtlNSdI99EI86KZum2MMq3EAZlF9Q==}
 
@@ -2636,6 +2646,8 @@ snapshots:
       '@rolldown/binding-win32-x64-msvc': 1.2.12
 
   safe-stable-stringify@2.5.0: {}
+
+  smol-toml@1.9.0: {}
 
   sonic-boom@4.2.1:
     dependencies:
