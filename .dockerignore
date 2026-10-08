@@ -1,0 +1,18 @@
+# Keep the build context small and free of secrets (DEP-001, ADR-0067). The dev stage does not COPY
+# the context; the checkout is a bind mount. Nothing secret belongs in the context either way.
+.git
+**/node_modules
+**/.env
+**/.env.*
+!**/.env.test
+**/*.pem
+.pre-commit-config.yaml
+.claude/settings.local.json
+.devenv
+.direnv
+.turbo
+.worktrees
+**/coverage
+**/dist
+**/.turbo
+**/.next

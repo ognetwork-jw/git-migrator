@@ -1,0 +1,122 @@
+# Docker Compose dev environment (DEV-020, ADR-0068). Same database, user and port as devenv.nix.
+#
+# One checkout per path. Compose installs into the bind-mounted checkout as your host UID/GID. Never
+# share that checkout with the devenv or host path: the install refuses (tools/install-origin.ts).
+# A separate clone is the safe way to run both.
+#
+# Run as your host user. bash keeps UID read-only, so export it, and export GID from `id -g`:
+#   export UID; export GID=$(id -g)
+# Without them the containers run as 1000:1000.
+#
+# Start order: postgres (healthy) and install (once). dev and fakes start after install. dev does not
+# wait for fakes, and fakes does not wait for dev. Re-running install needs dev and fakes restarted.
+#
+# Secrets: `secretspec run --profile development -- docker compose up` passes the development values
+# through. Without it only POSTGRES_PASSWORD has a default; the others are unset.
+name: git-migrator
+
+x-dev-build: &dev-build
+  context: .
+  dockerfile: deploy/docker/Dockerfile
+  target: dev
+
+x-host-user: &host-user "${UID:-1000}:${GID:-1000}"
+
+services:
+  postgres:
+    # postgres:16 (digest pinned, ADR-0067; the tag is kept for humans)
+    image: postgres:16@sha256:ca0bd484cb98bf4b24eb1010e73fb3fcbd6714d240fbc1a10eea5b7dbecb641d
+    environment:
+      POSTGRES_DB: git_migrator
+      POSTGRES_USER: git_migrator
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-git_migrator}
+    ports:
+      - "127.0.0.1:${POSTGRES_HOST_PORT:-5432}:5432"
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U git_migrator -d git_migrator"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  # One-shot: `pnpm install --frozen-lockfile` in the checkout, as the host user (install-deps.sh).
+  install:
+    build: *dev-build
+    user: root
+    restart: "no"
+    working_dir: /workspace
+    command: ["sh", "/workspace/deploy/docker/install-deps.sh"]
+    environment:
+      GM_UID: "${UID:-1000}"
+      GM_GID: "${GID:-1000}"
+    volumes:
+      - .:/workspace
+      - pnpm-store:/pnpm-store
+
+  # `pnpm dev` (web on port 3000, and the worker) from the checkout. Nothing is installed here.
+  dev:
+    build: *dev-build
+    user: *host-user
+    depends_on:
+      postgres:
+        condition: service_healthy
+      install:
+        condition: service_completed_successfully
+    working_dir: /workspace
+    volumes:
+      - .:/workspace
+      - pnpm-store:/pnpm-store
+    ports:
+      - "127.0.0.1:3000:3000"
+    environment:
+      GM_ENVIRONMENT: development
+      POSTGRES_HOST: postgres
+      POSTGRES_PORT: "5432"
+      POSTGRES_DB: git_migrator
+      POSTGRES_USER: git_migrator
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-git_migrator}
+      BETTER_AUTH_SECRET:
+      ENTRA_CLIENT_ID:
+      ENTRA_CLIENT_SECRET:
+      BITBUCKET_CREDENTIALS:
+      GITHUB_APP_PRIVATE_KEY:
+      GM_TEST_USER_PASSWORD:
+      ATLASSIAN_ADMIN_API_KEY:
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://127.0.0.1:3000/ >/dev/null"]
+      interval: 5s
+      timeout: 3s
+      retries: 60
+      start_period: 20s
+
+  # Provider fakes: Bitbucket 4010, git 4030 (GitHub 4020 once T-042 lands). Only with --profile test.
+  # Clone and LFS links use the name `fakes`, so other containers on the network can follow them.
+  fakes:
+    build: *dev-build
+    profiles: ["test"]
+    user: *host-user
+    depends_on:
+      install:
+        condition: service_completed_successfully
+    working_dir: /workspace
+    command: ["pnpm", "--filter", "@git-migrator/provider-fakes", "start"]
+    volumes:
+      - .:/workspace
+      - pnpm-store:/pnpm-store
+      - fake-git-data:/var/lib/fake-git
+    ports:
+      - "127.0.0.1:4010:4010"
+      - "127.0.0.1:4020:4020"
+      - "127.0.0.1:4030:4030"
+    environment:
+      GM_ENVIRONMENT: test
+      FAKES_HOST: 0.0.0.0
+      FAKE_GIT_ROOT: /var/lib/fake-git
+      FAKE_GIT_PUBLIC_URL: http://fakes:4030
+      FAKE_GIT_BASE_URL: http://fakes:4030/source
+
+volumes:
+  postgres-data:
+  pnpm-store:
+  fake-git-data:
