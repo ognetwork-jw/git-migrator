@@ -110,5 +110,8 @@
 | [0170](0170-auth-claims-session-and-tenant.md) | Entra claims read in `validateUserInfo`, request-scoped hand-off to Actor sync, tenant check, denial surface | accepted (spec updated) |
 | [0171](0171-auth-provisioning-test-users-and-migration.md) | Actor linking, test sign-in users, production guard, programmatic Better Auth migration | accepted (spec updated) |
 | [0190](0190-adapter-sdk-design.md) | Adapter SDK design: interpret hook, quota gates, origin pinning, raw capture, test allowlist | accepted (spec updated) |
+| [0135](0135-headless-secrets-in-devenv-ci.md) | Headless secretspec route for the devenv CI job (env provider, test profile) | agent-decided |
+| [0136](0136-devenv-ci-cli-and-lock.md) | devenv CI pins the CLI to the v2.4.0 tag and uses the devenv cache; devenv.lock not committed yet | agent-decided |
+| [0137](0137-devenv-test-readiness.md) | devenv test waits on readiness probes; Postgres probed over the socket; CREATEDB for the app role | agent-decided |
 
 New ADRs continue from 0028. Implementor decisions use `status: agent-decided` (PROC-005). T-002 uses 0065–0069.

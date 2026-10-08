@@ -38,7 +38,7 @@ Install the CLI once with `nix profile install nixpkgs#secretspec` (0.21.1, the 
 
 devenv installs a `pre-commit` hook into the repository's shared hooks directory, which every worktree uses, and writes `.pre-commit-config.yaml` into the checkout. In a shared checkout, pass `--option git-hooks.enable:bool false` to every devenv command so no hook is installed. If one was installed, remove it (`rm "$(git rev-parse --git-common-dir)/hooks/pre-commit" .pre-commit-config.yaml`). Neither is committed. See ADR-0066.
 
-On a machine without a keyring (CI, headless hosts), override the provider: `devenv --secretspec-provider dotenv shell`. The override replaces the per-secret routing, so `GITHUB_APP_PRIVATE_KEY` then has to come from the environment or a `.env` file; see ADR-0066.
+On a machine without a keyring, override the provider for one command. The override replaces the per-secret routing, so `GITHUB_APP_PRIVATE_KEY` then has to come from the environment or a `.env` file; see ADR-0066. The CI job (`devenv test` in `.github/workflows/devenv.yml`) uses the `test` profile with the `env` provider, which reads the committed fake values; see ADR-0135.
 
 ### Docker Compose path
 
