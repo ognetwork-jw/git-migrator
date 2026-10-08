@@ -53,6 +53,11 @@
 | [0059](0059-readiness-and-policy-resolution.md) | Readiness inputs and lossy-policy resolution in `core` | accepted (no spec change needed) |
 | [0060](0060-fake-bitbucket-behavior.md) | Fake Bitbucket behavior choices where the spec is silent | accepted (no spec change needed) |
 | [0061](0061-bitbucket-response-validation.md) | How fake Bitbucket responses are validated against the OpenAPI document | accepted (no spec change needed) |
+| [0065](0065-secretspec-manifest.md) | secretspec 0.21.1 manifest syntax and profile inheritance | agent-decided |
+| [0066](0066-devenv-environment.md) | devenv environment | agent-decided |
+| [0067](0067-docker-image.md) | Docker image stages and secretspec installation | agent-decided |
+| [0068](0068-compose-and-placeholders.md) | Compose services and placeholder processes | agent-decided |
+| [0069](0069-fixture-key-and-test-env.md) | Committed fake GitHub App key and `.env.test` | agent-decided |
 | [0070](0070-fake-git-url-layout-and-auth.md) | Fake git server URL layout and authentication | accepted (no spec change needed) |
 | [0071](0071-fake-git-rejection-mechanisms.md) | How the fake target rejects oversized blobs and pushes | accepted (no spec change needed) |
 | [0072](0072-fake-git-seeding.md) | Seeding fake git repositories with `git fast-import` | accepted (no spec change needed) |
@@ -73,4 +78,4 @@
 | [0094](0094-guidance-severity-links-and-unverified-urls.md) | Guidance severity model, and links that could not be verified | accepted (spec updated) |
 | [0095](0095-naming-semantics.md) | Naming pipeline semantics, validation and collision keys | accepted (spec updated) |
 
-New ADRs continue from 0028. Implementor decisions use `status: agent-decided` (PROC-005).
+New ADRs continue from 0028. Implementor decisions use `status: agent-decided` (PROC-005). T-002 uses 0065–0069.

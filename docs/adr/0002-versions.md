@@ -28,6 +28,8 @@ The spec says "latest stable" for most dependencies (ARC-001) and requires exact
 | `oxc-parser` | `0.153.0` | Parses TS/TSX for the repository tools (`tools/ast.ts`); TypeScript 7 has no JavaScript API. Native binding, no JS dependency of ours. See ADR-0028. |
 | `re2js` | `2.8.6` | Added by T-013 to `packages/core` only (not the root). Pure-JavaScript RE2 port: linear-time regex for naming `replace` steps (ADR-0095). |
 | `@types/node` | `24.19.1` | Deliberately the `24.x` line, to match the Node 24 runtime. `latest` is 26.6.4, which would describe APIs Node 24 lacks. |
+| `yaml` | `2.9.1` | Added by T-002 (review round 1). Parses `compose.yaml` and `devenv.yaml` in `tools/dev-environment.test.ts`. The version `packages/config` pins later (see "Intended pins"). |
+| `smol-toml` | `1.9.0` | Added by T-002 (review round 1). Parses `secretspec.toml` in `tools/dev-environment.test.ts`. ADR-0065. |
 
 ### Installed by T-004 (exact pins in `packages/observability/package.json`)
 
