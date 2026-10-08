@@ -14,6 +14,17 @@ export {
   type ConnectionParts,
   redactConnectionString,
 } from './connection.ts';
+export {
+  createEventListener,
+  type EventListener,
+  type EventListenerOptions,
+  type FeedMessage,
+  type ListenClient,
+  pgListenClient,
+  publishEvent,
+  publishEventIn,
+  type QueryExecutor,
+} from './events.ts';
 export * from './generated/models.ts';
 export { type SchemaType, schema } from './generated/schema.ts';
 export {

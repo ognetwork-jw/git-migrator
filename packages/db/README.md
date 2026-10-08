@@ -42,3 +42,7 @@ Arguments are also refused when an object is reached twice (shared references, a
 `forActor` clients carry an audit plugin (`src/audit.ts`, ADR-0201). Every create, update or delete made through them writes one `AuditEvent` per row (`rpc.<model>.<action>`, a redacted field diff) in the same transaction. The `privileged` client is not audited; custom endpoints and jobs write their own events. The facade exposes no write operation of `auditEvent`.
 
 A `rpc.wave.delete` event lists `clearedMigrationIds`, the Migrations whose `waveId` the delete cleared. A mutation without an Actor id throws and rolls back, so nothing commits unaudited (ADR-0202).
+
+## Events (JOB-060)
+
+`publishEvent(executor, event)` and `publishEventIn(tx, event)` run `pg_notify('gm_events', ...)` with the payload from `encodeEvent` (`@git-migrator/core`, at most 7,000 bytes); inside a transaction the notification is delivered on commit only. `createEventListener({ createClient: pgListenClient(pool) })` holds one dedicated `LISTEN gm_events` connection (not counted in `poolMax`), reconnects with backoff, and tells subscribers to resync after a reconnect. Fan-out to SSE clients is in `@git-migrator/api`.
