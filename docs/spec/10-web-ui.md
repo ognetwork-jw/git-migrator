@@ -52,9 +52,14 @@ type Guidance = {
   code: string;
   title: string;          // i18n key
   summary: string;        // i18n key, may interpolate params
-  steps: { text: string; copy?: string; link?: string }[];   // text/copy are templates over params
-  verification?: string;  // how parity verifies it, if verifiable
+  steps: { text: string; copy?: string; link?: string }[];   // text is an i18n key; copy is a template over params (not translated)
+  verification?: string;  // i18n key: how parity verifies it, if verifiable
 };
 ```
+
+- English guidance messages live in `packages/guidance/src/messages/en.json` (flat dotted keys such as `finding.<code>.title`). The web app mounts them under its guidance namespace with `nestCatalog` and renders with `renderGuidance(code, params, { lookup: nextIntlLookup(t) })`, which uses next-intl's `t.raw` so ICU syntax does not interfere; missing keys fall back to English (ADR-0093).
+- Templates use `{name}` or `{name:context}` placeholders with typed parameters and three contexts: `markdown` (escaped, autolinks neutralised), `shell` (POSIX single-quoted; values starting with `-` refused) and `raw` (URL parameters only). Invalid or missing parameters render as a `‹name›` marker and drop the step's `copy`; rendering never throws (ADR-0092).
+- Severity is `blocker`, `pre`, `post` or `warning`, with a separate verifiable flag. The catalog carries no unverified external links (ADR-0094).
+- `packages/guidance/src/codes.ts` is the single list of finding codes, including the LIF-031 lifecycle blockers; a test cross-checks it against `05-facets.md` and the LIF-031 bullets (ADR-0090, ADR-0091).
 
 The UI renders it with copy-to-clipboard buttons for `copy` values. Every code emitted by any Facet MUST have guidance; a unit test enforces this (FAC-002).

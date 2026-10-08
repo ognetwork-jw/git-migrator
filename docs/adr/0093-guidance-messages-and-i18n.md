@@ -1,6 +1,6 @@
 # ADR-0093: Where guidance messages live, and how next-intl renders them
 
-- Status: agent-decided
+- Status: accepted (spec updated)
 - Date: 2026-10-08
 
 ## Context

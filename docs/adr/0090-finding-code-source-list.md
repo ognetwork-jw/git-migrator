@@ -1,6 +1,6 @@
 # ADR-0090: One source list of Finding codes, with the FAC-006 generic codes
 
-- Status: agent-decided
+- Status: accepted (spec updated)
 - Date: 2026-10-08
 
 ## Context

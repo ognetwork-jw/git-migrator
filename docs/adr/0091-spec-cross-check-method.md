@@ -1,6 +1,6 @@
 # ADR-0091: How the finding-code list is cross-checked against the spec
 
-- Status: agent-decided
+- Status: accepted (spec updated)
 - Date: 2026-10-08
 
 ## Context

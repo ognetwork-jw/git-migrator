@@ -1,6 +1,6 @@
 # ADR-0094: Guidance severity model, and links that could not be verified
 
-- Status: agent-decided
+- Status: accepted (spec updated)
 - Date: 2026-10-08
 
 ## Context

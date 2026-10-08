@@ -216,7 +216,7 @@ type BranchRules = { rules: BranchRule[] };
 ```ts
 type Webhook = {                                   // key: key = webhookKey(url) = <origin>#<16 hex of sha256(normalized URL)> (ADR-0088)
   key: string;
-  url: string;                                     // may carry credentials in path/query: redact before logging or display (redactWebhookUrl)
+  url: string;                                     // may carry credentials in path/query: redact before logging or display (redactWebhookUrl); the one exception is the guidance copy snippet that recreates the hook, which carries the full URL shell-quoted because the user needs it (FAC-WEB-002, ADR-0092)
   events: CanonicalEvent[];                        // sorted set
   active: boolean;
   hasSecret: boolean;                              // secret value is unreadable

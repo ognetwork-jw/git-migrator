@@ -1,6 +1,6 @@
 # ADR-0092: Guidance template syntax, typed parameters, escaping and value hardening
 
-- Status: agent-decided
+- Status: accepted (spec updated)
 - Date: 2026-10-08
 
 ## Context

@@ -18,7 +18,7 @@ git-migrator is a provider-neutral framework and web app for migrating repositor
 - Never call real Bitbucket or GitHub from tests (TST-006). Use `testing/provider-fakes`.
 - Never put secrets in code, logs, argv, fixtures or raw-response captures.
 - All provider HTTP goes through `ProviderHttpClient` and the quota service.
-- Every user-facing string goes in `apps/web/messages/en.json`.
+- Every user-facing string goes in `apps/web/messages/en.json`, except guidance content, which goes in `packages/guidance/src/messages/en.json` (ADR-0093).
 - Conventional Commits. Review fixes are `--fixup` commits, autosquashed into the commit they fix.
 
 ## Commands
