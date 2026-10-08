@@ -138,5 +138,6 @@
 | [0291](0291-helm-chart-decisions.md) | Helm chart naming, configuration merge, required values and helm:check | agent-decided |
 | [0292](0292-release-and-ci-image-jobs.md) | Release workflow and the CI image and chart jobs | agent-decided |
 | [0293](0293-secretspec-production-profile.md) | secretspec production profile and manifest in the image | agent-decided |
+| [0294](0294-erasable-syntax-only.md) | Runtime TypeScript must be erasable (erasableSyntaxOnly, strip-only import guard) | agent-decided |
 
 New ADRs continue from 0028. Implementor decisions use `status: agent-decided` (PROC-005). T-002 uses 0065–0069.

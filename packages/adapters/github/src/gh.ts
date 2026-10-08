@@ -51,10 +51,13 @@ export function encodePath(path: string): string {
 }
 
 export class Gh {
-  constructor(
-    readonly http: ProviderHttpClient,
-    readonly options: GhOptions = {},
-  ) {}
+  readonly http: ProviderHttpClient;
+  readonly options: GhOptions;
+
+  constructor(http: ProviderHttpClient, options: GhOptions = {}) {
+    this.http = http;
+    this.options = options;
+  }
 
   /** Same client, with a collector for the raw response ids of one read. */
   collecting(collector: Collector): Gh {

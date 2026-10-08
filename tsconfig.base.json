@@ -16,6 +16,7 @@
     "composite": true,
     "declaration": true,
     "emitDeclarationOnly": true,
-    "allowImportingTsExtensions": true
+    "allowImportingTsExtensions": true,
+    "erasableSyntaxOnly": true
   }
 }

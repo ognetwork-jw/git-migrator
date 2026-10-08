@@ -5,7 +5,8 @@
     "declaration": false,
     "emitDeclarationOnly": false,
     "noEmit": true,
-    "jsx": "react-jsx"
+    "jsx": "react-jsx",
+    "erasableSyntaxOnly": false
   },
   "include": [
     "vitest.config.ts",

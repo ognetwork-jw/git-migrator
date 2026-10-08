@@ -4,8 +4,10 @@ import { GUIDANCE } from './entries.ts';
 /** Thrown when a Facet emits Finding codes that have no guidance. */
 export class GuidanceCoverageError extends Error {
   override readonly name = 'GuidanceCoverageError';
-  constructor(readonly missing: readonly string[]) {
+  readonly missing: readonly string[];
+  constructor(missing: readonly string[]) {
     super(`Finding codes without guidance (FAC-002): ${missing.join(', ')}`);
+    this.missing = missing;
   }
 }
 
