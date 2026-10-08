@@ -43,8 +43,8 @@ The state machine is a pure function in `core`: `transition(state, event) → st
 | `parity_different` | `verified`, `manually_completed` | `drifted` | `statusBeforeDrift := from` |
 | `parity_different` | others | unchanged | |
 | `mark_complete` | any except `running`, `source_missing`, `manually_completed` | `manually_completed` | `statusBeforeManual := from` |
-| `revoke_complete` | `manually_completed` | `verified` if the latest parity is all equal and no tasks are open, else `statusBeforeManual` | |
-| `source_missing` | any except `running` | `source_missing` | `statusBeforeMissing := from`. While `running`, the event is deferred until `run_finished`. |
+| `revoke_complete` | `manually_completed` | `verified` if the latest parity is all equal and no tasks are open; else `statusBeforeManual`, except that a saved `verified` or `drifted` is never restored: the last Run outcome (`migrated`, `partial`, `failed` or `rolled_back`, from the latest finished migrate/run-anyway/resync/rollback Run that changed status) is used instead (LIF-075, ADR-0058) | |
+| `source_missing` | any except `running` and `source_missing` | `source_missing` | `statusBeforeMissing := from`. While `running`, the event is accepted but deferred until `run_finished` (not a LIF-003 rejection). While already `source_missing`, it is a no-op (ADR-0058). |
 | `source_present` | `source_missing` | `statusBeforeMissing` | |
 
 Runs of every kind go through `running`. `verified` and `manually_completed` Migrations can start resync, verify, rollback and source read-only Runs.

@@ -1,6 +1,6 @@
 # ADR-0057: Declaring and normalizing keyed collections
 
-- Status: agent-decided
+- Status: accepted (no spec change needed)
 - Date: 2026-10-08
 
 ## Context

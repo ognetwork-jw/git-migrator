@@ -1,6 +1,6 @@
 # ADR-0058: Lifecycle state machine edge cases
 
-- Status: agent-decided
+- Status: accepted (spec updated)
 - Date: 2026-10-08
 
 ## Context

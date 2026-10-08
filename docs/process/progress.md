@@ -9,7 +9,7 @@ The orchestrator maintains this table (see [workflow](workflow.md)). Integration
 | T-003 | in_review | task/T-003-agent-tooling-ci | [#4](https://github.com/ognetwork-jw/git-migrator/pull/4) | 2 | r1 fixed (26e9f42); round-2 review |
 | T-004 | in_review | task/T-004-config-observability | [#7](https://github.com/ognetwork-jw/git-migrator/pull/7) | 2 | r1: 3 BLOCKER (log redaction) + 4 MAJOR in fix pass |
 | T-010 | todo |  | | | |
-| T-011 | in_review | task/T-011-core-primitives | [#6](https://github.com/ognetwork-jw/git-migrator/pull/6) | 2 | r2 ACCEPTABLE (both); merging |
+| T-011 | merged | task/T-011-core-primitives | [#6](https://github.com/ognetwork-jw/git-migrator/pull/6) | 2 | merged to ai-main 1c654ab; ADR-0058 folded into LIF-002; 0055-0057, 0059 accepted |
 | T-012 | todo |  | | | |
 | T-013 | todo |  | | | |
 | T-014 | todo |  | | | |

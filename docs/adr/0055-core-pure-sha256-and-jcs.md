@@ -1,6 +1,6 @@
 # ADR-0055: Pure SHA-256 in `core`, and a strict RFC 8785 serializer
 
-- Status: agent-decided
+- Status: accepted (no spec change needed)
 - Date: 2026-10-08
 
 ## Context

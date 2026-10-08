@@ -1,6 +1,6 @@
 # ADR-0056: Field path escaping and Expected Difference pattern semantics
 
-- Status: agent-decided
+- Status: accepted (no spec change needed)
 - Date: 2026-10-08
 
 ## Context

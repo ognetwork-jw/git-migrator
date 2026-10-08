@@ -1,6 +1,6 @@
 # ADR-0059: Readiness inputs and lossy-policy resolution in `core`
 
-- Status: agent-decided
+- Status: accepted (no spec change needed)
 - Date: 2026-10-08
 
 ## Context

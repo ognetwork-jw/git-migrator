@@ -37,11 +37,11 @@
 | [0040](0040-force-push-fail-closed.md) | Force-push exemptions follow the spec pairing and fail closed on GitHub | accepted (spec updated) |
 | [0041](0041-blocks-creations-follows-push-restriction.md) | `blocksCreations` follows `restrictsPushes` | accepted (spec updated) |
 | [0045](0045-ai-main-integration-branch.md) | Agents integrate into `ai-main`; the human merges into `main` | accepted (user decision) |
-| [0055](0055-core-pure-sha256-and-jcs.md) | Pure SHA-256 in `core`, and a strict RFC 8785 serializer | agent-decided |
-| [0056](0056-field-path-and-pattern-syntax.md) | Field path escaping and Expected Difference pattern semantics | agent-decided |
-| [0057](0057-collection-normalization.md) | Declaring and normalizing keyed collections | agent-decided |
-| [0058](0058-lifecycle-edge-cases.md) | Lifecycle state machine edge cases | agent-decided |
-| [0059](0059-readiness-and-policy-resolution.md) | Readiness inputs and lossy-policy resolution in `core` | agent-decided |
+| [0055](0055-core-pure-sha256-and-jcs.md) | Pure SHA-256 in `core`, and a strict RFC 8785 serializer | accepted (no spec change needed) |
+| [0056](0056-field-path-and-pattern-syntax.md) | Field path escaping and Expected Difference pattern semantics | accepted (no spec change needed) |
+| [0057](0057-collection-normalization.md) | Declaring and normalizing keyed collections | accepted (no spec change needed) |
+| [0058](0058-lifecycle-edge-cases.md) | Lifecycle state machine edge cases | accepted (spec updated) |
+| [0059](0059-readiness-and-policy-resolution.md) | Readiness inputs and lossy-policy resolution in `core` | accepted (no spec change needed) |
 | [0060](0060-fake-bitbucket-behavior.md) | Fake Bitbucket behavior choices where the spec is silent | accepted (no spec change needed) |
 | [0061](0061-bitbucket-response-validation.md) | How fake Bitbucket responses are validated against the OpenAPI document | accepted (no spec change needed) |
 
