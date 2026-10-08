@@ -106,5 +106,6 @@
 | [0161](0161-pipelines-translation-safety.md) | Safety rules of the generated workflows | accepted (spec updated) |
 | [0162](0162-pipelines-translation-structure.md) | Shape of the generated workflows | accepted (spec updated) |
 | [0163](0163-pipelines-corpus-and-test-layout.md) | Where the pipelines corpus and its tests live | accepted (no spec change needed) |
+| [0180](0180-quota-service-design.md) | Quota service design: neutral feedback, near-limit clamp, secondary-hit counter, metrics sink | agent-decided |
 
 New ADRs continue from 0028. Implementor decisions use `status: agent-decided` (PROC-005). T-002 uses 0065–0069.

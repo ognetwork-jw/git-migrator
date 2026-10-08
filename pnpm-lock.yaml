@@ -486,6 +486,13 @@ importers:
       '@git-migrator/db':
         specifier: workspace:*
         version: link:../db
+      pg:
+        specifier: 8.23.1
+        version: 8.23.1
+    devDependencies:
+      '@types/pg':
+        specifier: 8.23.1
+        version: 8.23.1
 
   packages/registry:
     dependencies:

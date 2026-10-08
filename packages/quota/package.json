@@ -14,7 +14,11 @@
     "test": "vitest run --root ../.. --project unit packages/quota"
   },
   "dependencies": {
+    "@git-migrator/core": "workspace:*",
     "@git-migrator/db": "workspace:*",
-    "@git-migrator/core": "workspace:*"
+    "pg": "8.23.1"
+  },
+  "devDependencies": {
+    "@types/pg": "8.23.1"
   }
 }
