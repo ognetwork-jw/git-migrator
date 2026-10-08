@@ -134,6 +134,15 @@ export function registerRepos(r: Router, state: GitHubState): void {
     if ('description' in body) repo.description = (body.description as string | null) ?? null;
     if ('homepage' in body) repo.homepage = (body.homepage as string | null) ?? null;
     if (typeof body.archived === 'boolean') repo.archived = body.archived;
+    if (typeof body.allow_forking === 'boolean') repo.allowForking = body.allow_forking;
+    if (typeof body.allow_merge_commit === 'boolean')
+      repo.allowMergeCommit = body.allow_merge_commit;
+    if (typeof body.allow_squash_merge === 'boolean')
+      repo.allowSquashMerge = body.allow_squash_merge;
+    if (typeof body.allow_rebase_merge === 'boolean')
+      repo.allowRebaseMerge = body.allow_rebase_merge;
+    if (typeof body.delete_branch_on_merge === 'boolean')
+      repo.deleteBranchOnMerge = body.delete_branch_on_merge;
     if (typeof body.has_issues === 'boolean') repo.hasIssues = body.has_issues;
     if (typeof body.has_projects === 'boolean') repo.hasProjects = body.has_projects;
     if (typeof body.has_wiki === 'boolean') repo.hasWiki = body.has_wiki;

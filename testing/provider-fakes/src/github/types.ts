@@ -102,6 +102,8 @@ export interface OrgRec {
   /** Repositories the members may create, organization policy (provider doc, repository creation). */
   membersCanCreatePrivateRepositories: boolean;
   membersCanDeleteRepositories: boolean;
+  /** Whether private repositories may be forked at all (organization policy). Default true. */
+  membersCanForkPrivateRepositories: boolean;
   /** Whether `GET /orgs/{org}` shows the settings fields to the caller (owners only on GitHub). */
   exposeSettings: boolean;
   baseRole: 'none' | Role;
@@ -236,6 +238,12 @@ export interface RepoRec {
   hasIssues: boolean;
   hasProjects: boolean;
   hasWiki: boolean;
+  /** Repository settings written by PATCH (T-033). */
+  allowForking: boolean;
+  allowMergeCommit: boolean;
+  allowSquashMerge: boolean;
+  allowRebaseMerge: boolean;
+  deleteBranchOnMerge: boolean;
   createdAt: number;
   updatedAt: number;
   pushedAt: number | null;
