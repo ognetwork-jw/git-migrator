@@ -7,6 +7,8 @@ import { fileURLToPath } from 'node:url';
 import { hashCanonical } from '@git-migrator/core';
 import type pg from 'pg';
 import type { Db } from './client.ts';
+import { publishEventIn } from './events.ts';
+import { markAnalysesStale } from './staleness.ts';
 
 /** The Postgres schemas of DATA-001. Each is owned by a different migration tool. */
 export const SCHEMAS = ['app', 'auth', 'bullmq'] as const;
@@ -178,6 +180,7 @@ export async function syncConfig(db: Db, snapshot: ConfigSnapshot): Promise<Sync
     const endpoints = emptyCounts();
     const routes = emptyCounts();
     let staleMigrations = 0;
+    const changedRoutes: string[] = [];
     const now = new Date();
 
     const knownEndpoints = new Map((await tx.endpoint.findMany()).map((e) => [e.id, e]));
@@ -233,15 +236,7 @@ export async function syncConfig(db: Db, snapshot: ConfigSnapshot): Promise<Sync
         });
         routes.updated++;
         if (existing.configHash !== spec.configHash) {
-          const stale = await tx.migration.updateMany({
-            where: {
-              routeId: spec.id,
-              latestAnalysisId: { not: null },
-              OR: [{ analysisStaleAt: null }, { analysisStaleAt: { gt: now } }],
-            },
-            data: { analysisStaleAt: now },
-          });
-          staleMigrations += stale.count;
+          changedRoutes.push(spec.id);
         }
       } else routes.unchanged++;
 
@@ -273,6 +268,15 @@ export async function syncConfig(db: Db, snapshot: ConfigSnapshot): Promise<Sync
       if (!configuredRoutes.has(r.id) && r.retiredAt === null) {
         await tx.route.update({ where: { id: r.id }, data: { retiredAt: now } });
         routes.retired++;
+      }
+    }
+    // One statement for every changed Route, so the Migration rows are locked in one id order
+    // (ADR-0310); the staleness triggers lock them in the same order.
+    if (changedRoutes.length > 0) {
+      const stale = await markAnalysesStale(tx, { routeIds: changedRoutes });
+      staleMigrations += stale.length;
+      if (stale.length > 0) {
+        await publishEventIn(tx, { type: 'migration.updated', ids: {}, at: now.toISOString() });
       }
     }
     return { endpoints, routes, staleMigrations };

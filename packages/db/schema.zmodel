@@ -294,6 +294,10 @@ model Migration {
     blockerCodes             String[]             @map("blocker_codes") @deny('update', true) // promoted for filtering
     latestAnalysisId         String?              @map("latest_analysis_id") @deny('update', true)
     analysisStaleAt          DateTime?            @map("analysis_stale_at") @db.Timestamptz(3) @deny('update', true)
+    analysisFailedAt         DateTime?            @map("analysis_failed_at") @db.Timestamptz(3) @deny('update', true) // ADR-0312
+    analysisFailureCount     Int                  @default(0) @map("analysis_failure_count") @deny('update', true)
+    analysisRetryAt          DateTime?            @map("analysis_retry_at") @db.Timestamptz(3) @deny('update', true) // feeder backoff, database clock (ADR-0312)
+    staleGeneration          BigInt               @default(0) @map("stale_generation") @deny('update', true) // bumped by every stale marker (ADR-0310)
     targetCreatedByFramework Boolean              @default(false) @map("target_created_by_framework") @deny('update', true)
     sourceReadOnlyApplied    Boolean              @default(false) @map("source_read_only_applied") @deny('update', true)
     waveId                   String?              @map("wave_id")
@@ -379,6 +383,7 @@ model Analysis {
     targetSnapshotIds String[]    @map("target_snapshot_ids")
     readiness         Readiness
     translation       Json // per facet: desired target canonical + field fidelity
+    startedAt         DateTime?   @map("started_at") @db.Timestamptz(3) // database clock when the Analysis started (ADR-0310)
     createdAt         DateTime    @default(now()) @map("created_at") @db.Timestamptz(3)
     updatedAt         DateTime    @updatedAt @map("updated_at") @db.Timestamptz(3)
 
