@@ -12,6 +12,8 @@ Implemented:
 | `git-refs` | `src/git-refs` | T-050 | 0100 |
 | `merge-settings` | `src/merge-settings` | T-050 | 0101 |
 | `repository-settings` | `src/repository-settings` | T-050 | 0102 |
+| `change-requests` | `src/change-requests` | T-055 | 0155 |
+| `extras` | `src/extras` | T-055 | 0156 |
 
 Each module exports its `FacetDefinition` (`gitRefsDefinition`, `mergeSettingsDefinition`, `repositorySettingsDefinition`), built from the schema in `@git-migrator/canonical` and the contract in `@git-migrator/core`. Facets are pure and provider-neutral: they see canonical documents and capabilities, never provider payloads.
 
