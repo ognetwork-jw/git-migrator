@@ -44,5 +44,8 @@
 | [0059](0059-readiness-and-policy-resolution.md) | Readiness inputs and lossy-policy resolution in `core` | accepted (no spec change needed) |
 | [0060](0060-fake-bitbucket-behavior.md) | Fake Bitbucket behavior choices where the spec is silent | accepted (no spec change needed) |
 | [0061](0061-bitbucket-response-validation.md) | How fake Bitbucket responses are validated against the OpenAPI document | accepted (no spec change needed) |
+| [0070](0070-fake-git-url-layout-and-auth.md) | Fake git server URL layout and authentication | agent-decided |
+| [0071](0071-fake-git-rejection-mechanisms.md) | How the fake target rejects oversized blobs and pushes | agent-decided |
+| [0072](0072-fake-git-seeding.md) | Seeding fake git repositories with `git fast-import` | agent-decided |
 
 New ADRs continue from 0028. Implementor decisions use `status: agent-decided` (PROC-005).
