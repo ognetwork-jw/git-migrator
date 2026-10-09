@@ -62,4 +62,15 @@ describe('[API-011] apiRequest', () => {
       status: 0,
     });
   });
+
+  it('[API-020] sends PATCH, PUT and DELETE, and a 204 answer resolves without a body', async () => {
+    const fetchImpl = vi.fn(async () => new Response(null, { status: 204 }));
+    await expect(
+      apiRequest('/api/v1/api-keys/k1', { method: 'DELETE', fetchImpl }),
+    ).resolves.toBeUndefined();
+    const [path, init] = fetchImpl.mock.calls[0] as unknown as [string, RequestInit];
+    expect(path).toBe('/api/v1/api-keys/k1');
+    expect(init.method).toBe('DELETE');
+    expect(init.body).toBeUndefined();
+  });
 });

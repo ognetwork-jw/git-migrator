@@ -20,7 +20,7 @@ export class ApiError extends Error {
 }
 
 export interface ApiRequestInit {
-  readonly method?: 'GET' | 'POST';
+  readonly method?: 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE';
   readonly json?: unknown;
   /** A text body (for example CSV) with its media type. */
   readonly text?: { readonly body: string; readonly type: string };
@@ -71,5 +71,7 @@ export async function apiRequest<T>(path: string, init: ApiRequestInit = {}): Pr
     const errors = await readErrors(response);
     throw new ApiError(response.status, await problemCodeOf(response), errors);
   }
+  // 204 (API-020 revoke) has no body.
+  if (response.status === 204) return undefined as T;
   return (await response.json()) as T;
 }

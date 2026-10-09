@@ -14,7 +14,13 @@
     "types": ["node"]
   },
   "include": ["next-env.d.ts", "src", "app", "i18n", "messages/*.json", "next.config.ts"],
-  "exclude": ["src/**/*.test.*", "src/**/*.spec.*", "app/**/*.test.*", "src/test-render.tsx"],
+  "exclude": [
+    "src/**/*.test.*",
+    "src/**/*.spec.*",
+    "app/**/*.test.*",
+    "src/test-render.tsx",
+    "src/test-api.ts"
+  ],
   "references": [
     {
       "path": "../../packages/api"
@@ -42,6 +48,9 @@
     },
     {
       "path": "../../packages/db"
+    },
+    {
+      "path": "../../packages/facets"
     }
   ]
 }
