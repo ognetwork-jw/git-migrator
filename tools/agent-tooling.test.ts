@@ -111,8 +111,8 @@ describe('DEP-060 CI workflow', () => {
     expect(steps.some((s) => s.includes('turbo'))).toBe(false);
   });
 
-  it('[DEP-060] prints spec coverage as a report', () => {
-    expect(steps).toContain('run: pnpm spec:coverage');
+  it('[DEP-060] gates spec coverage in strict mode (TST-002, ADR-0029)', () => {
+    expect(steps).toContain('run: pnpm spec:coverage -- --strict');
   });
 
   it('[DEP-060] pins every action to a full commit SHA', () => {

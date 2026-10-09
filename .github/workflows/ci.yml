@@ -61,9 +61,9 @@ jobs:
       - name: Unit tests
         run: pnpm test
 
-      # Report only: prints requirement IDs without tests and never fails (ADR-0029).
-      - name: Spec coverage (report only)
-        run: pnpm spec:coverage
+      # Strict since T-097 (TST-002, ADR-0029): fails when a must-test.txt ID has no referencing test.
+      - name: Spec coverage (strict)
+        run: pnpm spec:coverage -- --strict
 
   # TST-001, ADR-0475: the integration tier (API, worker, Postgres, provider fakes, git http-backend)
   # in its own job, so the unit job stays fast. The fakes are started by the tests themselves.

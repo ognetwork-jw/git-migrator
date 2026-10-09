@@ -42,6 +42,14 @@ const MUST_TEST_RE = /^(?:LIF-\d{3}|FAC(?:-[A-Z]{2,5})*-\d{3}|JOB-04\d|AUTH-0\d\
 /** The work breakdown only references IDs (including ranges); it does not define them. */
 const SPEC_EXCLUDE = new Set(['15-work-breakdown.md']);
 
+/**
+ * IDs that a spec file uses only as examples of the naming convention (ADR-0506). They are ignored
+ * in that file alone: if another spec file defines the same ID, it counts as a requirement.
+ */
+export const ILLUSTRATIVE_IDS: Readonly<Record<string, readonly string[]>> = {
+  '00-overview.md': ['LIF-012'],
+};
+
 export const MUST_TEST_FILE = 'must-test.txt';
 
 export function extractIds(text: string): string[] {
@@ -73,8 +81,12 @@ function* walk(dir: string, accept: (rel: string) => boolean, rel = ''): Generat
 export function collectSpecIds(root: string): string[] {
   const ids = new Set<string>();
   for (const file of walk(join(root, 'docs', 'spec'), (n) => n.endsWith('.md'))) {
-    if (SPEC_EXCLUDE.has(file.split(/[\\/]/).pop() ?? '')) continue;
-    for (const id of extractIds(readFileSync(file, 'utf8'))) ids.add(id);
+    const name = file.split(/[\\/]/).pop() ?? '';
+    if (SPEC_EXCLUDE.has(name)) continue;
+    const illustrative = new Set(ILLUSTRATIVE_IDS[name] ?? []);
+    for (const id of extractIds(readFileSync(file, 'utf8'))) {
+      if (!illustrative.has(id)) ids.add(id);
+    }
   }
   return [...ids].sort();
 }

@@ -9,6 +9,7 @@ import {
   computeReport,
   extractIds,
   extractTestTitleIds,
+  ILLUSTRATIVE_IDS,
   isMustTest,
   main,
   readMustTest,
@@ -67,6 +68,18 @@ describe('spec:coverage', () => {
     const ids = collectSpecIds(root);
     expect(ids).toContain(must);
     expect(ids).not.toContain(id('LIF', 900));
+  });
+
+  it('[TST-002] ignores IDs that the overview uses only as naming examples (ADR-0506)', () => {
+    const { root } = world();
+    const example = id('LIF', 12);
+    expect(ILLUSTRATIVE_IDS['00-overview.md']).toContain(example);
+    write(root, 'docs/spec/00-overview.md', `for example \`${example}\`\n`);
+    expect(collectSpecIds(root)).not.toContain(example);
+    // The same ID defined in another spec file is a real requirement.
+    write(root, 'docs/spec/06-x.md', `- **${example}** defined\n`);
+    expect(collectSpecIds(root)).toContain(example);
+    expect(readFileSync(join(repoRoot, 'must-test.txt'), 'utf8')).not.toContain(example);
   });
 
   it('[TST-002] lists uncovered IDs and flags must-test ones', () => {
@@ -133,6 +146,18 @@ describe('spec:coverage', () => {
     });
     expect(run.status).toBe(0);
     expect(run.stdout).toContain('requirement IDs referenced by a test');
+  });
+
+  it('[TST-002] strict mode passes against the repository: no must-test gaps (CI gate, T-097)', () => {
+    const run = spawnSync(
+      process.execPath,
+      [join(repoRoot, 'tools/spec-coverage.ts'), '--strict'],
+      {
+        encoding: 'utf8',
+      },
+    );
+    expect(run.stderr).toBe('');
+    expect(run.status).toBe(0);
   });
 
   it('[TST-002] counts only IDs in titles of running it/test/describe calls', () => {
