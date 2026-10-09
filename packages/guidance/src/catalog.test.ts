@@ -2,7 +2,7 @@ import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import { GUIDANCE } from './entries.ts';
 import enMessages from './messages/en.json' with { type: 'json' };
-import { PARAM_NAMES, PARAMS } from './params.ts';
+import { entryMessageKeys, PARAM_NAMES, PARAMS } from './params.ts';
 import { CONTEXTS, placeholdersIn } from './template.ts';
 
 const catalog: Record<string, string> = enMessages;
@@ -15,6 +15,7 @@ function referencedKeys(): Set<string> {
     if (entry.verification !== undefined) keys.add(entry.verification);
     for (const step of entry.steps) keys.add(step.text);
   }
+  for (const key of entryMessageKeys()) keys.add(key);
   return keys;
 }
 

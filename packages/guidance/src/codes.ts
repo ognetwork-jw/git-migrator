@@ -76,6 +76,34 @@ export const FINDING_SPECS = [
     verifiable: false,
     ref: 'FAC-SET-002',
   },
+  {
+    code: 'repository-settings.target-unreadable',
+    facet: 'repository-settings',
+    severity: 'post',
+    verifiable: false,
+    ref: 'LIF-077',
+  },
+  {
+    code: 'repository-settings.deletion-forbidden',
+    facet: 'repository-settings',
+    severity: 'post',
+    verifiable: false,
+    ref: 'LIF-077',
+  },
+  {
+    code: 'repository-settings.left-in-place',
+    facet: 'repository-settings',
+    severity: 'post',
+    verifiable: false,
+    ref: 'LIF-077',
+  },
+  {
+    code: 'repository-settings.deletion-unproven',
+    facet: 'repository-settings',
+    severity: 'post',
+    verifiable: false,
+    ref: 'LIF-077',
+  },
   // merge-settings
   {
     code: 'merge-settings.accept-lossy',

@@ -26,6 +26,29 @@ describe('guidance rendering', () => {
     }
   });
 
+  it('[LIF-077] an entries parameter renders each kind through its message in glossary terms, escapes the name, and refuses an unknown kind', () => {
+    const rendered = renderGuidance('repository-settings.left-in-place', {
+      details: [
+        { kind: 'group-renamed', name: 'plat_form' },
+        { kind: 'repository-earlier', name: 'app-old' },
+      ],
+    });
+    expect(rendered.problems).toEqual([]);
+    expect(rendered.summary).toContain(
+      'Group plat\\_form, renamed since the migration created it; repository app-old, which an earlier run created',
+    );
+    expect(rendered.summary).not.toMatch(/\bteam\b/);
+    const unknown = renderGuidance('repository-settings.left-in-place', {
+      details: [{ kind: 'made-up', name: 'x' }],
+    });
+    expect(unknown.problems).toContainEqual({ param: 'details', reason: 'invalid' });
+    expect(unknown.summary).toContain('‹details›');
+    const bad = renderGuidance('repository-settings.left-in-place', {
+      details: [{ kind: 'group-renamed', name: '' }],
+    });
+    expect(bad.problems).toContainEqual({ param: 'details', reason: 'invalid' });
+  });
+
   it('[UI-040] carries severity and verifiable from the source list', () => {
     const rendered = renderGuidance('secrets.set-value', SAMPLE_VALUES);
     expect(rendered).toMatchObject({

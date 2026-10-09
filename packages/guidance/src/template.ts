@@ -119,7 +119,48 @@ function validItems(kind: ParamKind, value: unknown): string[] | undefined {
       return validList(value);
     case 'flag':
       return value === true ? ['true'] : undefined;
+    case 'entries':
+      // Rendered through their messages (`renderEntries`), never as raw values.
+      return undefined;
   }
+}
+
+/** Looks up the message of one entry kind of an `entries` parameter; undefined when unknown. */
+export type EntryMessage = (param: string, kind: string) => string | undefined;
+
+export interface TemplateOptions {
+  /** Renders `entries` parameters; without it they are reported `invalid`. */
+  readonly entryMessage?: EntryMessage;
+}
+
+const ENTRY_SEPARATOR = '; ';
+
+/**
+ * Renders an `entries` value: each `{kind, name}` through the message of its kind, with the name
+ * inserted as `{entryName}` (escaped like any value). An entry of an undeclared kind, or a name that
+ * is not valid text, makes the whole value invalid, so nothing half-checked is shown.
+ */
+function renderEntries(
+  name: string,
+  raw: unknown,
+  options: TemplateOptions,
+  problems: TemplateProblem[],
+): string | undefined {
+  const spec = PARAMS[name as ParamName] as { readonly entryKinds?: readonly string[] };
+  if (!Array.isArray(raw) || raw.length === 0 || raw.length > MAX_LIST_LENGTH) return undefined;
+  const parts: string[] = [];
+  for (const entry of raw as unknown[]) {
+    if (typeof entry !== 'object' || entry === null) return undefined;
+    const { kind, name: entryName } = entry as { kind?: unknown; name?: unknown };
+    if (typeof kind !== 'string' || !(spec.entryKinds ?? []).includes(kind)) return undefined;
+    if (validText(entryName) === undefined) return undefined;
+    const message = options.entryMessage?.(name, kind);
+    if (message === undefined) return undefined;
+    const rendered = renderOnce(message, { entryName }, {});
+    problems.push(...rendered.problems);
+    parts.push(rendered.text);
+  }
+  return parts.join(ENTRY_SEPARATOR);
 }
 
 function optional(value: string | undefined): string[] | undefined {
@@ -173,7 +214,11 @@ export function isSupplied(value: unknown): boolean {
   return true;
 }
 
-function renderOnce(template: string, values: Readonly<Record<string, unknown>>): TemplateResult {
+function renderOnce(
+  template: string,
+  values: Readonly<Record<string, unknown>>,
+  options: TemplateOptions,
+): TemplateResult {
   const problems: TemplateProblem[] = [];
   const text = template.replace(PLACEHOLDER, (_whole, name: string, rawContext?: string) => {
     if (!Object.hasOwn(PARAMS, name)) {
@@ -190,10 +235,22 @@ function renderOnce(template: string, values: Readonly<Record<string, unknown>>)
       problems.push({ param: name, reason: 'context-mismatch' });
       return missingMarker(name);
     }
+    if (spec.kind === 'entries' && context !== 'markdown') {
+      problems.push({ param: name, reason: 'context-mismatch' });
+      return missingMarker(name);
+    }
     const raw = values[name];
     if (!isSupplied(raw)) {
       problems.push({ param: name, reason: 'missing' });
       return missingMarker(name);
+    }
+    if (spec.kind === 'entries') {
+      const rendered = renderEntries(name, raw, options, problems);
+      if (rendered === undefined) {
+        problems.push({ param: name, reason: 'invalid' });
+        return missingMarker(name);
+      }
+      return rendered;
     }
     const items = validItems(spec.kind, raw);
     // A value that starts with "-" would be read as an option by the copied command.
@@ -207,8 +264,12 @@ function renderOnce(template: string, values: Readonly<Record<string, unknown>>)
 }
 
 /** Renders one template. Problems are reported, never thrown. */
-export function renderTemplate(template: string, values: ParamValues): TemplateResult {
-  return renderOnce(template, values);
+export function renderTemplate(
+  template: string,
+  values: ParamValues,
+  options: TemplateOptions = {},
+): TemplateResult {
+  return renderOnce(template, values, options);
 }
 
 /**
@@ -231,10 +292,10 @@ export function renderLines(template: string, values: ParamValues): TemplateResu
     );
   }
   const [listName] = listNames;
-  if (listName === undefined) return renderOnce(template, record);
+  if (listName === undefined) return renderOnce(template, record, {});
   const items = validList(record[listName]);
-  if (items === undefined) return renderOnce(template, record);
-  const lines = items.map((item) => renderOnce(template, { ...record, [listName]: [item] }));
+  if (items === undefined) return renderOnce(template, record, {});
+  const lines = items.map((item) => renderOnce(template, { ...record, [listName]: [item] }, {}));
   return {
     text: lines.map((line) => line.text).join('\n'),
     problems: lines.flatMap((line) => line.problems),

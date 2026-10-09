@@ -6,6 +6,10 @@ export const SAMPLE_VALUES: ParamValues = {
   namespace: 'acme',
   targetUrl: 'https://example.test/hooks/1',
   names: ['API_TOKEN', 'DB_PASSWORD'],
+  details: [
+    { kind: 'group-has-children', name: 'platform' },
+    { kind: 'branch-rule-replaced', name: 'release/*' },
+  ],
   scope: 'environment:production',
   environment: 'production',
   policyKey: 'branch-rules.advisory-enforced',

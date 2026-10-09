@@ -1,5 +1,6 @@
 import { createTestDatabase, type TestDatabase } from '@git-migrator/db/testing';
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
+import { LOCK_INTENT_KIND } from '../analysis/framework-resources.ts';
 import { reapRuns } from '../reaper.ts';
 import { seedBasics } from '../world.fixture.ts';
 import { finishRun, settleOrphanedMigrations } from './finish.ts';
@@ -9,6 +10,7 @@ import {
   effectiveReadiness,
   RunGuardError,
   requestRunCancel,
+  teamsInUse,
 } from './guard.ts';
 import { FIXED_NOW, Harness, silentLog, step } from './harness.fixture.ts';
 import { checkRunOptions } from './options.ts';
@@ -34,6 +36,35 @@ async function readyMigration(
   const world = await seedBasics(db());
   await db().migration.update({ where: { id: world.migrationId }, data: { status, readiness } });
   return world;
+}
+
+/** A ledger record of an earlier Run of the Migration. */
+async function mutation(
+  world: { migrationId: string; actorId: string },
+  resourceRef: Record<string, unknown>,
+  fields: { side?: string; state?: string } = {},
+) {
+  const run = await db().run.create({
+    data: {
+      migrationId: world.migrationId,
+      kind: 'migrate',
+      triggeredById: world.actorId,
+      options: {},
+      status: 'failed',
+    },
+  });
+  return db().mutation.create({
+    data: {
+      migrationId: world.migrationId,
+      runId: run.id,
+      side: fields.side ?? 'target',
+      facetKey: 'framework',
+      resourceRef: resourceRef as never,
+      paths: [],
+      action: 'create',
+      state: fields.state ?? 'recorded',
+    },
+  });
 }
 
 describe('[DOM-010] one active Run per Migration', () => {
@@ -229,6 +260,9 @@ describe('[LIF-005] readiness required per Run kind', () => {
   ];
   it.each(table)('[LIF-005] %s', async (_name, readiness, kind, allowed) => {
     const world = await readyMigration(readiness);
+    // A rollback needs something to undo (LIF-077): an unconfirmed create may have made the target.
+    if (kind === 'rollback')
+      await mutation(world, { kind: 'repository', name: 'x' }, { state: 'intended' });
     const attempt = createRun(db(), {
       migrationId: world.migrationId,
       kind,
@@ -286,6 +320,210 @@ describe('[LIF-005] readiness required per Run kind', () => {
         triggeredById: world.actorId,
       }),
     ).rejects.toMatchObject({ code: 'run.route_retired' });
+  });
+});
+
+describe('[LIF-077] when a rollback is available', () => {
+  /** A Migration with a target repository row, as a migrated one has. */
+  async function withTarget(status: 'migrated' | 'verified' | 'analyzed' = 'migrated') {
+    const world = await readyMigration();
+    const target = await db().repository.create({
+      data: {
+        endpointId: world.targetEndpointId,
+        namespaceId: (
+          await db().namespace.create({
+            data: {
+              endpointId: world.targetEndpointId,
+              providerId: 'org',
+              kind: 'organization',
+              slug: 'acme',
+              name: 'acme',
+            },
+          })
+        ).id,
+        providerId: 'target-1',
+        slug: 'r',
+        name: 'r',
+        fullPath: 'acme/r',
+        isPrivate: true,
+        lastInventoriedAt: new Date(),
+      },
+    });
+    await db().migration.update({
+      where: { id: world.migrationId },
+      data: { targetRepositoryId: target.id, status },
+    });
+    return world;
+  }
+
+  const rollback = (migrationId: string, actorId: string, confirm = 'acme/r') =>
+    createRun(db(), { migrationId, kind: 'rollback', triggeredById: actorId, confirm });
+
+  it('[LIF-077] admits a rollback of a migrated, verified or partial Migration that has a target', async () => {
+    for (const status of ['migrated', 'verified'] as const) {
+      const world = await withTarget(status);
+      const created = await rollback(world.migrationId, world.actorId);
+      expect(created.routing.kind).toBe('rollback');
+      expect(
+        (await db().migration.findUniqueOrThrow({ where: { id: world.migrationId } })).status,
+      ).toBe('running');
+    }
+  });
+
+  it('[LIF-077] refuses a Migration that is discovered or already rolled back', async () => {
+    for (const status of ['discovered', 'rolled_back'] as const) {
+      const world = await withTarget();
+      await db().migration.update({ where: { id: world.migrationId }, data: { status } });
+      await expect(rollback(world.migrationId, world.actorId)).rejects.toMatchObject({
+        code: 'run.not_permitted',
+        httpStatus: 409,
+      });
+    }
+  });
+
+  it('[LIF-077] refuses a rollback while the source is read-only: undo_source_read_only comes first', async () => {
+    const world = await withTarget();
+    await db().migration.update({
+      where: { id: world.migrationId },
+      data: { sourceReadOnlyApplied: true },
+    });
+    await expect(rollback(world.migrationId, world.actorId)).rejects.toMatchObject({
+      code: 'run.not_permitted',
+      message: expect.stringContaining('undo_source_read_only'),
+    });
+    await db().migration.update({
+      where: { id: world.migrationId },
+      data: { sourceReadOnlyApplied: false },
+    });
+    await expect(rollback(world.migrationId, world.actorId)).resolves.toBeDefined();
+  });
+
+  it('[LIF-077] refuses a rollback while a write of the source lock is unsettled (T-073 follow-up): the source may be locked and the ledger does not say how', async () => {
+    const world = await withTarget();
+    await mutation(
+      world,
+      { kind: LOCK_INTENT_KIND, noop: true },
+      { side: 'source', state: 'intended' },
+    );
+    await expect(rollback(world.migrationId, world.actorId)).rejects.toMatchObject({
+      code: 'run.not_permitted',
+      message: expect.stringContaining('unsettled'),
+    });
+    expect(
+      (await db().migration.findUniqueOrThrow({ where: { id: world.migrationId } })).status,
+    ).toBe('migrated');
+  });
+
+  it('[LIF-077] an endpoint rollback is refused while a live repository Migration of the Route holds a grant for a team it would delete', async () => {
+    const world = await withTarget('verified');
+    const endpoint = await db().migration.create({
+      data: { scope: 'endpoint', routeId: world.routeId, status: 'migrated', readiness: 'ready' },
+    });
+    const write = async (migrationId: string, facetKey: string, ref: Record<string, unknown>) => {
+      const run = await db().run.create({
+        data: {
+          migrationId,
+          kind: 'migrate',
+          triggeredById: world.actorId,
+          options: {},
+          status: 'succeeded',
+        },
+      });
+      return db().mutation.create({
+        data: {
+          migrationId,
+          runId: run.id,
+          side: 'target',
+          facetKey,
+          resourceRef: ref as never,
+          paths: [],
+          action: 'create',
+          state: 'recorded',
+        },
+      });
+    };
+    await write(endpoint.id, 'teams', { kind: 'team', slug: 'platform', id: '55' });
+    // A grant for another team does not hold this one.
+    const other = await write(world.migrationId, 'access-control', {
+      kind: 'access-grant',
+      principal: 'group:99',
+    });
+    await expect(rollback(endpoint.id, world.actorId, '')).resolves.toBeDefined();
+    // Put the endpoint Migration back: the Run above started.
+    await db().run.updateMany({
+      where: { migrationId: endpoint.id, kind: 'rollback' },
+      data: { status: 'cancelled' },
+    });
+    await db().migration.update({ where: { id: endpoint.id }, data: { status: 'migrated' } });
+    const grant = await write(world.migrationId, 'access-control', {
+      kind: 'access-grant',
+      principal: 'group:55',
+    });
+    await expect(rollback(endpoint.id, world.actorId, '')).rejects.toMatchObject({
+      code: 'run.not_permitted',
+      message: expect.stringContaining('access grants'),
+    });
+    // Once the repository Migration is rolled back, or its grant is reverted, the team is free.
+    await db().mutation.update({ where: { id: grant.id }, data: { undoneAt: new Date() } });
+    await expect(rollback(endpoint.id, world.actorId, '')).resolves.toBeDefined();
+    void other;
+  });
+
+  it('[LIF-077] teamsInUse can be asked about one team, which the rollback step does before each team delete', async () => {
+    const world = await withTarget('verified');
+    const endpoint = await db().migration.create({
+      data: { scope: 'endpoint', routeId: world.routeId, status: 'migrated', readiness: 'ready' },
+    });
+    const write = async (migrationId: string, facetKey: string, ref: Record<string, unknown>) => {
+      const run = await db().run.create({
+        data: {
+          migrationId,
+          kind: 'migrate',
+          triggeredById: world.actorId,
+          options: {},
+          status: 'succeeded',
+        },
+      });
+      return db().mutation.create({
+        data: {
+          migrationId,
+          runId: run.id,
+          side: 'target',
+          facetKey,
+          resourceRef: ref as never,
+          paths: [],
+          action: 'create',
+          state: 'recorded',
+        },
+      });
+    };
+    await write(endpoint.id, 'teams', { kind: 'team', slug: 'a', id: '71' });
+    await write(endpoint.id, 'teams', { kind: 'team', slug: 'b', id: '72' });
+    await write(world.migrationId, 'access-control', {
+      kind: 'access-grant',
+      principal: 'group:72',
+    });
+    const scope = { id: endpoint.id, routeId: world.routeId };
+    expect(await teamsInUse(db(), scope, '71')).toBe(false);
+    expect(await teamsInUse(db(), scope, '72')).toBe(true);
+    expect(await teamsInUse(db(), scope)).toBe(true);
+  });
+
+  it('[LIF-077] needs a target or a Mutation to undo: adopted and no-op records are not Mutations to undo', async () => {
+    const world = await readyMigration();
+    await db().migration.update({ where: { id: world.migrationId }, data: { status: 'partial' } });
+    await expect(rollback(world.migrationId, world.actorId)).rejects.toMatchObject({
+      code: 'run.not_permitted',
+    });
+    await mutation(world, { kind: 'repository', adopted: true });
+    await mutation(world, { kind: 'git-push', noop: true });
+    await mutation(world, { kind: 'repository', name: 'x' }, { state: 'not_applied' });
+    await expect(rollback(world.migrationId, world.actorId)).rejects.toMatchObject({
+      code: 'run.not_permitted',
+    });
+    // An unconfirmed create may have created the repository: that is a Mutation to undo.
+    await mutation(world, { kind: 'repository', name: 'x' }, { state: 'intended' });
+    await expect(rollback(world.migrationId, world.actorId)).resolves.toBeDefined();
   });
 });
 

@@ -7,7 +7,7 @@
  * bad value never reaches the output as "undefined", "null", "NaN" or an unescaped string.
  */
 
-export const PARAM_KINDS = ['text', 'url', 'integer', 'list', 'flag'] as const;
+export const PARAM_KINDS = ['text', 'url', 'integer', 'list', 'flag', 'entries'] as const;
 export type ParamKind = (typeof PARAM_KINDS)[number];
 
 export const PARAMS = {
@@ -23,6 +23,26 @@ export const PARAMS = {
       'Origin of targetUrl with the path and query masked, for display. Derived when not supplied.',
   },
   names: { kind: 'list', description: 'Variable or secret names.' },
+  details: {
+    kind: 'entries',
+    description:
+      'What a rollback left in place, one {kind, name} entry per change. Each kind renders through the message `entry.details.<kind>`.',
+    entryKinds: [
+      'group-unproven',
+      'group-renamed',
+      'group-has-children',
+      'group-changed',
+      'group-in-use',
+      'group-membership-in-use',
+      'branch-rule-replaced',
+      'branch-rule-exists',
+      'repository-earlier',
+    ],
+  },
+  entryName: {
+    kind: 'text',
+    description: 'The name in one entry of an entries parameter. Supplied by the renderer.',
+  },
   scope: { kind: 'text', description: 'Scope label, "repository" or "environment:<name>".' },
   environment: { kind: 'text', description: 'Deployment environment name.' },
   policyKey: { kind: 'text', description: 'Policy key, <facet>.<name>.' },
@@ -54,9 +74,26 @@ export const PARAMS = {
     description:
       'True when the hook was active on the source and should be activated after its secret is set.',
   },
-} as const satisfies Record<string, { readonly kind: ParamKind; readonly description: string }>;
+} as const satisfies Record<
+  string,
+  {
+    readonly kind: ParamKind;
+    readonly description: string;
+    /** For `entries`: the kinds an entry may have. */
+    readonly entryKinds?: readonly string[];
+  }
+>;
 
 export type ParamName = keyof typeof PARAMS;
+
+/**
+ * One entry of an `entries` parameter: a kind, rendered through the message
+ * `entry.<param>.<kind>`, and the name it is about (inserted as `{entryName}`).
+ */
+export interface ParamEntry {
+  readonly kind: string;
+  readonly name: string;
+}
 
 type ValueOf<K extends ParamKind> = K extends 'text' | 'url'
   ? string
@@ -64,7 +101,9 @@ type ValueOf<K extends ParamKind> = K extends 'text' | 'url'
     ? number
     : K extends 'flag'
       ? boolean
-      : readonly string[];
+      : K extends 'entries'
+        ? readonly ParamEntry[]
+        : readonly string[];
 
 /** Values a caller may supply, typed by each parameter's kind. Omitted or null means missing. */
 export type ParamValues = {
@@ -75,4 +114,20 @@ export const PARAM_NAMES = Object.keys(PARAMS) as ParamName[];
 
 export function isParamName(name: string): name is ParamName {
   return Object.hasOwn(PARAMS, name);
+}
+
+/** The parameters of kind `entries`, with the message key of each of their kinds. */
+export function entryMessageKeys(): string[] {
+  const keys: string[] = [];
+  for (const [name, spec] of Object.entries(PARAMS)) {
+    if (spec.kind !== 'entries') continue;
+    for (const kind of (spec as { readonly entryKinds?: readonly string[] }).entryKinds ?? []) {
+      keys.push(entryMessageKey(name, kind));
+    }
+  }
+  return keys;
+}
+
+export function entryMessageKey(param: string, kind: string): string {
+  return `entry.${param}.${kind}`;
 }

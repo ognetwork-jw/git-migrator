@@ -88,6 +88,16 @@ const AGENT_DECIDED_CODES: Readonly<Record<string, string>> = {
   'branch-rules.protection-lifted': 'run-origin post task after a failure that follows step 3a',
   // LIF-070: a write of the source lock whose outcome is unknown blocks target writes (ADR-0425).
   'branch-rules.source-lock-unsettled': 'run-origin blocker while a source lock write is unsettled',
+  // LIF-077: "If deletion is forbidden, the Run fails with guidance" (ADR-0465).
+  'repository-settings.deletion-forbidden': 'run-origin post task when a rollback cannot delete',
+  // LIF-077: a rollback that cannot tell whether the target exists reverts nothing (ADR-0465).
+  'repository-settings.target-unreadable':
+    'run-origin post task when a rollback cannot read the target',
+  // LIF-077: a rollback leaves what it cannot prove the framework's, and reports it (ADR-0465).
+  'repository-settings.left-in-place':
+    'run-origin post task when a rollback leaves changes it cannot prove its own',
+  'repository-settings.deletion-unproven':
+    'run-origin post task when the ledger does not prove the framework created the target',
 };
 
 /**

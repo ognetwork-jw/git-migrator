@@ -114,6 +114,24 @@ export const GUIDANCE: Readonly<Record<FindingCode, Guidance>> = {
     step('repository-settings.org-forking-disabled', 1),
     step('repository-settings.org-forking-disabled', 2),
   ]),
+  'repository-settings.target-unreadable': plain('repository-settings.target-unreadable', [
+    step('repository-settings.target-unreadable', 1),
+    step('repository-settings.target-unreadable', 2),
+  ]),
+  'repository-settings.deletion-forbidden': plain('repository-settings.deletion-forbidden', [
+    step('repository-settings.deletion-forbidden', 1),
+    step('repository-settings.deletion-forbidden', 2),
+  ]),
+
+  'repository-settings.left-in-place': plain('repository-settings.left-in-place', [
+    step('repository-settings.left-in-place', 1),
+    step('repository-settings.left-in-place', 2),
+    step('repository-settings.left-in-place', 3),
+  ]),
+  'repository-settings.deletion-unproven': plain('repository-settings.deletion-unproven', [
+    step('repository-settings.deletion-unproven', 1),
+    step('repository-settings.deletion-unproven', 2),
+  ]),
 
   // merge-settings
   'merge-settings.accept-lossy': acceptLossy('merge-settings.accept-lossy'),

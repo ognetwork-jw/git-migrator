@@ -4,6 +4,7 @@
  * Overlays of LIF-048. `registerMigrationSteps` is called once by the worker.
  */
 import type { RunKind } from '@git-migrator/core';
+import { createRollbackPlanner } from '../rollback/steps.ts';
 import type { RunStepRegistry } from '../run/types.ts';
 import { createMigrationPlanner } from './plan.ts';
 import type { MigrationServices } from './services.ts';
@@ -11,7 +12,7 @@ import { createSourceLockPlanner } from './source-read-only.ts';
 
 export const MIGRATION_RUN_KINDS: readonly RunKind[] = ['migrate', 'run_anyway', 'resync'];
 
-/** Registers the Steps of the three repository migration kinds (LIF-040, LIF-043) and the two source lock kinds (LIF-070). */
+/** Registers the Steps of the three migration kinds (LIF-040, LIF-043), the two source lock kinds (LIF-070) and rollback (LIF-077). */
 export function registerMigrationSteps(
   registry: RunStepRegistry<MigrationServices>,
   services: MigrationServices,
@@ -20,6 +21,8 @@ export function registerMigrationSteps(
   // LIF-070: the two Run kinds that only lock or unlock the source.
   registry.register('source_read_only', createSourceLockPlanner('source_read_only'));
   registry.register('undo_source_read_only', createSourceLockPlanner('undo_source_read_only'));
+  // LIF-077: a rollback reverts the framework's own writes to the target (repository or endpoint).
+  registry.register('rollback', createRollbackPlanner());
 }
 
 export { changeRequestsStep, partialMutationsOf } from './change-requests.ts';

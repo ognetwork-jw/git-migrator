@@ -131,6 +131,8 @@ export const repositorySettingsDefinition: FacetDefinition<RepositorySettings> =
   findingCodes: {
     'repository-settings.accept-lossy': { kind: 'pre', completion: 'accept' },
     'repository-settings.org-forking-disabled': { kind: 'post', completion: 'manual' },
+    'repository-settings.deletion-forbidden': { kind: 'post', completion: 'manual' },
+    'repository-settings.target-unreadable': { kind: 'post', completion: 'manual' },
   },
   policyKeys: [PUBLIC_FORK_POLICY, DESCRIPTION_TRUNCATED],
 };

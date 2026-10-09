@@ -15,6 +15,7 @@ import type { Db } from '@git-migrator/db';
 import type { Logger } from '@git-migrator/observability';
 import { hasOpenLockIntent } from '../analysis/framework-resources.ts';
 import type { RunRouting } from '../queues.ts';
+import { hasUndoableMutations } from '../rollback/ledger.ts';
 import { parsePendingMarker } from '../run-leases.ts';
 import { endRunIn } from './finish.ts';
 import { checkRunOptions } from './options.ts';
@@ -95,6 +96,70 @@ export function effectiveReadiness(input: {
   return typeof counts?.preTasks === 'number' && counts.preTasks > 0 ? 'needs_attention' : 'ready';
 }
 
+/**
+ * Why a rollback cannot start (LIF-077), or `undefined`. It is available for every status except
+ * `running` and `source_missing` (the lifecycle table refuses those), `discovered` and
+ * `rolled_back`, when the Migration has a target or Mutations to undo. The source lock is undone
+ * first, by its own Run: a rollback is refused while `sourceReadOnlyApplied` is set or a write of
+ * the lock is unsettled (the source may be locked and the ledger does not say how), so it never
+ * leaves a source that points at a target that is gone (ADR-0465).
+ */
+async function rollbackRefusal(
+  tx: Pick<Db, '$queryRaw'>,
+  migration: {
+    readonly id: string;
+    readonly status: string;
+    readonly targetRepositoryId: string | null;
+    readonly sourceReadOnlyApplied: boolean;
+    readonly scope: string;
+    readonly routeId: string;
+  },
+): Promise<string | undefined> {
+  if (migration.status === 'discovered' || migration.status === 'rolled_back') {
+    return `A Migration that is ${migration.status} has nothing to roll back`;
+  }
+  if (migration.sourceReadOnlyApplied || (await hasOpenLockIntent(tx, migration.id))) {
+    return 'The source is read-only, or a write of its lock is unsettled: run undo_source_read_only first, then roll back';
+  }
+  if (migration.targetRepositoryId === null && !(await hasUndoableMutations(tx, migration.id))) {
+    return 'The Migration has no target and no Mutations to undo';
+  }
+  if (migration.scope === 'endpoint' && (await teamsInUse(tx, migration))) {
+    return 'Repository Migrations of this Route still hold access grants for teams this Run created: roll them back first, or remove the grants, so the teams are not deleted from under them';
+  }
+  return undefined;
+}
+
+/**
+ * True when a live repository Migration of the Route (not `rolled_back` or `discovered`) still has an
+ * active access-control write for a team the endpoint Migration created: rolling the endpoint back
+ * would delete the team under that grant (ADR-0465 round 2). Branch-rule push restrictions and CODEOWNERS references are not counted
+ * (ADR-0465 round 3).
+ */
+export async function teamsInUse(
+  tx: Pick<Db, '$queryRaw'>,
+  migration: { readonly id: string; readonly routeId: string },
+  /** Only this team (its provider id), when given. */
+  teamId?: string,
+): Promise<boolean> {
+  const only = teamId ?? null;
+  const rows = await tx.$queryRaw<{ n: number }[]>`
+    SELECT count(*)::int AS n
+    FROM app.mutation g
+    JOIN app.migration rm ON rm.id = g.migration_id
+    WHERE rm.route_id = ${migration.routeId} AND rm.scope = 'repository'
+      AND rm.status NOT IN ('rolled_back', 'discovered')
+      AND g.facet_key = 'access-control' AND g.side = 'target'
+      AND g.undone_at IS NULL AND g.state <> 'not_applied'
+      AND g.resource_ref->>'principal' IN (
+        SELECT 'group:' || (t.resource_ref->>'id') FROM app.mutation t
+        WHERE t.migration_id = ${migration.id} AND t.facet_key = 'teams'
+          AND t.resource_ref->>'kind' = 'team' AND t.undone_at IS NULL
+          AND t.state <> 'not_applied' AND t.resource_ref->>'id' IS NOT NULL
+          AND (${only}::text IS NULL OR t.resource_ref->>'id' = ${only}::text))`;
+  return (rows[0]?.n ?? 0) > 0;
+}
+
 export interface CreateRunInput {
   readonly migrationId: string;
   readonly kind: RunKind;
@@ -151,6 +216,10 @@ export async function createRun(db: Db, input: CreateRunInput): Promise<CreatedR
       });
       if (active > 0) {
         throw new RunGuardError('run.active', 'This Migration already has a queued or running Run');
+      }
+      if (input.kind === 'rollback') {
+        const why = await rollbackRefusal(tx, migration);
+        if (why !== undefined) throw new RunGuardError('run.not_permitted', why);
       }
       const targetFullName =
         migration.targetRepository?.fullPath ??

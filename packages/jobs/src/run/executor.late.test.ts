@@ -180,7 +180,9 @@ describe('[LIF-002] a write that lands after the Run finished', () => {
       steps: () => [
         step(
           'git.push-refs',
-          async () => {
+          async (ctx) => {
+            // The Run wrote something before it failed, so there is something to roll back (LIF-077).
+            await ctx.ledger.record({ side: 'target', origin: 'desired' }, [record('r1')]);
             throw new Error('push failed');
           },
           { severity: 'fatal' },

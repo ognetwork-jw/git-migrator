@@ -219,6 +219,17 @@ export {
   reapRuns,
 } from './reaper.ts';
 export { applyRetention, type RetentionResult } from './retention.ts';
+export { unmapUndoneTeams } from './rollback/endpoint.ts';
+export { hasUndoableMutations } from './rollback/ledger.ts';
+export {
+  createRollbackPlanner,
+  DELETION_FORBIDDEN,
+  ROLLBACK_SETTLE_STEP,
+  ROLLBACK_TARGET_STEP,
+  rollbackSettleStep,
+  rollbackTargetStep,
+  TARGET_UNREADABLE,
+} from './rollback/steps.ts';
 export {
   RETRY_BASE_MS,
   RETRY_CAP_MS,

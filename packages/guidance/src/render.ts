@@ -3,7 +3,7 @@ import { redactWebhookUrl } from '@git-migrator/canonical';
 import type { FindingCode } from './codes.ts';
 import { GUIDANCE } from './entries.ts';
 import enMessages from './messages/en.json' with { type: 'json' };
-import type { ParamValues } from './params.ts';
+import { entryMessageKey, type ParamValues } from './params.ts';
 import { isSupplied, renderLines, renderTemplate, type TemplateProblem } from './template.ts';
 import type { MessageLookup, RenderedGuidance, RenderedStep } from './types.ts';
 
@@ -128,8 +128,14 @@ export function renderGuidance(
       ? values
       : { ...values, targetUrlDisplay: displayTargetUrl(values.targetUrl) };
   const problems: TemplateProblem[] = [];
+  const entryMessage = (param: string, kind: string): string | undefined => {
+    const key = entryMessageKey(param, kind);
+    return lookup(key) !== undefined || englishLookup(key) !== undefined
+      ? message(lookup, key, problems)
+      : undefined;
+  };
   const text = (key: string): string => {
-    const result = renderTemplate(message(lookup, key, problems), effective);
+    const result = renderTemplate(message(lookup, key, problems), effective, { entryMessage });
     problems.push(...result.problems);
     return result.text;
   };
