@@ -74,7 +74,8 @@ Publish with `publishEvent(pool, event)` or, inside a ZenStack transaction, `pub
 | `GET /routes/{id}/invitation-candidates` (`q`, cursor), `GET /invitation-batches` (`routeId`, `status`, cursor), `GET /invitation-batches/{id}` (entries page, `status`, cursor) | reads (`read`) |
 | `POST /routes/{id}/invitation-batches` `{identityIds}` or `{all}` | `manageInvitations`; a draft with the e-mail and target team slugs per person; queues the seat read |
 | `POST /invitation-batches/{id}/items/{itemId}/{select\|deselect}` | `manageInvitations`; draft batches only; deselecting needs `reason` and creates the `identity_excluded` Expected Differences (linked to the entry) |
-| `POST /invitation-batches/{id}/approve` `{expectedCount?}` | `manageInvitations`; 202 and the send step is queued; 409 for a second approval, a changed final count or an empty batch |
-| `POST /invitation-batches/{id}/items/{itemId}/revoke` | `manageInvitations`; 202, queues the revoke step for a `sent` entry |
+| `POST /invitation-batches/{id}/approve` `{expectedCount?}` | `manageInvitations`; `expectedToken` (required) and `expectedCount`; 202 and the send step is queued; 409 for a second approval, a changed selection or count, or an empty batch |
+| `POST /invitation-batches/{id}/items/{itemId}/revoke` | `manageInvitations`; 202, queues the revoke step for a `sent` entry (one without a provider id is looked up by address) |
+| `POST /invitation-batches/{id}/items/{itemId}/resolve` `{outcome: invited\|not_invited}` | `manageInvitations`; settles an `unknown` entry (the person and address stay held until then) |
 
-`service.ts` runs every write in one transaction under the batch row lock (`FOR NO KEY UPDATE`), publishes `invitation.updated` (`invitation:<id>`, `list:invitations`) and writes an `AuditEvent`.
+A person or an address is held by at most one outstanding entry per target organization, across every Route that targets it (AUTH-061, ADR-0370); a refusal names the Route and batch that hold them. `service.ts` runs every write in one transaction under the target Endpoint's invitation lock, the Route lock and the batch row lock (`FOR NO KEY UPDATE`), publishes `invitation.updated` (`invitation:<id>`, `list:invitations`) and writes an `AuditEvent`.

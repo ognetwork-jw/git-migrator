@@ -165,6 +165,9 @@
 | [0367](0367-capability-matrix-page.md) | The capability matrix page pivots the matrix and reads the lossy policies from Route.policies | agent-decided |
 | [0368](0368-audit-log-pagination.md) | Audit log paging and date bounds | agent-decided |
 | [0369](0369-actor-administration-surface.md) | What the Actors page offers: creation, disable and enable, keys; no role change in the UI | agent-decided |
+| [0370](0370-invitation-batches.md) | Invitation batches: lifecycle, the AUTH-061 guarantee, endpoints and staleness | agent-decided |
+| [0371](0371-invitation-correlation.md) | Acceptance correlation and expiry at inventory | agent-decided |
+| [0372](0372-invitation-job-and-adapter-cancel.md) | The `invitations.batch` job and `InvitationWriter.cancel` | agent-decided |
 | [0395](0395-parity-result-storage.md) | ParityResult storage: one row per Facet updated in place, diff shape, redaction at write | agent-decided |
 | [0396](0396-parity-engine-and-verified-status.md) | Parity Check, verifiable tasks completed by the system, `verified` through the lifecycle table at the end of a Run, parity outside a Run | agent-decided |
 | [0397](0397-parity-git-checks.md) | LFS parity through a mirror and the batch API, post-cutover containment applied to every check | agent-decided |
