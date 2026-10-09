@@ -45,9 +45,9 @@ The orchestrator maintains this table (see [workflow](workflow.md)). Integration
 | T-070 | merged | task/T-070-run-executor | [#43](https://github.com/ognetwork-jw/git-migrator/pull/43) | 5 | merged to ai-main 614242b at the 5-round cap (r5 ACCEPTABLE both; MINORs → followups.md); ADR folding pending |
 | T-071 | merged | task/T-071-migration-steps | [#48](https://github.com/ognetwork-jw/git-migrator/pull/48) | 3 | merged to ai-main 3e3d04e (r3 ACCEPTABLE both; MINORs → followups.md); ADR folding pending |
 | T-072 | merged | task/T-072-parity | [#47](https://github.com/ognetwork-jw/git-migrator/pull/47) | 2 | merged to ai-main 8e07540 (r2 ACCEPTABLE both; MINORs → followups.md); ADR folding pending |
-| T-073 | in_review | task/T-073-source-read-only | [#52](https://github.com/ognetwork-jw/git-migrator/pull/52) | 4 | r3 BLOCKER (recovered description before); implementor escalated (PROC-008); fix pass |
+| T-073 | merged | task/T-073-source-read-only | [#52](https://github.com/ognetwork-jw/git-migrator/pull/52) | 4 | merged to ai-main 3572bd8 via local gate (ADR-0455); escalated at r3 (PROC-008); r4 ACCEPTABLE both; MINORs → followups.md; ADR-0425 folding pending |
 | T-074 | merged | task/T-074-run-endpoints | [#50](https://github.com/ognetwork-jw/git-migrator/pull/50) | 2 | merged to ai-main d1265cd (r2 ACCEPTABLE both; MINORs → followups.md); ADR folding pending |
-| T-075 | todo |  | | | |
+| T-075 | in_progress | task/T-075-phase1-integration | | | implementor dispatched |
 | T-080 | merged | task/T-080-web-shell | [#39](https://github.com/ognetwork-jw/git-migrator/pull/39) | 2 | merged to ai-main 31b7577 (MINORs → followups.md); ADRs folded (9f10315) |
 | T-081 | merged | task/T-081-dashboard | [#44](https://github.com/ognetwork-jw/git-migrator/pull/44) | 3 | merged to ai-main 6435ad0 (r3 ACCEPTABLE both; MINORs → followups.md); ADR folding pending |
 | T-082 | in_review | task/T-082-detail-pages | [#53](https://github.com/ognetwork-jw/git-migrator/pull/53) | 1 | r1 ACCEPTABLE both; rebased head 2e23bcc passed local gate; publish (force-with-lease) denied by permission classifier, awaiting user |
@@ -57,7 +57,7 @@ The orchestrator maintains this table (see [workflow](workflow.md)). Integration
 | T-086 | merged | task/T-086-endpoint-migration | [#51](https://github.com/ognetwork-jw/git-migrator/pull/51) | 4 | merged to ai-main 8e6cdb5 via local gate (ADR-0455; GitHub Actions down); r4 ACCEPTABLE both; MINORs → followups.md; ADR folding pending |
 | T-087 | todo |  | | | |
 | T-088 | merged | task/T-088-waves-bulk | [#49](https://github.com/ognetwork-jw/git-migrator/pull/49) | 2 | merged to ai-main eb9ed1d (r2 ACCEPTABLE both; MINORs → followups.md); ADR folding pending |
-| T-089 | todo |  | | | |
+| T-089 | in_progress | task/T-089-drift-rollback | | | implementor dispatched |
 | T-090 | merged | task/T-090-release | [#38](https://github.com/ognetwork-jw/git-migrator/pull/38) | 2 | merged to ai-main 441c0ff (r2 ACCEPTABLE + reviewed erasable-syntax CI fix); ADRs folded (9f10315) |
 | T-091 | merged | task/T-091-admin-pages | [#45](https://github.com/ognetwork-jw/git-migrator/pull/45) | 2 | merged to ai-main 1108bc4 (r2 ACCEPTABLE both; MINORs → followups.md); ADR folding pending |
 | T-093 | merged | task/T-093-devenv-ci | [#18](https://github.com/ognetwork-jw/git-migrator/pull/18) | 2 | merged to ai-main 8dba617 (r2 ACCEPTABLE; CI green incl. devenv test); ADR-0135/0137 folded into DEV-010/DEV-030 |
