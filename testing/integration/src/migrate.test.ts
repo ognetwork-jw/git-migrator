@@ -1328,6 +1328,29 @@ describe('a repository the framework did not create is never counted as its own 
     expect(creates.map((c) => c.resourceRef)).toEqual([expect.objectContaining({ adopted: true })]);
   }, 300_000);
 
+  it('[LIF-077] a foreign EMPTY repository made by hand after the Run ended is adopted, never claimed as created (T-071 follow-up: rollback would delete it)', async () => {
+    const repo = await addSourceRepo();
+    faults.createFailsBeforeWrite = true;
+    const first = await perform(repo.migration.id);
+    expect(first.result).toEqual({ outcome: 'finished', status: 'failed' });
+    // The Run ended an hour ago (well past the margin); the operator makes an empty repository now.
+    await t.db.pool.query(
+      "UPDATE app.run SET finished_at = now() - interval '1 hour' WHERE id = $1",
+      [first.runId],
+    );
+    await createTarget(repo.target);
+    const { runId, result } = await perform(repo.migration.id);
+    expect(result).toEqual({ outcome: 'finished', status: 'succeeded' });
+    const migration = await t.db.privileged.migration.findUniqueOrThrow({
+      where: { id: repo.migration.id },
+    });
+    expect(migration.targetCreatedByFramework).toBe(false);
+    const creates = await t.db.privileged.mutation.findMany({
+      where: { runId, facetKey: 'framework', action: 'create' },
+    });
+    expect(creates.map((c) => c.resourceRef)).toEqual([expect.objectContaining({ adopted: true })]);
+  }, 300_000);
+
   it('[LIF-077] when nothing holds the name, an old create intent is settled not_applied before a new create', async () => {
     const repo = await addSourceRepo();
     faults.createFailsBeforeWrite = true;

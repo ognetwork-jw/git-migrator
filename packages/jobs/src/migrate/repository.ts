@@ -7,6 +7,7 @@
 
 import { isAdapterError, type RepositoryRecord } from '@git-migrator/adapter-sdk';
 import { parseFieldPath } from '@git-migrator/core';
+import type { Db } from '@git-migrator/db';
 import { StepFailure } from '../run/errors.ts';
 import type { MutationLike, StepDefinition, StepResult } from '../run/types.ts';
 import { recoverOpenIntents } from './facets.ts';
@@ -100,14 +101,14 @@ async function claimTarget(
 }
 
 /** True when this Migration's ledger holds a recorded, non-adopted creation of exactly `record`. */
-async function creationRecorded(
-  ctx: MigrationContext,
-  world: RunWorld,
-  record: RepositoryRecord,
+export async function creationRecorded(
+  db: Db,
+  migrationId: string,
+  record: Pick<RepositoryRecord, 'providerId'>,
 ): Promise<boolean> {
-  const recorded = await ctx.services.db.$queryRaw<{ n: number }[]>`
+  const recorded = await db.$queryRaw<{ n: number }[]>`
     SELECT count(*)::int AS n FROM app.mutation
-    WHERE migration_id = ${world.migrationId} AND side = 'target' AND action = 'create'
+    WHERE migration_id = ${migrationId} AND side = 'target' AND action = 'create'
       AND state = 'recorded' AND resource_ref->>'kind' = ${REPOSITORY_KIND}
       AND resource_ref->>'id' = ${record.providerId}
       AND coalesce(resource_ref->>'adopted', 'false') <> 'true'`;
@@ -115,30 +116,49 @@ async function creationRecorded(
 }
 
 /**
+ * How long after its Run ended an unsettled create intent can still vouch for an empty repository
+ * (LIF-077): the create request may have been sent just before the cancel and land at the provider
+ * after the Run finished, and the provider's clock is not ours. A repository an operator made by
+ * hand later than that is not ours, however empty it is (ADR-0465).
+ */
+export const INTENT_SETTLE_MARGIN_SECONDS = 60;
+
+/**
  * True when this Migration's ledger shows that the framework created `record` (LIF-031, LIF-077:
  * rollback deletes what the framework created, so a doubt must resolve to "not ours").
  * - A recorded, non-adopted creation of exactly this repository (by provider id) is proof.
  * - An unsettled create intent for the name (a cancelled or crashed Run, response lost) counts
  *   only when the repository is empty and the provider created it no earlier than the intent was
- *   written (provider times have second resolution). A repository an operator made by hand and
- *   filled is never ours, whatever intent is open.
+ *   written (provider times have second resolution) and no later than the Run's last recorded
+ *   activity (its latest Step that was not skipped by the end of the Run; `finished_at` caps it, and
+ *   a reaper that ends an abandoned Run late must not widen the window) plus
+ *   `INTENT_SETTLE_MARGIN_SECONDS`. A Run still running has no end. A repository an operator made
+ *   by hand and filled is never ours, whatever intent is open; one made by hand and left empty
+ *   after the Run ended is not ours either.
  */
-async function ledgerShowsCreation(
-  ctx: MigrationContext,
-  world: RunWorld,
+export async function ledgerShowsCreation(
+  db: Db,
+  migrationId: string,
   record: RepositoryRecord,
   empty: boolean,
 ): Promise<boolean> {
-  if (await creationRecorded(ctx, world, record)) return true;
-  const db = ctx.services.db;
+  if (await creationRecorded(db, migrationId, record)) return true;
   if (!empty || record.createdAt === undefined) return false;
   const intents = await db.$queryRaw<{ n: number }[]>`
-    SELECT count(*)::int AS n FROM app.mutation
-    WHERE migration_id = ${world.migrationId} AND side = 'target' AND action = 'create'
-      AND state = 'intended' AND resource_ref->>'kind' = ${REPOSITORY_KIND}
-      AND coalesce(resource_ref->>'adopted', 'false') <> 'true'
-      AND lower(resource_ref->>'name') = ${record.name.toLowerCase()}
-      AND date_trunc('second', created_at) <= ${record.createdAt}`;
+    SELECT count(*)::int AS n FROM app.mutation m JOIN app.run r ON r.id = m.run_id
+    WHERE m.migration_id = ${migrationId} AND m.side = 'target' AND m.action = 'create'
+      AND m.state = 'intended' AND m.resource_ref->>'kind' = ${REPOSITORY_KIND}
+      AND coalesce(m.resource_ref->>'adopted', 'false') <> 'true'
+      AND lower(m.resource_ref->>'name') = ${record.name.toLowerCase()}
+      AND date_trunc('second', m.created_at) <= ${record.createdAt}
+      AND (r.finished_at IS NULL
+           OR ${record.createdAt} <= LEAST(
+                r.finished_at,
+                GREATEST(
+                  m.created_at,
+                  coalesce((SELECT max(s.updated_at) FROM app.run_step s
+                             WHERE s.run_id = r.id AND s.status <> 'skipped'), m.created_at))
+              ) + make_interval(secs => ${INTENT_SETTLE_MARGIN_SECONDS}))`;
   return (intents[0]?.n ?? 0) > 0;
 }
 
@@ -214,8 +234,8 @@ async function ensure(ctx: MigrationContext, world: RunWorld): Promise<StepResul
         const ours =
           found !== null &&
           (await ledgerShowsCreation(
-            ctx,
-            world,
+            ctx.services.db,
+            world.migrationId,
             found,
             await target.connection.repositories.isEmpty({
               providerId: found.providerId,
@@ -336,9 +356,11 @@ async function adopt(
     return blockAndFail(ctx, 'target.exists-nonempty', existing.name);
   }
   // A repository this Migration created in an earlier attempt whose claim was never saved is ours.
-  const recorded = await creationRecorded(ctx, world, existing);
+  const recorded = await creationRecorded(ctx.services.db, world.migrationId, existing);
   const proven =
-    createdBefore || recorded || (await ledgerShowsCreation(ctx, world, existing, empty));
+    createdBefore ||
+    recorded ||
+    (await ledgerShowsCreation(ctx.services.db, world.migrationId, existing, empty));
   await claimOrBlock(ctx, world, existing, proven);
   if (!proven) {
     await ctx.ledger.record({ side: 'target', origin: 'desired' }, [
