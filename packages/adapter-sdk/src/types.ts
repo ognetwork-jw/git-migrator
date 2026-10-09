@@ -112,8 +112,29 @@ export interface ChangeRequestWriter {
 
 export interface InvitationWriter {
   invite(req: { email: string; teamIds: string[] }): Promise<{ providerInvitationId: string }>;
-  listPending(): Promise<{ providerInvitationId: string; email?: string; inviteeLogin?: string }[]>;
-  listFailed(): Promise<{ providerInvitationId: string; email?: string; reason: string }[]>;
+  /**
+   * Pending invitations. `createdAt` is set where the provider tells it: a caller that looks for an
+   * invitation it may have sent uses it to tell that one apart from an older one for the same
+   * address (AUTH-061).
+   */
+  listPending(): Promise<
+    { providerInvitationId: string; email?: string; inviteeLogin?: string; createdAt?: Date }[]
+  >;
+  /** Failed and expired invitations, with `createdAt` and `failedAt` where the provider tells them. */
+  listFailed(): Promise<
+    {
+      providerInvitationId: string;
+      email?: string;
+      reason: string;
+      createdAt?: Date;
+      failedAt?: Date;
+    }[]
+  >;
+  /**
+   * Withdraws a pending invitation (the revoke flow of AUTH-060). An invitation that is already
+   * gone (accepted, expired or cancelled) is not an error: the result says whether one was removed.
+   */
+  cancel(providerInvitationId: string): Promise<{ cancelled: boolean }>;
 }
 
 export interface SourceLock {

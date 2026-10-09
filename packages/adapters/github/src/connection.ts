@@ -37,6 +37,13 @@ const OID = /^[0-9a-f]{64}$/;
 /** The provider's words for the organization's daily invitation cap (provider body message only). */
 const INVITATION_CAP = /invitation.*(limit|exceed)|exceeded.*invit/i;
 
+/** `{ [key]: Date }` for a valid ISO timestamp, nothing otherwise. */
+function timestamp<K extends string>(key: K, value: unknown): { [P in K]?: Date } {
+  if (typeof value !== 'string') return {};
+  const at = new Date(value);
+  return Number.isNaN(at.getTime()) ? {} : ({ [key]: at } as { [P in K]?: Date });
+}
+
 /**
  * The provider's body message of a failed request. AdapterError messages read
  * `METHOD <url>: <detail>`, so the request prefix is cut off before any text matching.
@@ -184,7 +191,26 @@ export async function connectGitHub(
         providerInvitationId: String(i.id),
         ...(typeof i.email === 'string' ? { email: i.email } : {}),
         ...(typeof i.login === 'string' ? { inviteeLogin: i.login } : {}),
+        ...timestamp('createdAt', i.created_at),
       }));
+    },
+    async cancel(providerInvitationId) {
+      if (!/^\d{1,18}$/.test(providerInvitationId)) {
+        throw new AdapterError({
+          code: 'invalid',
+          provider: PROVIDER,
+          message: 'Invitation ids must be numeric',
+        });
+      }
+      try {
+        await gh().send('DELETE', `/orgs/${org}/invitations/${providerInvitationId}`);
+        return { cancelled: true };
+      } catch (error) {
+        if (error instanceof AdapterError && error.code === 'not_found') {
+          return { cancelled: false };
+        }
+        throw error;
+      }
     },
     async listFailed() {
       const list = await gh().list<Json>(`/orgs/${org}/failed_invitations`);
@@ -192,6 +218,8 @@ export async function connectGitHub(
         providerInvitationId: String(i.id),
         ...(typeof i.email === 'string' ? { email: i.email } : {}),
         reason: str(i.failed_reason) || 'failed',
+        ...timestamp('createdAt', i.created_at),
+        ...timestamp('failedAt', i.failed_at),
       }));
     },
   };

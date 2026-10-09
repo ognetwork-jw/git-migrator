@@ -281,6 +281,40 @@ describe('invitation writer', () => {
     expect(await h.conn.invitations?.listFailed()).toEqual([]);
   });
 
+  it('[AUTH-061] lists pending and failed invitations with their creation and failure times', async () => {
+    const h = await setup();
+    const sent = await h.conn.invitations?.invite({ email: 'late@test.local', teamIds: [] });
+    const inv = h.fake.state
+      .requireOrg('acme')
+      .invitations.find((i) => String(i.id) === sent?.providerInvitationId);
+    if (!inv) throw new Error('the invitation is missing');
+    inv.createdAt = Date.parse('2026-10-01T10:00:00Z');
+    expect(await h.conn.invitations?.listPending()).toEqual([
+      expect.objectContaining({ createdAt: new Date('2026-10-01T10:00:00Z') }),
+    ]);
+    inv.failedAt = Date.parse('2026-10-02T11:00:00Z');
+    inv.failedReason = 'Unable to send email';
+    expect(await h.conn.invitations?.listFailed()).toEqual([
+      {
+        providerInvitationId: sent?.providerInvitationId,
+        email: 'late@test.local',
+        reason: 'Unable to send email',
+        createdAt: new Date('2026-10-01T10:00:00Z'),
+        failedAt: new Date('2026-10-02T11:00:00Z'),
+      },
+    ]);
+  });
+
+  it('[AUTH-060] cancels a pending invitation, and an invitation that is gone is not an error', async () => {
+    const h = await setup();
+    const sent = await h.conn.invitations?.invite({ email: 'gone@test.local', teamIds: [] });
+    const id = sent?.providerInvitationId as string;
+    expect(await h.conn.invitations?.cancel(id)).toEqual({ cancelled: true });
+    expect(await h.conn.invitations?.listPending()).toEqual([]);
+    expect(await h.conn.invitations?.cancel(id)).toEqual({ cancelled: false });
+    await expect(h.conn.invitations?.cancel('../x')).rejects.toMatchObject({ code: 'invalid' });
+  });
+
   it('[AUTH-060] a 403 secondary limit on the invitations endpoint keeps the SDK retry time', async () => {
     const h = await setup({
       intercept: (r) =>
