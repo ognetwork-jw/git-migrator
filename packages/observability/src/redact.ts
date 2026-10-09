@@ -111,9 +111,14 @@ const AUTH_SCHEME = new RegExp(
   String.raw`(?:(?<![\w-])|${AFTER_ESCAPE})(Bearer|Basic|Digest)(?:${SPACING}|\+)+\S+`,
   'giu',
 );
-/** A command-line credential: `curl -u user:secret`, `--user user:secret`, `--proxy-user=user:secret`. */
+/**
+ * A command-line credential: `curl -u user:secret`, `--user user:secret`, `--proxy-user=user:secret`.
+ * A quoted argument is matched whole (to its closing quote, or to the end of the line when it never
+ * closes), and `scrubPlain` redacts it only when it holds a `:`. A pattern that looked for the `:`
+ * between the quotes would backtrack quadratically on a long run of colons (ADR-0052).
+ */
 const CLI_USER = new RegExp(
-  String.raw`(?:(?<![\w-])|${AFTER_ESCAPE})(-u|-U|--user|--proxy-user)(${SPACING}+|=)?(?:"[^"]*:[^"]*"|'[^']*:[^']*'|[^\s:'"]+:\S*)`,
+  String.raw`(?:(?<![\w-])|${AFTER_ESCAPE})(-u|-U|--user|--proxy-user)(${SPACING}+|=)?("[^"\r\n]*"?|'[^'\r\n]*'?|[^\s:'"]+:\S*)`,
   'giu',
 );
 /** Known credential shapes: signed tokens, provider access tokens and key identifiers, and any long prefixed token. */
@@ -129,8 +134,12 @@ const TOKEN_SHAPE = new RegExp(
   ].join('|'),
   'g',
 );
-/** A URL scheme. Bounded, and it may start after a `+` (`error:+https://`), so no start rescans a long run. */
-const SCHEME = String.raw`(?:(?<![a-z0-9.-])|${AFTER_ESCAPE})([a-z][a-z0-9+.-]{0,31}:\/\/)`;
+/**
+ * A URL scheme: up to 32 scheme characters before `://`, or none. It has no lookbehind, so a scheme
+ * is found after any run of scheme characters (`mirror-of-a-long-name-https://`); the bound keeps the
+ * work at each start position constant (ADR-0052). The slashes may be JSON-escaped (`https:\/\/`).
+ */
+const SCHEME = String.raw`([a-z0-9+.-]{0,32}:(?:\\{0,16}\/){2})`;
 /** URL userinfo with no `/`, `?` or `#` in it: `https://user:secret@host`, `https://token@host`. */
 const USERINFO = new RegExp(String.raw`${SCHEME}[^\s/?#]*@`, 'gi');
 /**
@@ -152,13 +161,19 @@ const PEM_END = new RegExp(
   `-----END${PEM_SPACE}(?:[A-Z0-9]|${PEM_SPACE}){0,40}PRIVATE${PEM_SPACE}KEY(?:${PEM_SPACE}BLOCK)?-----`,
   'g',
 );
+/** An HTML or XML character reference for a quote: `&quot;`, `&apos;`, `&#34;`, `&#x27;`. */
+const HTML_QUOTE = '&(?:quot|apos|#0*3[49]|#[xX]0*2[27]);';
 /**
  * A quote token: `"` or `'`, or their percent escapes `%22` and `%27` (they stay encoded in the
- * shadow), after up to 16 backslashes or `%5C` escapes (JSON inside a string, at any depth).
+ * shadow), after up to 16 backslashes or `%5C` escapes (JSON inside a string, at any depth); or an
+ * HTML character reference for a quote.
  */
-const QUOTE_TOKEN = String.raw`(?:\\|%5[Cc]){0,16}(?:["']|%2[27])`;
-/** `:` and `=`, and their fullwidth forms U+FF1A and U+FF1D. */
-const SEPARATOR_CHAR = String.raw`[:=\uFF1A\uFF1D]`;
+const QUOTE_TOKEN = String.raw`(?:(?:\\|%5[Cc]){0,16}(?:["']|%2[27])|${HTML_QUOTE})`;
+/**
+ * `:` and `=`, their fullwidth forms U+FF1A and U+FF1D, and their escaped forms in source and markup
+ * text: `\x3d`, `=`, `&#61;`, `&#x3d;` and `&equals;`, and the same forms of `:`.
+ */
+const SEPARATOR_CHAR = String.raw`(?:[:=\uFF1A\uFF1D]|\\x3[AaDd]|\\u003[AaDd]|&#0*(?:58|61);|&#[xX]0*3[AaDd];|&(?:colon|equals);)`;
 /** A parameter or object key that may be quoted, possibly escaped as in JSON inside a string. */
 const KEY = new RegExp(
   String.raw`(?:(?<![\w%-])|${AFTER_ESCAPE})[\w-]+(?=(?:${QUOTE_TOKEN})?(?:${SPACING}|\+)*${SEPARATOR_CHAR})`,
@@ -169,8 +184,11 @@ const SEPARATOR = new RegExp(
   String.raw`(?:${QUOTE_TOKEN})?(?:${SPACING}|\+)*${SEPARATOR_CHAR}(?:${SPACING}|\+)*`,
   'iuy',
 );
-/** The opening quote of a value: its escape prefix (group 1) and its quote token (group 2). */
-const QUOTE_OPEN = /((?:\\|%5[Cc]){0,16})("|'|%22|%27)/y;
+/**
+ * The opening quote of a value: its escape prefix (group 1) and its quote token (group 2), which
+ * may be an HTML character reference (`&quot;`, `&#34;`, `&apos;`, `&#39;`).
+ */
+const QUOTE_OPEN = new RegExp(String.raw`((?:\\|%5[Cc]){0,16})("|'|%22|%27|${HTML_QUOTE})`, 'y');
 // Plain quoted bodies may span newlines and run to the closing quote, or to the end of the text
 // when the quote never closes (fail safe). Each alternative starts with a different character, so
 // the patterns stay linear.
@@ -189,11 +207,94 @@ const SPACED_WORD = new RegExp(
   String.raw`(?:(?<!\w)|${AFTER_ESCAPE})(?:password|passwd|passphrase|passcode|pwd|pin|secret|token|credential|api(?:[ _+-]|%20)?key|client(?:[ _+-]|%20)?secret)(?![\w-])`,
   'gi',
 );
+/**
+ * A flag (`--secret-key`, `-api_token`), bounded to 64 characters, or an `_`-joined word
+ * (`aws_secret_access_key`). Each starts only at the beginning of a run (lookbehind), so the pattern
+ * is linear. `isSensitiveCompound` decides whether it names a secret.
+ */
+const COMPOUND_WORD = new RegExp(
+  String.raw`(?:(?<![\w-])|${AFTER_ESCAPE})(?:--?[A-Za-z][A-Za-z0-9_-]{0,63}|[A-Za-z][A-Za-z0-9]*(?:_[A-Za-z0-9]+)+)(?![\w-])`,
+  'g',
+);
+/** Last parts of a compound word that name something about a secret, not the secret itself. */
+const NOT_SECRET_LAST_PARTS = new Set([
+  'file',
+  'path',
+  'dir',
+  'url',
+  'uri',
+  'name',
+  'type',
+  'expiry',
+  'expires',
+  'expiration',
+  'ttl',
+  'length',
+  'count',
+  // `secret_scanning enabled`: the name of a provider setting, not a secret.
+  'scanning',
+]);
+/**
+ * A markup start tag: its name (group 1, at most 64 characters) and its attributes (group 2). The
+ * attributes cannot hold `<` or `>`, so each scan stops at the next tag.
+ */
+const MARKUP_TAG = /<([A-Za-z_][\w:.-]{0,63})(?![\w:.-])([^<>]*)>/g;
+/** A quoted attribute: its name (group 1) and its quoted value (group 2). */
+const MARKUP_ATTRIBUTE = /(?<![\w:.-])([\w:.-]+)\s*=\s*("[^"]*"|'[^']*'|[^\s"'<>=`]+)/g;
+/** Attributes whose value names another attribute's value (`key="password" value="…"`). */
+const NAMING_ATTRIBUTES = new Set([
+  'key',
+  'name',
+  'id',
+  'property',
+  'param',
+  'parameter',
+  'field',
+  'variable',
+  'var',
+  'setting',
+  'type',
+]);
+/** The last part of a diagnostic compound (`status_code`); only `code` names one. */
+const DIAGNOSTIC_LAST_PARTS = new Set(['code']);
+/** Qualifiers that make a final `code` a diagnostic: `status_code`, `exit_code`, `error_code`. */
+const DIAGNOSTIC_QUALIFIERS = new Set([
+  'status',
+  'exit',
+  'error',
+  'http',
+  'response',
+  'return',
+  'result',
+]);
+/** A line break and the indentation after it, accepted between a separator and its value. */
+const LINE_BREAK_INDENT = /(?:\r\n?|\n)[ \t]*/y;
+const LINE_BREAK = /\r\n?|\n/y;
+const LINE_REST = /[^\r\n]*/y;
+const INDENT = /[ \t]*/y;
+/** A stack frame line, after its indentation. */
+const STACK_FRAME = /at[ \t]/y;
+/** A YAML block scalar indicator with optional chomping and indentation marks and a comment. */
+const YAML_BLOCK_INDICATOR =
+  /(?:[!&][^\s&;]{0,64}[ \t]+){0,2}[|>][1-9+-]{0,2}[ \t]*(?:#[^\r\n]{0,256})?/y;
+/**
+ * The end of a line value that opens a YAML block whatever stands before the indicator (any number
+ * of tags and anchors): ` |`, ` >-`, ` |2`. Tested on the last few characters only (constant work).
+ */
+const BLOCK_INDICATOR_TAIL = /[ \t][|>][1-9+-]{0,2}[ \t]*$/;
+/** YAML node properties before a value: up to eight tags or anchors of at most 1,024 characters. */
+const NODE_PROPERTIES = /(?:[!&][^\s]{0,1024}[ \t]*){1,8}/y;
+/** A YAML comment after node properties, at most 1,024 characters. */
+const PROPERTY_COMMENT = /#[^\r\n]{0,1024}/y;
+/** A YAML sequence item at the start of a line's content. */
+const SEQUENCE_ITEM = /-(?=[ \t\r\n]|$)/y;
+/** Characters that may follow a bracketed value as structure (`],`, `}}`, `] `). */
+const STRUCTURE_AFTER_VALUE = /[\s,;&)\]}]/;
 /** Spacing between a word and its value: any Unicode space (U+00A0, U+2003, U+3000, …), a tab or a form-encoded `+`. */
 const SPACE_RUN = new RegExp(String.raw`(?:${SPACING}|\+)*`, 'iuy');
 const IS_WAS = /(?:is|was)(?![\w-])/iy;
-/** Separators between a word and its value, also percent-encoded (`%3D`), so a separator is never taken as the value. */
-const LINK_RUN = /(?:[:=\uFF1A\uFF1D]|%3[AD]|%EF%BC%9[AD])*/iy;
+/** Separators between a word and its value, also percent-encoded (`%3D`) or escaped, so a separator is never taken as the value. */
+const LINK_RUN = new RegExp(`(?:${SEPARATOR_CHAR}|%3[AD]|%EF%BC%9[AD])*`, 'iy');
 const SPACED_RUN = /[^\s&;]+/y;
 /** Percent-encoded byte runs, decoded in the shadow copy. */
 const PERCENT_RUN = /(?:%[0-9A-Fa-f]{2})+/g;
@@ -239,6 +340,8 @@ function redactPemBlocks(text: string): string {
 }
 
 interface ValueSpan {
+  /** Where the replaced text starts, when it is not where the value was looked for. */
+  readonly start?: number;
   readonly end: number;
   readonly open: string;
   readonly close: string;
@@ -303,13 +406,196 @@ function quotedValueAt(text: string, start: number): ValueSpan | undefined {
   }
 }
 
-/** Returns the end of the value that starts at `start`, with its opening and closing quote text. */
-function valueAt(text: string, start: number): ValueSpan {
+/**
+ * The end of a bracketed value (`[…]` or `{…}`) that opens at `start`: the matching close, found with
+ * one forward scan that counts depth and skips quoted strings. A value that never closes runs to the
+ * end of the text (fail safe).
+ */
+function bracketEnd(text: string, start: number): number {
+  let depth = 0;
+  for (let at = start; at < text.length; at += 1) {
+    const char = text.charAt(at);
+    if (char === '"' || char === "'") {
+      const body = char === '"' ? DOUBLE_BODY : SINGLE_BODY;
+      body.lastIndex = at + 1;
+      at += 1 + (body.exec(text)?.[0].length ?? 0);
+    } else if (char === '[' || char === '{') {
+      depth += 1;
+    } else if (char === ']' || char === '}') {
+      depth -= 1;
+      if (depth === 0) return at + 1;
+    }
+  }
+  return text.length;
+}
+
+/** True when the line content at `at` is a stack frame (`at fn (file:1:2)`). */
+function isStackFrame(text: string, at: number): boolean {
+  STACK_FRAME.lastIndex = at;
+  return STACK_FRAME.test(text);
+}
+
+/** The end of a line value before a trailing YAML comment (` # c`). Linear in the value. */
+function withoutComment(text: string, start: number, end: number): number {
+  const hash = text.slice(start, end).search(/[ \t]#/);
+  return hash < 0 ? end : start + hash;
+}
+
+/** The end of the line that holds `at`: the index of the next CR or LF, or the end of the text. */
+function lineEnd(text: string, at: number): number {
+  LINE_REST.lastIndex = at;
+  return at + (LINE_REST.exec(text)?.[0].length ?? 0);
+}
+
+/** The indentation (spaces and tabs) at the start of the line that holds `at`. */
+function lineIndent(text: string, at: number): number {
+  let lineStart = at;
+  while (
+    lineStart > 0 &&
+    text.charAt(lineStart - 1) !== '\n' &&
+    text.charAt(lineStart - 1) !== '\r'
+  ) {
+    lineStart -= 1;
+  }
+  INDENT.lastIndex = lineStart;
+  return INDENT.exec(text)?.[0].length ?? 0;
+}
+
+interface LineSpan {
+  /** First character after the indentation. */
+  readonly start: number;
+  readonly end: number;
+  readonly indent: number;
+}
+
+/** The line that starts after the line break at `at`, or undefined when no line break is there. */
+function nextLine(text: string, at: number): LineSpan | undefined {
+  LINE_BREAK.lastIndex = at;
+  const newline = LINE_BREAK.exec(text);
+  if (!newline) return undefined;
+  const lineStart = at + newline[0].length;
+  INDENT.lastIndex = lineStart;
+  const indent = INDENT.exec(text)?.[0].length ?? 0;
+  return { start: lineStart + indent, end: lineEnd(text, lineStart), indent };
+}
+
+/**
+ * The value of a key that ends its line (`password:` then a line break) or holds only a YAML block
+ * indicator (`password: |`): the following lines indented deeper than the key's line (a YAML block,
+ * a nested mapping such as `credentials:` with `pw: x` under it, or a pretty-printed value), or else
+ * the value on the next line (`password:\nx`). `at` is the end of the key's line. Stack frame lines
+ * (`    at fn (file:1:2)`) do not count, so an error message that ends in `token:` keeps its stack.
+ * Returns undefined when no value follows.
+ */
+function valueOnFollowingLines(
+  text: string,
+  keyIndex: number,
+  at: number,
+  indicator: boolean,
+): ValueSpan | undefined {
+  // Blank lines before the first value line are skipped (`password: |`, an empty line, `  x`).
+  let first = nextLine(text, at);
+  let skipped = false;
+  while (first && first.start === first.end) {
+    skipped = true;
+    first = nextLine(text, first.end);
+  }
+  // Inside a block opened by an indicator, a line starting with `at ` is text, not a stack frame.
+  const frame = (start: number) => !indicator && isStackFrame(text, start);
+  if (!first || frame(first.start)) return undefined;
+  const keyIndent = lineIndent(text, keyIndex);
+  // A YAML sequence may sit at the key's own indentation (`tokens:` then `- a`, `- b`).
+  const sequence = first.indent === keyIndent && isSequenceItem(text, first.start);
+  if (first.indent < keyIndent || (first.indent === keyIndent && !sequence)) {
+    // Not a block: the next line is the value, unless blank lines stood between.
+    if (skipped) return undefined;
+    const value = quotedValueAt(text, first.start) ?? { end: first.end, open: '', close: '' };
+    return { ...value, start: first.start };
+  }
+  let end = first.end;
+  for (let line = nextLine(text, end); line; line = nextLine(text, line.end)) {
+    if (line.start === line.end) continue;
+    const continues =
+      line.indent > keyIndent ||
+      (sequence && line.indent === keyIndent && isSequenceItem(text, line.start));
+    if (!continues || frame(line.start)) break;
+    end = line.end;
+  }
+  return { start: first.start, end, open: '', close: '' };
+}
+
+/** True when the line content at `at` is a YAML sequence item (`- x`, or a lone `-`). */
+function isSequenceItem(text: string, at: number): boolean {
+  SEQUENCE_ITEM.lastIndex = at;
+  return SEQUENCE_ITEM.test(text);
+}
+
+/**
+ * Returns the span of the value that starts at `start`, with its opening and closing quote text. A
+ * quoted value runs to its closing quote; a bracketed value to its matching close; a value that is
+ * empty at the end of a line, or a YAML block indicator, takes the lines that follow
+ * (`valueOnFollowingLines`); any other value runs to the end of the line or a query delimiter.
+ */
+function valueAt(text: string, keyIndex: number, start: number): ValueSpan {
   const quoted = quotedValueAt(text, start);
   if (quoted) return quoted;
+  const char = text.charAt(start);
+  if (char === '[' || char === '{') {
+    const close = bracketEnd(text, start);
+    // Text glued to the close (`[a]tail`) is not structure, so the value runs on as unquoted text.
+    if (close >= text.length || STRUCTURE_AFTER_VALUE.test(text.charAt(close))) {
+      return { end: close, open: '', close: '' };
+    }
+    UNQUOTED_BODY.lastIndex = close;
+    return { end: close + (UNQUOTED_BODY.exec(text)?.[0].length ?? 0), open: '', close: '' };
+  }
+  const lineEndsAt = (at: number) =>
+    at >= text.length || text.charAt(at) === '\n' || text.charAt(at) === '\r';
+  // A block indicator is matched before the unquoted body, which would stop at the `&` of an
+  // anchor (`password: &a |`).
+  YAML_BLOCK_INDICATOR.lastIndex = start;
+  if (YAML_BLOCK_INDICATOR.test(text) && lineEndsAt(YAML_BLOCK_INDICATOR.lastIndex)) {
+    const following = valueOnFollowingLines(text, keyIndex, YAML_BLOCK_INDICATOR.lastIndex, true);
+    if (following) return { ...following, start };
+  }
+  const blockTail = (lineEnd: number) =>
+    BLOCK_INDICATOR_TAIL.test(text.slice(Math.max(start, lineEnd - 16), lineEnd));
+  const yamlSpaced = text.charAt(start - 1) === ' ' || text.charAt(start - 1) === '\t';
+  if (yamlSpaced && (text.charAt(start) === '!' || text.charAt(start) === '&')) {
+    // YAML node properties (`!tag`, `&anchor`, up to eight, each bounded) are skipped, and what
+    // follows them is the value: nothing (the lines after it), a block indicator (the block), or
+    // a plain scalar (the rest of the line). The unquoted body would stop at an anchor's `&`.
+    NODE_PROPERTIES.lastIndex = start;
+    let at = start + (NODE_PROPERTIES.exec(text)?.[0].length ?? 0);
+    // A comment after the properties (`&a # rotated`) ends the line: the value follows it.
+    PROPERTY_COMMENT.lastIndex = at;
+    const comment = PROPERTY_COMMENT.exec(text)?.[0].length ?? 0;
+    if (comment > 0 && lineEndsAt(at + comment)) at += comment;
+    if (lineEndsAt(at)) {
+      const following = valueOnFollowingLines(text, keyIndex, at, false);
+      return following ? { ...following, start } : { end: at, open: '', close: '' };
+    }
+    YAML_BLOCK_INDICATOR.lastIndex = at;
+    if (YAML_BLOCK_INDICATOR.test(text) && lineEndsAt(YAML_BLOCK_INDICATOR.lastIndex)) {
+      const following = valueOnFollowingLines(text, keyIndex, YAML_BLOCK_INDICATOR.lastIndex, true);
+      if (following) return { ...following, start };
+    }
+    return { end: lineEnd(text, at), open: '', close: '' };
+  }
   UNQUOTED_BODY.lastIndex = start;
-  const match = UNQUOTED_BODY.exec(text);
-  return { end: start + (match?.[0].length ?? 0), open: '', close: '' };
+  const end = start + (UNQUOTED_BODY.exec(text)?.[0].length ?? 0);
+  if (lineEndsAt(end)) {
+    // An empty value, or only a comment (`secret: # rotated monthly`): the value follows.
+    if (end === start || text.charAt(start) === '#') {
+      const following = valueOnFollowingLines(text, keyIndex, end, false);
+      if (following) return text.charAt(start) === '#' ? { ...following, start } : following;
+    } else if (blockTail(withoutComment(text, start, end))) {
+      // A block indicator after anything (tags or anchors of any length): fail safe.
+      const following = valueOnFollowingLines(text, keyIndex, end, true);
+      if (following) return { ...following, start };
+    }
+  }
+  return { end, open: '', close: '' };
 }
 
 /**
@@ -325,6 +611,86 @@ function keyName(text: string, index: number, key: string): string {
   return key.slice(lead.length);
 }
 
+/** Escapes a string for use inside a regular expression. */
+function escapeRegExp(text: string): string {
+  return text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+/** The local name of a markup element or attribute: `ns:password` is `password`. */
+function localName(name: string): string {
+  return name.slice(name.lastIndexOf(':') + 1);
+}
+
+/**
+ * Redacts every attribute value of a start tag that names a secret through a naming attribute
+ * (`<entry key="password" value="x"/>`, `<input type="password" value="x">`). The naming value is
+ * kept; the key-value rule judges it on its own. Also says whether the tag names a secret, so the
+ * element's content is redacted too (`<param name="password">x</param>`).
+ */
+function redactNamedAttributes(attributes: string): { attributes: string; named: boolean } {
+  let named = false;
+  MARKUP_ATTRIBUTE.lastIndex = 0;
+  for (
+    let found = MARKUP_ATTRIBUTE.exec(attributes);
+    found;
+    found = MARKUP_ATTRIBUTE.exec(attributes)
+  ) {
+    const name = localName(found[1] ?? '').toLowerCase();
+    const raw = found[2] ?? '';
+    const value = /^["']/.test(raw) ? raw.slice(1, -1) : raw;
+    if (NAMING_ATTRIBUTES.has(name) && isSensitiveKey(value)) named = true;
+  }
+  if (!named) return { attributes, named };
+  const scrubbed = attributes.replace(MARKUP_ATTRIBUTE, (match, name: string, value: string) => {
+    if (NAMING_ATTRIBUTES.has(localName(name).toLowerCase())) return match;
+    const quote = /^["']/.test(value) ? value.charAt(0) : '';
+    return `${match.slice(0, match.length - value.length)}${quote}${REDACTED}${quote}`;
+  });
+  return { attributes: scrubbed, named };
+}
+
+/**
+ * Redacts secrets in markup. The content of an element whose name is sensitive is replaced up to its
+ * end tag, or to the end of the text when the end tag is missing (`<password>x</password>`,
+ * `<credentials><user>bob</user></credentials>`). A `<key>` element whose text names a secret also
+ * redacts the content of the element after it (`<key>password</key><string>x</string>`). Attribute
+ * values are handled by `redactNamedAttributes`. One forward scan: content that is replaced is never
+ * scanned again.
+ */
+function redactMarkup(text: string): string {
+  if (!text.includes('<')) return text;
+  let out = '';
+  let cursor = 0;
+  let redactNext = false;
+  MARKUP_TAG.lastIndex = 0;
+  for (let tag = MARKUP_TAG.exec(text); tag; tag = MARKUP_TAG.exec(text)) {
+    if (tag.index < cursor) continue;
+    const name = tag[1] ?? '';
+    const attributes = tag[2] ?? '';
+    const tagEnd = tag.index + tag[0].length;
+    const { attributes: scrubbed, named } = redactNamedAttributes(attributes);
+    const openTag = scrubbed === attributes ? tag[0] : `<${name}${scrubbed}>`;
+    const selfClosing = attributes.endsWith('/');
+    const sensitive = named || isSensitiveKey(localName(name));
+    if (selfClosing || !(sensitive || redactNext)) {
+      out += text.slice(cursor, tag.index) + openTag;
+      cursor = tagEnd;
+      continue;
+    }
+    const closing = new RegExp(String.raw`<\/${escapeRegExp(name)}\s*>`, 'gi');
+    closing.lastIndex = tagEnd;
+    const close = closing.exec(text);
+    const contentEnd = close ? close.index : text.length;
+    const content = text.slice(tagEnd, contentEnd);
+    redactNext =
+      !redactNext && localName(name).toLowerCase() === 'key' && isSensitiveKey(content.trim());
+    out += text.slice(cursor, tag.index) + openTag + (content === '' ? '' : REDACTED);
+    cursor = contentEnd;
+    MARKUP_TAG.lastIndex = Math.max(MARKUP_TAG.lastIndex, contentEnd);
+  }
+  return out + text.slice(cursor);
+}
+
 /** Redacts the value of every sensitive key, in `key=value`, `"key": "value"` and escaped JSON forms. */
 function redactKeyValues(text: string): string {
   let out = '';
@@ -335,8 +701,9 @@ function redactKeyValues(text: string): string {
     SEPARATOR.lastIndex = found.index + found[0].length;
     const separator = SEPARATOR.exec(text);
     if (!separator) continue;
-    const start = found.index + found[0].length + separator[0].length;
-    const value = valueAt(text, start);
+    const after = found.index + found[0].length + separator[0].length;
+    const value = valueAt(text, found.index, after);
+    const start = value.start ?? after;
     if (value.end === start) continue;
     out += text.slice(cursor, start) + value.open + REDACTED + value.close;
     cursor = value.end;
@@ -378,14 +745,17 @@ export function scrubPlain(input: string): string {
   text = text.replace(AUTH_SCHEME, (_match, scheme: string) => `${scheme} ${REDACTED}`);
   text = text.replace(
     CLI_USER,
-    (_match, flag: string, link: string | undefined) => `${flag}${link ?? ' '}${REDACTED}`,
+    (match: string, flag: string, link: string | undefined, value: string) =>
+      /^["']/.test(value) && !value.includes(':') ? match : `${flag}${link ?? ' '}${REDACTED}`,
   );
   text = text.replace(TOKEN_SHAPE, REDACTED);
   text = redactBase64Credentials(text);
   text = text.replace(USERINFO, (_match, scheme: string) => `${scheme}${REDACTED}@`);
   text = text.replace(USERINFO_PAIR, (_match, scheme: string) => `${scheme}${REDACTED}@`);
+  text = redactMarkup(text);
   text = redactKeyValues(text);
-  return redactSpacedSecrets(text);
+  text = redactSpacedSecrets(text, SPACED_WORD, () => true);
+  return redactSpacedSecrets(text, COMPOUND_WORD, isSensitiveCompound);
 }
 
 /**
@@ -394,14 +764,22 @@ export function scrubPlain(input: string): string {
  * The value is a quoted string (plain, escaped or percent-encoded quotes, as for key values) or one
  * run of characters that ends at whitespace, `&` or `;`, and it is never a lone `:` or `=`. Done
  * with sticky patterns in sequence, so no pattern backtracks into another. This also catches prose
- * such as "password reset", which becomes "password [REDACTED]" (ADR-0052).
+ * such as "password reset", which becomes "password [REDACTED]" (ADR-0052). After a `:` or `=`,
+ * the value may start on the next line (`password is:\n  x`).
+ *
+ * `words` finds the candidate words and `accept` decides whether a candidate names a secret: every
+ * SPACED_WORD does, and a COMPOUND_WORD does when `isSensitiveCompound` accepts it.
  */
-function redactSpacedSecrets(text: string): string {
+function redactSpacedSecrets(
+  text: string,
+  words: RegExp,
+  accept: (word: string) => boolean,
+): string {
   let out = '';
   let cursor = 0;
-  SPACED_WORD.lastIndex = 0;
-  for (let word = SPACED_WORD.exec(text); word; word = SPACED_WORD.exec(text)) {
-    if (word.index < cursor) continue;
+  words.lastIndex = 0;
+  for (let word = words.exec(text); word; word = words.exec(text)) {
+    if (word.index < cursor || !accept(word[0])) continue;
     let at = word.index + word[0].length;
     const wordEnd = at;
     SPACE_RUN.lastIndex = at;
@@ -413,9 +791,15 @@ function redactSpacedSecrets(text: string): string {
       at += SPACE_RUN.exec(text)?.[0].length ?? 0;
     }
     LINK_RUN.lastIndex = at;
-    at += LINK_RUN.exec(text)?.[0].length ?? 0;
+    const link = LINK_RUN.exec(text)?.[0].length ?? 0;
+    at += link;
     SPACE_RUN.lastIndex = at;
     at += SPACE_RUN.exec(text)?.[0].length ?? 0;
+    if (link > 0) {
+      LINE_BREAK_INDENT.lastIndex = at;
+      at += LINE_BREAK_INDENT.exec(text)?.[0].length ?? 0;
+      if (isStackFrame(text, at)) continue;
+    }
     if (at === wordEnd) continue;
     const quoted = quotedValueAt(text, at);
     let end: number;
@@ -431,9 +815,30 @@ function redactSpacedSecrets(text: string): string {
     }
     out += text.slice(cursor, at) + replacement;
     cursor = end;
-    SPACED_WORD.lastIndex = cursor;
+    words.lastIndex = cursor;
   }
   return out + text.slice(cursor);
+}
+
+/**
+ * True when a flag (`--secret-key`) or an `_`-joined word (`aws_secret_access_key`) names a secret,
+ * unless its last part says it names something about the secret rather than the secret itself
+ * (`--token-file`, `key_path`, `secret_name`).
+ */
+function isSensitiveCompound(word: string): boolean {
+  if (!isSensitiveKey(word)) return false;
+  const parts = word.toLowerCase().replace(/^-+/, '').split(/[_-]+/);
+  if (NOT_SECRET_LAST_PARTS.has(parts[parts.length - 1] ?? '')) return false;
+  // `status_code 429`, `exit_code 128`, `error_code ECONNRESET`: a diagnostic code, named by a
+  // qualifier, whose only sensitive word is the final `code`. A word that holds a secret substring
+  // anywhere (`error_api_key`, `status_secret`) is never exempt (ADR-0052).
+  const compact = parts.join('');
+  const diagnostic =
+    DIAGNOSTIC_LAST_PARTS.has(parts[parts.length - 1] ?? '') &&
+    parts.slice(0, -1).some((part) => DIAGNOSTIC_QUALIFIERS.has(part)) &&
+    parts.slice(0, -1).every((part) => !isSensitiveKey(part)) &&
+    !SECRET_SUBSTRINGS.some((word) => compact.includes(word));
+  return !diagnostic;
 }
 
 /** Percent-encodes one character as UTF-8, in upper case (`%C2%A0`). */

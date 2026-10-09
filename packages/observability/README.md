@@ -17,11 +17,11 @@ runLog.info({ steps: 4 }, 'run started');
 ```
 
 - One JSON object per line on standard output, with `level`, `time` (ISO 8601), `msg`, `service`, `traceId` (when a span is active) and the bound fields such as `component`, `runId`, `migrationId` and `jobId` (DEP-050).
-- Every value is scrubbed before it is written: the message, the arguments, the bound fields of `child()` loggers and nested objects. See [ADR-0052](../../docs/adr/0052-log-redaction.md) for the rules.
+- Every value is scrubbed before it is written: the message (joined to any `msgPrefix` first), the arguments, the bindings given to `child()` and `setBindings()` on any logger, and nested objects. See [ADR-0052](../../docs/adr/0052-log-redaction.md) for the rules.
 - An `Error` is written under `err` (type, scrubbed message and stack). When the call has no message, the error message becomes `msg`.
 - `redactValue` and `redactString` are exported for code that formats text for other destinations.
 
-Redacted, by structure first: the whole value of `Authorization`, `Proxy-Authorization`, `Cookie`, `Set-Cookie`, `X-Api-Key` and `X-Auth-Token` lines; the value of any key whose name contains a secret word (`password`, `token`, `secret`, `credential`, `api_key`, `sig`, `code`, `session`, …), in `key=value`, quoted and escaped JSON forms, and query strings; `Bearer`, `Basic` and `Digest` credentials; private key blocks (to their END marker); JWTs and known token shapes; URL userinfo.
+Redacted, by structure first: the whole value of `Authorization`, `Proxy-Authorization`, `Cookie`, `Set-Cookie`, `X-Api-Key` and `X-Auth-Token` lines; the value of any key whose name contains a secret word (`password`, `token`, `secret`, `credential`, `api_key`, `sig`, `code`, `session`, …), in `key=value`, quoted, escaped JSON, HTML-escaped and markup forms, and query strings, including a JSON array or object or a YAML block that spans lines under the key; the value after a sensitive word or flag (`password x`, `--secret-key x`); `Bearer`, `Basic` and `Digest` credentials; private key blocks (to their END marker); JWTs and known token shapes; URL userinfo.
 
 Percent-encoded text is scrubbed as written and then at up to three decoded levels, each decoded from the level before it after that level was scrubbed, so decoding can only add redactions (the chained scrub). Encoded quotes (`%22`), escaped quotes at any JSON depth (`\"`, `\\\"`) and Unicode or encoded spaces are understood.
 

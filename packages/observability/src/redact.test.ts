@@ -367,12 +367,15 @@ describe('bounded scanning (DEP-050)', () => {
 
 describe('encoded, folded and spaced secrets (DEP-050)', () => {
   it('[DEP-050] redacts a value after a percent-encoded separator', () => {
-    // A sensitive word followed by an encoded separator is caught before decoding, so the text
-    // stays as written; the encoded key=value pair is caught in the decoded level.
+    // A sensitive word or `_`-joined word followed by an encoded separator is caught before
+    // decoding, so the text stays as written; an encoded key=value pair is caught in the decoded level.
     expect(redactString('token%3Dabc')).toBe(`token%3D${REDACTED}`);
     expect(redactString('?a=1&password%3Dhunter&b=2')).toBe(`?a=1&password%3D${REDACTED}&b=2`);
     expect(redactString('?a=1&x_pw%3D1%26user_password%3Dhunter')).toBe(
-      `?a=1&x_pw=1%26user_password=${REDACTED}`,
+      `?a=1&x_pw%3D1%26user_password%3D${REDACTED}`,
+    );
+    expect(redactString('?a=1&x_pw%3D1%26userpassword%3Dhunter')).toBe(
+      `?a=1&x_pw=1%26userpassword=${REDACTED}`,
     );
   });
 
@@ -388,8 +391,11 @@ describe('encoded, folded and spaced secrets (DEP-050)', () => {
 
   it('[DEP-050] redacts a percent-encoded Authorization header and a nested redirect token', () => {
     expect(redactString('Authorization%3A%20Bearer%20abc')).toBe(`Authorization: ${REDACTED}`);
+    expect(redactString('redirect=https%3A%2F%2Fh%2F%3Faccesstoken%3Dabc')).toBe(
+      `redirect=https://h/?accesstoken=${REDACTED}`,
+    );
     expect(redactString('redirect=https%3A%2F%2Fh%2F%3Faccess_token%3Dabc')).toBe(
-      `redirect=https://h/?access_token=${REDACTED}`,
+      `redirect=https%3A%2F%2Fh%2F%3Faccess_token%3D${REDACTED}`,
     );
   });
 
@@ -600,6 +606,383 @@ describe('chained scrub, encoded structure and nested escapes (DEP-050)', () => 
       const started = performance.now();
       redactString(input);
       expect(performance.now() - started, unit).toBeLessThan(1000);
+    }
+  });
+});
+
+describe('multi-line, compound, markup and long-prefix secrets (DEP-050, T-004 follow-ups)', () => {
+  it('[DEP-050] a line break between a sensitive key and its value does not hide the value', () => {
+    expect(redactString('password:\n  LEAK1')).toBe(`password:\n  ${REDACTED}`);
+    expect(redactString('password:\r\n  LEAK1')).toBe(`password:\r\n  ${REDACTED}`);
+    expect(redactString('password:\nLEAK1\nnext')).toBe(`password:\n${REDACTED}\nnext`);
+    expect(redactString('password:\u2028LEAK1')).not.toContain('LEAK1');
+    expect(redactString('"token":\n    "LEAK1"\n}')).toBe(`"token":\n    ${REDACTED}\n}`);
+    expect(redactString('the password is:\n  LEAK1')).not.toContain('LEAK1');
+  });
+
+  it('[DEP-050] a pretty-printed JSON array or object under a sensitive key is redacted to its close', () => {
+    expect(redactString('"password": [\n "LEAK2"\n]')).toBe(`"password": ${REDACTED}`);
+    expect(redactString('{"credentials": {\n  "pw": "LEAK2",\n  "n": [1, "]"]\n}, "ok": 1}')).toBe(
+      `{"credentials": ${REDACTED}, "ok": 1}`,
+    );
+    expect(redactString('token=[a]LEAK2 tail')).toBe(`token=${REDACTED}`);
+    expect(redactString('"secret": {"a": "LEAK2"')).toBe(`"secret": ${REDACTED}`);
+  });
+
+  it('[DEP-050] a YAML block or nested mapping under a sensitive key is redacted to its dedent', () => {
+    expect(redactString('password: |\n  LEAK3\n  LEAK3b\nnext: ok')).toBe(
+      `password: ${REDACTED}\nnext: ok`,
+    );
+    expect(redactString('password: >-\n  LEAK3\n\n  LEAK3b\nnext: ok')).toBe(
+      `password: ${REDACTED}\nnext: ok`,
+    );
+    expect(redactString('db:\n  credentials:\n    user: bob\n    pw: LEAK3\n  host: h')).toBe(
+      `db:\n  credentials:\n    ${REDACTED}\n  host: h`,
+    );
+  });
+
+  it('[DEP-050] a stack trace after a message ending in a sensitive key is kept', () => {
+    const stack = 'Error: invalid token:\n    at run (file.ts:1:2)\n    at main (file.ts:3:4)';
+    expect(redactString(stack)).toBe(stack);
+  });
+
+  it('[DEP-050] compound flags and _-joined words followed by a space redact their value', () => {
+    for (const word of [
+      '--secret-key',
+      '--api_token',
+      '--github_token',
+      'aws_secret_access_key',
+      '--auth',
+      '--pass',
+    ]) {
+      expect(redactString(`${word} LEAK4 next`)).toBe(`${word} ${REDACTED} next`);
+    }
+  });
+
+  it('[DEP-050] compound words that name something about a secret keep their value', () => {
+    for (const text of [
+      '--token-file /run/x',
+      'key_file /etc/x',
+      '--secret-name app',
+      'session_expiry 5',
+      '--author bob',
+      '--file path',
+    ]) {
+      expect(redactString(text)).toBe(text);
+    }
+  });
+
+  it('[DEP-050] HTML-escaped quotes and escaped separators do not hide a value', () => {
+    expect(redactString('&quot;password&quot;:&quot;LEAK5&quot;')).toBe(
+      `&quot;password&quot;:&quot;${REDACTED}&quot;`,
+    );
+    expect(redactString('&#34;token&#34;: &#34;LEAK5&#34;, x')).toBe(
+      `&#34;token&#34;: &#34;${REDACTED}&#34;, x`,
+    );
+    expect(redactString('token\\x3dLEAK5')).toBe(`token\\x3d${REDACTED}`);
+    expect(redactString('token\\u003dLEAK5')).toBe(`token\\u003d${REDACTED}`);
+    expect(redactString('token&#61;LEAK5')).toBe(`token&#61;${REDACTED}`);
+    expect(redactString('token&#x3D;LEAK5')).toBe(`token&#x3D;${REDACTED}`);
+  });
+
+  it('[DEP-050] markup elements and attribute pairs that name a secret lose their value', () => {
+    expect(redactString('<password>LEAK6</password>')).toBe(`<password>${REDACTED}</password>`);
+    expect(redactString('<a><credentials><u>bob</u><p>LEAK6</p></credentials><b>ok</b></a>')).toBe(
+      `<a><credentials>${REDACTED}</credentials><b>ok</b></a>`,
+    );
+    expect(redactString('<ns:Token>LEAK6')).toBe(`<ns:Token>${REDACTED}`);
+    expect(redactString('<ns:Token kind="x">LEAK6')).not.toContain('LEAK6');
+    expect(redactString('<entry key="password" value="LEAK6"/>')).not.toContain('LEAK6');
+    expect(redactString("<input type='password' value='LEAK6'>")).not.toContain('LEAK6');
+    expect(redactString('<key>password</key><string>LEAK6</string><k>ok</k>')).not.toContain(
+      'LEAK6',
+    );
+    expect(redactString('<entry name="color" value="blue"/><b>ok</b>')).toBe(
+      '<entry name="color" value="blue"/><b>ok</b>',
+    );
+  });
+
+  it('[DEP-050] URL userinfo is redacted after a long run of scheme characters', () => {
+    expect(redactString('mirror-of-a-very-long-repository-name-https://bob:LEAK7@host/')).toBe(
+      `mirror-of-a-very-long-repository-name-https://${REDACTED}@host/`,
+    );
+    expect(redactString(`${'a1.'.repeat(40)}https://LEAK7@host/x`)).not.toContain('LEAK7');
+    expect(redactString('see ://bob:LEAK7@host/x')).not.toContain('LEAK7');
+  });
+
+  it('[DEP-050] a quoted command-line user without a colon is kept, and an unclosed one is redacted', () => {
+    expect(redactString('curl -u "bob" -s')).toBe('curl -u "bob" -s');
+    expect(redactString('curl -u "bob:LEAK8 -s')).not.toContain('LEAK8');
+    expect(redactString("curl -u 'bob:LEAK8' -s")).toBe(`curl -u ${REDACTED} -s`);
+  });
+
+  it('[DEP-050] scans 1 MB command-line users made of colons within the time budget', () => {
+    for (const head of ['-u "', "-u '", '--user=', '-u "a', '--user "']) {
+      const input = head + ':'.repeat(1024 * 1024);
+      const started = performance.now();
+      redactString(input);
+      expect(performance.now() - started, head).toBeLessThan(1000);
+    }
+  });
+
+  it('[DEP-050] scans 1 MB inputs of the multi-line, compound and markup shapes within the time budget', () => {
+    for (const unit of [
+      'password:\n',
+      'password: |\n  a\n',
+      'credentials:\n  ',
+      'token=[',
+      'token=[{"',
+      'token={]',
+      '<password>',
+      '<a key="password" ',
+      '<a b',
+      '<key>password</key>',
+      '--secret-key ',
+      'aws_secret_',
+      'a_',
+      '&quot;password&quot;:',
+      'token\\x3d',
+      'a-b.c',
+      'a://b',
+      'password=a&',
+    ]) {
+      const input = unit.repeat(Math.ceil((1024 * 1024) / unit.length));
+      const started = performance.now();
+      redactString(input);
+      expect(performance.now() - started, unit).toBeLessThan(1000);
+    }
+  });
+});
+
+describe('YAML sequence, blank-line, tag and markup variants (DEP-050, T-097 review)', () => {
+  it('[DEP-050] a YAML sequence at the key indentation is redacted item by item', () => {
+    expect(redactString('tokens:\n- LEAKd\n- LEAKe\nnext: ok')).toBe(
+      `tokens:\n${REDACTED}\nnext: ok`,
+    );
+    expect(redactString('  secrets:\n  - LEAKd\n  -\n    LEAKe\n  host: h')).toBe(
+      `  secrets:\n  ${REDACTED}\n  host: h`,
+    );
+  });
+
+  it('[DEP-050] blank lines before the first value line are skipped', () => {
+    expect(redactString('password: |\n\n  LEAKa\n  LEAKb\nnext: ok')).toBe(
+      `password: ${REDACTED}\nnext: ok`,
+    );
+    expect(redactString('credentials:\n\n  pw: LEAKc\nnext: ok')).toBe(
+      `credentials:\n\n  ${REDACTED}\nnext: ok`,
+    );
+    // A paragraph after a blank line at the key's indentation is not a value.
+    expect(redactString('password:\n\nunrelated paragraph')).toBe(
+      'password:\n\nunrelated paragraph',
+    );
+  });
+
+  it('[DEP-050] a tag or an anchor before a block indicator does not hide the block', () => {
+    expect(redactString('password: !!binary |\n  LEAK15\nnext: ok')).toBe(
+      `password: ${REDACTED}\nnext: ok`,
+    );
+    expect(redactString('password: &a |\n  LEAK16\nnext: ok')).toBe(
+      `password: ${REDACTED}\nnext: ok`,
+    );
+    expect(redactString('password: !secret &b >-\n  LEAK17\nnext: ok')).toBe(
+      `password: ${REDACTED}\nnext: ok`,
+    );
+  });
+
+  it('[DEP-050] a line starting with "at" inside a block scalar is text, not a stack frame', () => {
+    expect(redactString('password: |\n  at least 8 chars\n  LEAKp\nnext: ok')).toBe(
+      `password: ${REDACTED}\nnext: ok`,
+    );
+  });
+
+  it('[DEP-050] an element whose naming attribute is sensitive loses its content', () => {
+    expect(
+      redactString('<property name="hibernate.connection.password">LEAKr</property><b>ok</b>'),
+    ).toBe(`<property name="hibernate.connection.password">${REDACTED}</property><b>ok</b>`);
+    expect(redactString('<param name="password">LEAK58</param>')).toBe(
+      `<param name="password">${REDACTED}</param>`,
+    );
+    expect(redactString('<param name="color">blue</param>')).toBe(
+      '<param name="color">blue</param>',
+    );
+  });
+
+  it('[DEP-050] URL userinfo with JSON-escaped slashes is redacted', () => {
+    expect(redactString('"url":"https:\\/\\/bob:LEAKf@host\\/x"')).toBe(
+      `"url":"https:\\/\\/${REDACTED}@host\\/x"`,
+    );
+  });
+
+  it('[DEP-050] scans 5 MB inputs of the variant shapes within the time budget', () => {
+    for (const unit of [
+      'tokens:\n- ',
+      '- \n',
+      'password: |\n\n',
+      'k:\n\n\n',
+      'password: !a |\n',
+      'token=&a |#&',
+      'token=!aaaaaaaaaa',
+      '<a name="password">',
+      '<param name="password">x',
+      'a:\\/\\/',
+      'a:\\/\\/b:',
+    ]) {
+      const input = unit.repeat(Math.ceil((5 * 1024 * 1024) / unit.length));
+      const started = performance.now();
+      redactString(input);
+      expect(performance.now() - started, unit).toBeLessThan(1000);
+    }
+  });
+});
+
+describe('neighbours of the review inputs (DEP-050, T-097 round 2)', () => {
+  const long = 'a'.repeat(80);
+
+  it('[DEP-050] tags and anchors of any length or number before a block indicator do not hide the block', () => {
+    for (const lead of [`!${long}`, `&${long}`, '!a &b !c', '!!binary &x']) {
+      expect(redactString(`password: ${lead} |\n  LEAK1\nnext: ok`), lead).toBe(
+        `password: ${REDACTED}\nnext: ok`,
+      );
+    }
+  });
+
+  it('[DEP-050] a value that is only a comment is empty: the lines after it are the value', () => {
+    expect(redactString('secret: # rotated monthly\n  LEAK2\nnext: ok')).toBe(
+      `secret: ${REDACTED}\nnext: ok`,
+    );
+    expect(redactString('credentials: # prod\n  user: bob\n  pw: LEAK2\nnext: ok')).toBe(
+      `credentials: ${REDACTED}\nnext: ok`,
+    );
+  });
+
+  it('[DEP-050] URL userinfo with slashes escaped at any JSON depth is redacted', () => {
+    expect(redactString('"url":"https:\\\\/\\\\/bob:LEAK3@host\\\\/x"')).toBe(
+      `"url":"https:\\\\/\\\\/${REDACTED}@host\\\\/x"`,
+    );
+  });
+
+  it('[DEP-050] unquoted attribute values are understood in markup', () => {
+    expect(redactString('<param name=password>LEAK4</param>')).toBe(
+      `<param name=password>${REDACTED}</param>`,
+    );
+    expect(redactString('<data key="secret" val=LEAK4 />')).not.toContain('LEAK4');
+    expect(redactString('<data name=color val=blue />')).toBe('<data name=color val=blue />');
+  });
+
+  it('[DEP-050] status, exit and error codes and scanning settings stay readable; key and secret words are redacted', () => {
+    for (const text of [
+      'status_code 429',
+      'exit_code 128',
+      'error_code ECONNRESET',
+      'secret_scanning enabled',
+      '--status-code 500',
+    ]) {
+      expect(redactString(text)).toBe(text);
+    }
+    expect(redactString('api_key LEAK5')).toBe(`api_key ${REDACTED}`);
+    expect(redactString('secret_key LEAK5')).toBe(`secret_key ${REDACTED}`);
+    expect(redactString('http_password LEAK5')).toBe(`http_password ${REDACTED}`);
+    for (const word of [
+      'status_secret_key',
+      'error_api_key',
+      'status_secret',
+      'exit_secret',
+      '--error-key',
+      'http_key',
+      'result_session',
+      'response_session_key',
+    ]) {
+      expect(redactString(`${word} LEAK6 next`), word).toBe(`${word} ${REDACTED} next`);
+    }
+  });
+
+  it('[DEP-050] scans 5 MB inputs of these shapes within the time budget', () => {
+    for (const unit of [
+      'password: !aaaa',
+      'password=!a.password=',
+      'password=&a;',
+      'password: &a &b |',
+      'k: # c\n',
+      'k: x |\n',
+      'a:\\\\\\\\/',
+      '<a n=b ',
+      '<a name=password>',
+      'status_code ',
+    ]) {
+      const input = unit.repeat(Math.ceil((5 * 1024 * 1024) / unit.length));
+      const started = performance.now();
+      redactString(input);
+      expect(performance.now() - started, unit).toBeLessThan(1000);
+    }
+  });
+});
+
+describe('YAML node properties before a value (DEP-050, T-097 round 3)', () => {
+  it('[DEP-050] an anchor or tag before a plain scalar does not hide it', () => {
+    expect(redactString('password: &pw LEAK1')).toBe(`password: ${REDACTED}`);
+    expect(redactString('db:\n  password: &pw LEAK2\n  user: x')).toBe(
+      `db:\n  password: ${REDACTED}\n  user: x`,
+    );
+    expect(redactString('password: &a !!str LEAK3')).toBe(`password: ${REDACTED}`);
+  });
+
+  it('[DEP-050] an anchor alone on the key line takes the lines after it', () => {
+    expect(redactString('password: &anchor\n  LEAK4\nnext: ok')).toBe(
+      `password: ${REDACTED}\nnext: ok`,
+    );
+  });
+
+  it('[DEP-050] a long tag and a trailing comment before a block indicator do not hide the block', () => {
+    const tag = `!<${'a'.repeat(80)}>`;
+    expect(redactString(`password: ${tag} | # c\n  LEAK5\nnext: ok`)).toBe(
+      `password: ${REDACTED}\nnext: ok`,
+    );
+    expect(redactString('password: foo | # c\n  LEAK6\nnext: ok')).toBe(
+      `password: ${REDACTED}\nnext: ok`,
+    );
+  });
+
+  it('[DEP-050] a comment after node properties ends the key line: the value on the next lines is redacted', () => {
+    expect(redactString('password: &a # c\n  LEAK1\nnext: ok')).toBe(
+      `password: ${REDACTED}\nnext: ok`,
+    );
+    expect(redactString('password: !!str # c\n  LEAK2\nnext: ok')).toBe(
+      `password: ${REDACTED}\nnext: ok`,
+    );
+    expect(redactString('password: &a !!binary # rotated\n  TEFLSw==\nnext: ok')).toBe(
+      `password: ${REDACTED}\nnext: ok`,
+    );
+    expect(redactString('credentials: &c # shared\n  user: bob\n  pw: LEAK3\nnext: ok')).toBe(
+      `credentials: ${REDACTED}\nnext: ok`,
+    );
+  });
+
+  it('[DEP-050] scans 5 MB of node properties followed by comments within the time budget', () => {
+    for (const unit of ['password: &a # c\n', 'password: &a #password: &a #', 'k: !t #\n  x\n']) {
+      const input = unit.repeat(Math.ceil((5 * 1024 * 1024) / unit.length));
+      const started = performance.now();
+      redactString(input);
+      expect(performance.now() - started, unit).toBeLessThan(1000);
+    }
+  });
+
+  it('[DEP-050] an empty query parameter is not read as a YAML anchor', () => {
+    expect(redactString('?token=&user=bob')).toBe('?token=&user=bob');
+  });
+
+  it('[DEP-050] scans 5 MB inputs of node property shapes within the time budget', () => {
+    for (const unit of [
+      'password: &a ',
+      'password: &a&',
+      'password: !a !b !c !d !e !f !g !h !i ',
+      'k: x # y\n',
+      'k: x | #\n',
+      `password: &${'a'.repeat(2000)} `,
+    ]) {
+      const input = unit.repeat(Math.ceil((5 * 1024 * 1024) / unit.length));
+      const started = performance.now();
+      redactString(input);
+      expect(performance.now() - started, unit.slice(0, 20)).toBeLessThan(1000);
     }
   });
 });
