@@ -50,14 +50,14 @@ The orchestrator maintains this table (see [workflow](workflow.md)). Integration
 | T-075 | merged | task/T-075-phase1-integration | [#54](https://github.com/ognetwork-jw/git-migrator/pull/54) | 1 | merged to ai-main b8b2f7d via local gate (ADR-0455); r1 ACCEPTABLE both; MINORs → followups.md; ADR-0475 folding pending |
 | T-080 | merged | task/T-080-web-shell | [#39](https://github.com/ognetwork-jw/git-migrator/pull/39) | 2 | merged to ai-main 31b7577 (MINORs → followups.md); ADRs folded (9f10315) |
 | T-081 | merged | task/T-081-dashboard | [#44](https://github.com/ognetwork-jw/git-migrator/pull/44) | 3 | merged to ai-main 6435ad0 (r3 ACCEPTABLE both; MINORs → followups.md); ADR folding pending |
-| T-082 | in_review | task/T-082-detail-pages | [#53](https://github.com/ognetwork-jw/git-migrator/pull/53) | 1 | r1 ACCEPTABLE both; rebased head 2e23bcc passed local gate; publish (force-with-lease) denied by permission classifier, awaiting user |
+| T-082 | merged | task/T-082-detail-pages | [#53](https://github.com/ognetwork-jw/git-migrator/pull/53) | 1 | merged to ai-main 20e51c9 (rebased head passed local gate; fast-forward pushed with user approval after the classifier denied it; task branch not republished, PR closed); MINORs → followups.md; ADR-0445/0446 folding pending |
 | T-083 | todo |  | | | |
 | T-084 | merged | task/T-084-identity-mapping | [#41](https://github.com/ognetwork-jw/git-migrator/pull/41) | 3 | merged to ai-main f66c9ae (r3 ACCEPTABLE both; MINORs → followups.md); ADR folding pending |
 | T-085 | merged | task/T-085-invitations | [#46](https://github.com/ognetwork-jw/git-migrator/pull/46) | 5 | merged to ai-main 556e67f (r5 ACCEPTABLE both after escalation; MINORs → followups.md); ADR folding pending |
 | T-086 | merged | task/T-086-endpoint-migration | [#51](https://github.com/ognetwork-jw/git-migrator/pull/51) | 4 | merged to ai-main 8e6cdb5 via local gate (ADR-0455; GitHub Actions down); r4 ACCEPTABLE both; MINORs → followups.md; ADR folding pending |
 | T-087 | todo |  | | | |
 | T-088 | merged | task/T-088-waves-bulk | [#49](https://github.com/ognetwork-jw/git-migrator/pull/49) | 2 | merged to ai-main eb9ed1d (r2 ACCEPTABLE both; MINORs → followups.md); ADR folding pending |
-| T-089 | in_review | task/T-089-drift-rollback | [#55](https://github.com/ognetwork-jw/git-migrator/pull/55) | 1 | r1 review |
+| T-089 | in_review | task/T-089-drift-rollback | [#55](https://github.com/ognetwork-jw/git-migrator/pull/55) | 4 | escalated at r3 (PROC-008); r4 ACCEPTABLE both; fixing CI phase1 failure plus 4 safety MINORs, then r5 delta review |
 | T-090 | merged | task/T-090-release | [#38](https://github.com/ognetwork-jw/git-migrator/pull/38) | 2 | merged to ai-main 441c0ff (r2 ACCEPTABLE + reviewed erasable-syntax CI fix); ADRs folded (9f10315) |
 | T-091 | merged | task/T-091-admin-pages | [#45](https://github.com/ognetwork-jw/git-migrator/pull/45) | 2 | merged to ai-main 1108bc4 (r2 ACCEPTABLE both; MINORs → followups.md); ADR folding pending |
 | T-093 | merged | task/T-093-devenv-ci | [#18](https://github.com/ognetwork-jw/git-migrator/pull/18) | 2 | merged to ai-main 8dba617 (r2 ACCEPTABLE; CI green incl. devenv test); ADR-0135/0137 folded into DEV-010/DEV-030 |
@@ -66,3 +66,5 @@ The orchestrator maintains this table (see [workflow](workflow.md)). Integration
 | T-097 | todo |  | | | |
 
 > 2026-10-09 12:53 UTC: GitHub Actions jobs fail instantly with no runner (runner_id 0, no logs) on every PR. Merges use the local gate of ADR-0455 until Actions runs jobs again; re-run CI on the ai-main head then.
+
+> 2026-10-09 ~16:00 UTC: GitHub Actions runs jobs again (repository made public). CI re-run on ai-main a412178 passed all jobs; the ADR-0455 local-gate fallback has ended. Merges again require CI green on the exact head.
