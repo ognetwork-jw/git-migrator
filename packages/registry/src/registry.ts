@@ -16,6 +16,7 @@ import {
   type PairOverride,
   RegistryError,
 } from '@git-migrator/core';
+import { type OverlayIssue, validateOverlayDocument } from '@git-migrator/facets/overlays';
 import { type CapabilityMatrix, computeCell, type MatrixRow } from './matrix.ts';
 
 export interface RegistryParts {
@@ -136,6 +137,15 @@ export class ProviderRegistry {
    */
   repositoryNameLimits(type: string): ProviderLimits['repositoryName'] | undefined {
     return this.#limits.get(type)?.repositoryName;
+  }
+
+  /**
+   * The problems of an Overlay document for Facet `facetKey` (DOM-001, UI-032): the Facet's schema
+   * in deep-partial strict form. `undefined` when no such Facet is registered.
+   */
+  validateOverlay(facetKey: string, data: unknown): OverlayIssue[] | undefined {
+    if (!this.#facets.has(facetKey as FacetKey)) return undefined;
+    return validateOverlayDocument(this.#facets.get(facetKey as FacetKey).schema, data);
   }
 
   /** The translate override for the pair and Facet, if any (ADP-032). */

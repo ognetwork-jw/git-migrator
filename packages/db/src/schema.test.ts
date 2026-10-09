@@ -147,7 +147,6 @@ describe('[DOM-005] policy declarations', () => {
       Wave: ['create,update,delete'],
       NamingRule: ['create,update,delete'],
       WebhookAllowlistEntry: ['create,update,delete'],
-      Overlay: ['create,update,delete'],
     });
     expect(zmodel).not.toMatch(/@@allow\('(all|create)'[^)]*\)\s*$/m);
   });

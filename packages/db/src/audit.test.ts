@@ -234,13 +234,13 @@ describe('[AUTH-022] the diff is redacted and bounded', () => {
   });
 
   it('[AUTH-022] a secret-looking field in a real mutation is not stored', async () => {
-    const overlay = await admin.overlay.create({
+    const rule = await admin.namingRule.create({
       data: {
-        ...world.createData('Overlay'),
-        data: { token: 'tok-123', keep: 'visible' },
+        ...world.createData('NamingRule'),
+        pipeline: { token: 'tok-123', keep: 'visible' },
       } as never,
     });
-    const [event] = await events({ subjectId: (overlay as { id: string }).id });
+    const [event] = await events({ subjectId: (rule as { id: string }).id });
     const text = JSON.stringify(event?.data);
     expect(text).not.toContain('tok-123');
     expect(text).toContain('visible');
@@ -281,7 +281,6 @@ describe('[AUTH-022] details of the audit trail', () => {
         world.where.WebhookAllowlistEntry as Record<string, unknown>,
         admin,
       ],
-      ['overlay', 'Overlay', world.where.Overlay as Record<string, unknown>, admin],
       ['migration', 'Migration', world.where.Migration as Record<string, unknown>, operator],
       ['manualTask', 'ManualTask', world.where.ManualTask as Record<string, unknown>, operator],
     ];

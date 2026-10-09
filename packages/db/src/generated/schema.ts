@@ -2992,8 +2992,7 @@ export class SchemaType implements SchemaDef {
             attributes: [
                 { name: "@@map", args: [{ name: "name", value: ExpressionUtils.literal("overlay") }] },
                 { name: "@@schema", args: [{ name: "map", value: ExpressionUtils.literal("app") }] },
-                { name: "@@allow", args: [{ name: "operation", value: ExpressionUtils.literal("read") }, { name: "condition", value: ExpressionUtils.binary(ExpressionUtils.binary(ExpressionUtils.call("auth"), "!=", ExpressionUtils._null()), "&&", ExpressionUtils.binary(ExpressionUtils.member(ExpressionUtils.call("auth"), ["disabled"]), "==", ExpressionUtils.literal(false))) }] },
-                { name: "@@allow", args: [{ name: "operation", value: ExpressionUtils.literal("create,update,delete") }, { name: "condition", value: ExpressionUtils.binary(ExpressionUtils.binary(ExpressionUtils.member(ExpressionUtils.call("auth"), ["role"]), "==", ExpressionUtils.literal("admin")), "&&", ExpressionUtils.binary(ExpressionUtils.member(ExpressionUtils.call("auth"), ["disabled"]), "==", ExpressionUtils.literal(false))) }] }
+                { name: "@@allow", args: [{ name: "operation", value: ExpressionUtils.literal("read") }, { name: "condition", value: ExpressionUtils.binary(ExpressionUtils.binary(ExpressionUtils.call("auth"), "!=", ExpressionUtils._null()), "&&", ExpressionUtils.binary(ExpressionUtils.member(ExpressionUtils.call("auth"), ["disabled"]), "==", ExpressionUtils.literal(false))) }] }
             ] as readonly AttributeApplication[],
             idFields: ["id"],
             uniqueFields: {

@@ -891,7 +891,9 @@ model WebhookAllowlistEntry {
     @@allow('create,update,delete', auth().role == admin && auth().disabled == false)
 }
 
-// Admin-managed through RPC (API-012).
+// Read through RPC (API-012). Writes go through the validated /api/v1/overlays endpoints only:
+// `data` depends on `facetKey` and the RPC mount cannot validate it against the Facet schema
+// (DOM-003, ADR-0362), so no role may create, update or delete an Overlay over RPC.
 model Overlay {
     id        String   @id @default(uuid(7)) @deny('update', true)
     routeId   String   @map("route_id")
@@ -906,7 +908,6 @@ model Overlay {
     @@map("overlay")
     @@schema('app')
     @@allow('read', auth() != null && auth().disabled == false)
-    @@allow('create,update,delete', auth().role == admin && auth().disabled == false)
 }
 
 // Append-only: only its own timestamp.

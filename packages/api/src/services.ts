@@ -16,7 +16,10 @@ export interface ApiServices {
   /** `GET /quota` (JOB-047). */
   readonly quota: Pick<QuotaService, 'snapshot'>;
   /** `GET /capability-matrix`, `POST /routes/{id}/naming/preview`, the `GET /migrations/{id}/diff` facet list. */
-  readonly registry: Pick<ProviderRegistry, 'capabilityMatrix' | 'repositoryNameLimits' | 'facets'>;
+  readonly registry: Pick<
+    ProviderRegistry,
+    'capabilityMatrix' | 'repositoryNameLimits' | 'facets' | 'validateOverlay'
+  >;
 }
 
 export type ServiceName = keyof ApiServices;

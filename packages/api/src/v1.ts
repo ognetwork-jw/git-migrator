@@ -34,6 +34,7 @@ import {
   renameGroupMapping,
   unmapIdentityMapping,
 } from './mapping/service.ts';
+import { createOverlays } from './overlays.ts';
 import type { Principal } from './principal.ts';
 import { ProblemError, ProblemSchema } from './problem.ts';
 import type { ApiServices } from './services.ts';
@@ -407,6 +408,7 @@ export function createV1(deps: V1Deps) {
           : await renameGroupMapping(deps.db, id, mappingId, body.plannedSlug ?? '', by);
       return c.json(view, 200);
     })
+    .route('/', createOverlays({ db: deps.db, services: deps.services ?? {}, validationHook }))
     .route(
       '/',
       createBatch1({

@@ -5,7 +5,9 @@
   "type": "module",
   "description": "Built-in FacetDefinitions, one module per facet.",
   "exports": {
-    ".": "./src/index.ts"
+    ".": "./src/index.ts",
+    "./webhooks-match": "./src/webhooks/match.ts",
+    "./overlays": "./src/overlays/index.ts"
   },
   "scripts": {
     "build": "tsc -b",
@@ -15,6 +17,7 @@
   },
   "dependencies": {
     "@git-migrator/core": "workspace:*",
-    "@git-migrator/canonical": "workspace:*"
+    "@git-migrator/canonical": "workspace:*",
+    "zod": "4.6.5"
   }
 }

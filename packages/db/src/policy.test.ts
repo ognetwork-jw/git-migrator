@@ -14,11 +14,11 @@ const MODELS = Object.keys(schema.models);
  * API-012 / AUTH-020: the RPC writes that exist, per model, and the lowest role that may make them.
  * Every other write, on every other model, must be denied for every role including admin (DOM-005).
  */
+// Overlay is absent on purpose: its writes go through /api/v1/overlays only (ADR-0362).
 const RPC_WRITABLE: Record<string, Role> = {
   Wave: 'operator',
   NamingRule: 'admin',
   WebhookAllowlistEntry: 'admin',
-  Overlay: 'admin',
 };
 const RANK: Record<Role, number> = { viewer: 0, operator: 1, admin: 2 };
 const mayWrite = (model: string, role: Role): boolean => {
@@ -807,6 +807,19 @@ describe('[AUTH-020] admin-only models', () => {
       await expectDenied(delegateOf(clients.operator, model).delete({ where }));
     });
   }
+
+  it('[API-012] [DOM-003] [UI-032] no role writes an Overlay over RPC, the validated endpoint is the only writer', async () => {
+    const where = world.where.Overlay as Record<string, unknown>;
+    for (const role of ROLES) {
+      const client = delegateOf(clients[role], 'Overlay');
+      await expectDenied(client.create({ data: world.createData('Overlay') }));
+      await expectDenied(client.update({ where, data: world.patch('Overlay') }));
+      await expectDenied(client.delete({ where }));
+    }
+    expect(await row('Overlay', where)).not.toBeNull();
+    const read = await clients.viewer.overlay.findMany({});
+    expect(read.length).toBeGreaterThan(0);
+  });
 
   it('[AUTH-020] Actors and API keys are changed only by server code, even by an admin', async () => {
     const actorWhere = { id: world.actors.operator.id };
