@@ -308,3 +308,7 @@ These are unresolved review findings (review loops that hit the 5-round cap) and
 | T-089 | MINOR | Trimmed GitHub OpenAPI description lacks GET /orgs/{org}/teams/{slug}/teams and the team DELETE, so the fake's replies to them are not schema-validated | open |
 | T-089 | MINOR | One unavoidable race remains in rollback: a write between the target pre-read and the write itself (GitHub has no repo-id conditional write); ADR-0465 Round 5 | open |
 | T-083 | MINOR | Migrations created by inventory refresh send no live event, so the dashboard counts do not update live until reload (UI-020); the e2e spec reloads to read them | open |
+| T-095 | MINOR | DEV-040 scripts table (docs/spec/12-dev-environment.md) does not list `test:e2e:live:dry` (ADR-0491); add at next spec revision | open |
+| T-095 | MINOR | Fakes lack GitHub refs/tags, contents, branch-protection reads and Bitbucket tags/LFS reads, so the live spec's dry mode skips 3 tests and 2 preconditions; extend the fakes | open |
+| T-095 | MINOR | packages/auth/src/api-keys.test.ts failed once under full-suite load during T-095's run (passes alone 10/10); investigate timing sensitivity before calling it flaky | open |
+| T-096 | MINOR | A unit run (pnpm test) during T-096 reported '2 failed files' with all tests passing (files not captured); together with the api-keys load failure, investigate unit-tier instability under load | open |
