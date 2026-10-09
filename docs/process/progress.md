@@ -53,7 +53,7 @@ The orchestrator maintains this table (see [workflow](workflow.md)). Integration
 | T-082 | todo |  | | | |
 | T-083 | todo |  | | | |
 | T-084 | merged | task/T-084-identity-mapping | [#41](https://github.com/ognetwork-jw/git-migrator/pull/41) | 3 | merged to ai-main f66c9ae (r3 ACCEPTABLE both; MINORs → followups.md); ADR folding pending |
-| T-085 | todo |  | | | |
+| T-085 | in_progress | task/T-085-invitations | | | implementor dispatched |
 | T-086 | todo |  | | | |
 | T-087 | todo |  | | | |
 | T-088 | todo |  | | | |
