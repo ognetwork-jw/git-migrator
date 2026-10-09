@@ -23,7 +23,7 @@
 
 6. Teardown closes each step on its own with a 60 s bound, and the web process group gets SIGTERM, then SIGKILL after 10 s, so a hung step cannot keep the database from being dropped. A spec that shares one browser context across its steps traces it by hand and keeps the trace and a screenshot only when a step failed (the config sets `trace: 'off'`).
 7. A spec that claims a live update proves it: `watchLive` waits for `data-live-mode="sse"`, plants a no-reload marker and records any switch to `polling`; `expectLiveStayedSse` asserts both after the result showed.
-8. (T-087, arrives with its spec.) The NeedsAttention spec covers "complete a task" by dismissing it: the only task of `data/unmapped-user` is the resolution task `access-control.unmapped-principal`, which the server refuses to mark done (LIF-006). The spec asserts that refusal. Its guidance has no value to copy, so the spec asserts the guidance text only; copy controls are covered by the guidance view's unit tests.
+8. The NeedsAttention spec covers "complete a task" by dismissing it: the only task of `data/unmapped-user` is the resolution task `access-control.unmapped-principal`, which the server refuses to mark done (LIF-006). The spec asserts that refusal. Its guidance has no value to copy, so the spec asserts the guidance text only; copy controls are covered by the guidance view's unit tests.
 9. The web and worker logs go to `testing/e2e/logs/` (the worker log is redacted; the web log is raw Next.js output); CI uploads them with `test-results/` when the job fails. Traces and logs embed what the pages and processes handled, so the e2e credentials must stay fake.
 
 ## Alternatives
