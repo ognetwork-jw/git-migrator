@@ -1,4 +1,4 @@
-export { createFakeGitHub, type FakeGitHub } from './app.ts';
+export { createFakeGitHub, type FakeGitHub, type GitHubRequestRecord } from './app.ts';
 export type { FakeGitHubOptions, RuntimeConfig } from './config.ts';
 export { fakeAppJwt } from './jwt.ts';
 export { isHiddenRef } from './routes/git.ts';

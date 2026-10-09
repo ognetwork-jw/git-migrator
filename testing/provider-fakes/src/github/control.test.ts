@@ -25,6 +25,24 @@ describe('control plane', () => {
     expect(again.status).toBe(200);
   });
 
+  it('[TST-011] logs the API requests it served, and a reset or clearRequests() empties the log', async () => {
+    const w = world();
+    expect(w.fake.requests()).toEqual([]);
+    await w.call('GET', '/orgs/acme');
+    await w.call('GET', '/orgs/acme/members');
+    const log = w.fake.requests();
+    expect(log.map((r) => `${r.method} ${r.path}`)).toEqual([
+      'GET /orgs/acme',
+      'GET /orgs/acme/members',
+    ]);
+    expect(log.every((r) => r.status === 200)).toBe(true);
+    w.fake.clearRequests();
+    expect(w.fake.requests()).toEqual([]);
+    await w.call('GET', '/orgs/acme');
+    await w.fake.reset('empty');
+    expect(w.fake.requests()).toEqual([]);
+  });
+
   it('[TST-011] reset is deterministic: two resets give identical ids', async () => {
     const fake = createFakeGitHub();
     const build = async () => {

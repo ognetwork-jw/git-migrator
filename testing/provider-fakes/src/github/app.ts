@@ -13,6 +13,13 @@ import { GitHubState } from './state.ts';
 import type { Permissions, RepoRec } from './types.ts';
 import { GhError, notFound } from './util.ts';
 
+/** One API request the fake served (control plane excluded), for tests that assert what was written. */
+export interface GitHubRequestRecord {
+  readonly method: string;
+  readonly path: string;
+  readonly status: number;
+}
+
 export interface FakeGitHub {
   /** A Hono app: use `app.request()` without a socket, or `startFakeGitHub` to bind a port. */
   app: Hono;
@@ -21,6 +28,9 @@ export interface FakeGitHub {
   config: () => RuntimeConfig;
   /** Same as `POST /__reset`. */
   reset(fixture?: string, overrides?: Partial<RuntimeConfig>): Promise<void>;
+  /** Every API request served since the last reset or `clearRequests()`, in arrival order. */
+  requests(): readonly GitHubRequestRecord[];
+  clearRequests(): void;
   /**
    * Re-derives the git policy flag from the current rules (all repositories, or one). Call it after
    * seeding a bare repository for a repository that already has rules (fixtures).
@@ -54,6 +64,7 @@ export function createFakeGitHub(options: FakeGitHubOptions = {}): FakeGitHub {
   const state = new GitHubState(options);
   const limiter = new RateLimiter(state);
   const app = new Hono();
+  const requestLog: GitHubRequestRecord[] = [];
   const fixtures: Record<string, (s: GitHubState) => void | Promise<void>> = {
     empty: () => {},
     ...options.fixtures,
@@ -91,6 +102,7 @@ export function createFakeGitHub(options: FakeGitHubOptions = {}): FakeGitHub {
     inflight += 1;
     try {
       await next();
+      requestLog.push({ method: c.req.method, path: c.req.path, status: c.res.status });
     } finally {
       inflight -= 1;
       if (inflight === 0) idle?.();
@@ -124,6 +136,7 @@ export function createFakeGitHub(options: FakeGitHubOptions = {}): FakeGitHub {
         await state.options.repositoryHooks?.deleted?.(repo);
       state.reset(overrides);
       limiter.clear();
+      requestLog.length = 0;
       state.fixture = fixture || 'empty';
       await run(state);
     } finally {
@@ -334,6 +347,10 @@ export function createFakeGitHub(options: FakeGitHubOptions = {}): FakeGitHub {
     limiter,
     config: () => state.config,
     reset,
+    requests: () => [...requestLog],
+    clearRequests: () => {
+      requestLog.length = 0;
+    },
     syncPolicy: (repo) => {
       for (const r of repo ? [repo] : state.repos.values())
         state.options.repositoryHooks?.policyChanged?.(r, r.rules.length > 0);

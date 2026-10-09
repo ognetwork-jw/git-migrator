@@ -108,6 +108,15 @@ interface SideState {
   lfs: LfsObjectStore;
 }
 
+/** One git or LFS request the server accepted past authentication, for tests that assert writes. */
+export interface GitRequestRecord {
+  readonly side: GitSide;
+  /** `read` for fetch and LFS download, `write` for a push and an LFS upload. */
+  readonly operation: 'read' | 'write';
+  readonly method: string;
+  readonly path: string;
+}
+
 export interface FakeGitServer {
   readonly port: number;
   readonly rootDir: string;
@@ -127,6 +136,9 @@ export interface FakeGitServer {
   ): void;
   /** Replace a side's accepted tokens at runtime. */
   setTokens(side: GitSide, tokens: string[]): void;
+  /** Authenticated requests since the server started or `clearRequests()`, in arrival order. */
+  requests(): readonly GitRequestRecord[];
+  clearRequests(): void;
   close(): Promise<void>;
 }
 
@@ -175,6 +187,7 @@ export async function startFakeGitServer(options: FakeGitServerOptions): Promise
     };
   }
   let baseUrl = '';
+  const requestLog: GitRequestRecord[] = [];
   const maxBatch = options.maxLfsBatchObjects ?? 100;
 
   const server: Server = createServer((req, res) => {
@@ -296,14 +309,20 @@ export async function startFakeGitServer(options: FakeGitServerOptions): Promise
     const creds = ticket
       ? { username: ticket.username, password: ticket.password }
       : credentials(req.headers.authorization);
+    const operation =
+      ticket?.operation === 'upload' ||
+      rest.endsWith('/git-receive-pack') ||
+      url.searchParams.get('service') === 'git-receive-pack'
+        ? 'write'
+        : 'read';
+    requestLog.push({
+      side: m[1] as GitSide,
+      operation,
+      method: req.method ?? 'GET',
+      path: url.pathname,
+    });
     if (side.authorize && creds) {
       const repoPath = rest.replace(/\.git(\/.*)?$/, '');
-      const operation =
-        ticket?.operation === 'upload' ||
-        rest.endsWith('/git-receive-pack') ||
-        url.searchParams.get('service') === 'git-receive-pack'
-          ? 'write'
-          : 'read';
       const status = await side.authorize({ ...creds, repo: repoPath, operation });
       if (status !== undefined) {
         req.resume();
@@ -433,6 +452,10 @@ export async function startFakeGitServer(options: FakeGitServerOptions): Promise
     },
     setTokens(side, tokens) {
       sides[side].tokens = tokens;
+    },
+    requests: () => [...requestLog],
+    clearRequests: () => {
+      requestLog.length = 0;
     },
     close: () =>
       new Promise<void>((resolve, reject) => {

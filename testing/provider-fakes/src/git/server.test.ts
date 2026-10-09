@@ -130,6 +130,31 @@ describe('fake git server', () => {
     expect(missing.code).not.toBe(0);
   });
 
+  it('[TST-013] logs authenticated requests by side and operation, so a test can prove nothing was written', async () => {
+    server.clearRequests();
+    await git(['ls-remote', server.repoUrl('source', 'acme/app')], work);
+    expect(server.requests().length).toBeGreaterThan(0);
+    expect(server.requests().every((r) => r.side === 'source' && r.operation === 'read')).toBe(
+      true,
+    );
+    await git(['ls-remote', server.repoUrl('source', 'acme/app')], work, {
+      token: 'wrong',
+      check: false,
+    });
+    const before = server.requests().length;
+    await createBareRepo(server.repoDir('target', 'acme/logged'));
+    const dir = await newClone(server.repoUrl('source', 'acme/app'), 'clone-for-log');
+    await git(['push', '-q', server.repoUrl('target', 'acme/logged'), 'main'], dir);
+    const writes = server.requests().filter((r) => r.operation === 'write');
+    expect(writes.length).toBeGreaterThan(0);
+    expect(writes.every((r) => r.side === 'target' && r.path.includes('acme/logged.git'))).toBe(
+      true,
+    );
+    expect(server.requests().length).toBeGreaterThan(before);
+    server.clearRequests();
+    expect(server.requests()).toEqual([]);
+  });
+
   it('[TST-013] rejects missing and wrong credentials with 401', async () => {
     const url = server.repoUrl('source', 'acme/app');
     const bad = await git(['ls-remote', url], work, { token: 'wrong', check: false });

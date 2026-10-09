@@ -26,6 +26,7 @@ export {
   type FakeGitServer,
   type FakeGitServerOptions,
   GIT_SIDES,
+  type GitRequestRecord,
   type GitSide,
   type GitSideOptions,
   normalizeRepoPath,
