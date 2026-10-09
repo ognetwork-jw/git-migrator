@@ -226,6 +226,9 @@ importers:
       '@git-migrator/facets':
         specifier: workspace:*
         version: link:../../packages/facets
+      '@git-migrator/guidance':
+        specifier: workspace:*
+        version: link:../../packages/guidance
       '@git-migrator/jobs':
         specifier: workspace:*
         version: link:../../packages/jobs

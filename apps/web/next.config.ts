@@ -13,9 +13,11 @@ const config: NextConfig = {
   transpilePackages: [
     '@git-migrator/api',
     '@git-migrator/auth',
+    '@git-migrator/canonical',
     '@git-migrator/config',
     '@git-migrator/core',
     '@git-migrator/db',
+    '@git-migrator/guidance',
     '@git-migrator/observability',
   ],
   poweredByHeader: false,
