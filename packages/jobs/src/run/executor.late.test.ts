@@ -290,6 +290,36 @@ describe('[LIF-042] a fatal Step keeps its severity when it leaves the plan', ()
     expect(statuses['old.independent']).toBe('skipped');
   });
 
+  it('[LIF-042] a fatal Step that ran, recorded a Mutation and was delayed by a rate limit fails the Run when it leaves the plan', async () => {
+    const h = new Harness(t);
+    h.registry.register('migrate', {
+      steps: () => [
+        step(
+          'target.ensure-repository',
+          async (ctx) => {
+            await ctx.ledger.record({ side: 'target', origin: 'desired' }, [record('repo')]);
+            throw rateLimited();
+          },
+          { severity: 'fatal' },
+        ),
+      ],
+    });
+    const { runId } = await h.queuedRun();
+    expect((await h.execute(runId)).outcome).toBe('delayed');
+    const [delayed] = await h.steps(runId);
+    // A rate limit is not a failure: the Step is pending again, but it did run and write.
+    expect(delayed).toMatchObject({ status: 'pending', attempts: 1, failures: 0 });
+    // The resumed plan no longer contains it (the registry is replaced by a different plan).
+    const resumed = new Harness(t);
+    resumed.registry.register('migrate', { steps: () => [step('after', async () => undefined)] });
+    await resumed.t.db.pool.query(
+      "UPDATE app.run SET status = 'running', lease_owner = NULL WHERE id = $1",
+      [runId],
+    );
+    expect(await resumed.execute(runId)).toEqual({ outcome: 'finished', status: 'failed' });
+    expect((await resumed.stepStatuses(runId))['target.ensure-repository']).toBe('failed');
+  });
+
   it('[LIF-042] a fatal Step that never ran and left the plan does not fail the Run', async () => {
     const h = new Harness(t);
     h.registry.register('migrate', { steps: () => [step('after')] });

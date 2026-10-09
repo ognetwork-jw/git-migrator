@@ -434,10 +434,12 @@ class Driver<S> {
       for (const row of rows) {
         if (planned.has(stepId(row.stepKey, row.facetKey))) continue;
         if (row.status !== 'pending' && row.status !== 'running') continue;
-        // A fatal Step that left the plan after it started (running, or failed before) is a failure
-        // of the Run; one that never ran is only skipped (ADR-0341).
+        // A fatal Step that left the plan after it started (running, or attempted before, however
+        // that attempt ended: a failure, a rate limit or a delay) is a failure of the Run, because it
+        // may have changed a provider; one that never ran is only skipped (ADR-0341).
         const status =
-          row.severity === 'fatal' && (row.status === 'running' || row.failures > 0)
+          row.severity === 'fatal' &&
+          (row.status === 'running' || row.attempts > 0 || row.failures > 0)
             ? 'failed'
             : 'skipped';
         this.#log.warn({ step: row.stepKey, status }, 'a stored Step is no longer planned');
