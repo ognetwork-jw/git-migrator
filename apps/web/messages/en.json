@@ -260,5 +260,369 @@
         "cancel": "Cancel"
       }
     }
+  },
+  "config": {
+    "naming": {
+      "noRoutes": "There are no Routes yet. Naming rules appear once a Route is configured.",
+      "cancel": "Cancel",
+      "save": "Save",
+      "routeDefault": {
+        "title": "Route default",
+        "body": "The Route default comes from the Route configuration. It is not stored as a rule and cannot be edited here.",
+        "template": "Template: {template}",
+        "none": "This Route has no default naming pipeline."
+      },
+      "rules": {
+        "title": "Rules",
+        "new": "New rule",
+        "empty": "No rules yet. The Route default applies to every repository.",
+        "column": {
+          "scope": "Scope",
+          "target": "Namespace or repository",
+          "rule": "Rule",
+          "actions": "Actions"
+        },
+        "scope": {
+          "namespace": "Namespace",
+          "repository": "Repository"
+        },
+        "summary": {
+          "override": "Literal name: {name}",
+          "pipeline": "Template {template}"
+        },
+        "edit": "Edit",
+        "delete": "Delete",
+        "deleteTitle": "Delete this rule?",
+        "deleteBody": "Repositories it names fall back to the broader rule or the Route default. Preview the result by editing the rule first if you need to check it.",
+        "deleteWarning": "Planned names for those repositories can change, and analyses of this Route become stale. The names that would change are not previewed here.",
+        "deleteConfirm": "Delete rule"
+      },
+      "modal": {
+        "newTitle": "New naming rule",
+        "editTitle": "Edit naming rule",
+        "scopeFixed": "This rule applies to the {scope} {target}. Its scope cannot be changed; delete the rule and create another to move it.",
+        "scope": "Scope",
+        "scopeRef": "Namespace or repository",
+        "scopeRefPlaceholder": "Search by name or path",
+        "scopeNone": "Nothing matches",
+        "scopeTaken": "A rule already exists for this scope. Edit that rule instead.",
+        "modeLabel": "Rule type",
+        "mode": {
+          "pipeline": "Pipeline",
+          "override": "Literal name"
+        }
+      },
+      "override": {
+        "label": "Target name",
+        "placeholder": "The exact repository name on the target",
+        "help": "A literal name wins over every pipeline for this repository."
+      },
+      "pipeline": {
+        "title": "Pipeline",
+        "stepNumber": "Step {number}",
+        "step": {
+          "var": "Variable",
+          "op": "Operation",
+          "arg": "Length",
+          "pattern": "Pattern (RE2)",
+          "with": "Replacement",
+          "remove": "Remove step {number}"
+        },
+        "addStep": "Add step",
+        "template": "Template",
+        "templateHelp": "Name the result with the variables the steps set, for example {example}."
+      },
+      "op": {
+        "projectKey": "Namespace key",
+        "slug": "Slug",
+        "name": "Name",
+        "lowercase": "Lowercase",
+        "kebab": "Kebab case",
+        "truncate": "Truncate",
+        "replace": "Replace"
+      },
+      "problem": {
+        "scope": "Choose a namespace or repository.",
+        "overrideScope": "A literal name applies to a repository only.",
+        "override": "Enter a name of at most 256 characters.",
+        "steps": "A pipeline needs between 1 and 50 steps.",
+        "template": "Enter a template of at most 256 characters.",
+        "var": "Every step needs a variable.",
+        "op": "Choose an operation for every step.",
+        "truncateArg": "Truncate needs a length of at least 1.",
+        "pattern": "Replace needs a pattern of at most 400 characters.",
+        "with": "The replacement is at most 400 characters."
+      },
+      "preview": {
+        "title": "Preview",
+        "run": "Preview names",
+        "stale": "The rule changed since the last preview. Preview again before saving.",
+        "failed": "The preview could not run: {reason}",
+        "summary": "{affected} affected, {changed} renamed, {invalid} invalid, {colliding} colliding.",
+        "collisionTitle": "{count, plural, one {# collision} other {# collisions}}",
+        "collisionBody": "These repositories would get the same name. Saving is blocked until you confirm.",
+        "column": {
+          "source": "Source",
+          "current": "Current name",
+          "planned": "Planned name",
+          "changed": "Change",
+          "findings": "Findings"
+        },
+        "changed": "Renamed",
+        "unchanged": "Unchanged",
+        "empty": "No repository is affected by this rule.",
+        "shown": "Showing {shown} of {total} affected repositories.",
+        "loadMore": "Load more"
+      },
+      "confirm": {
+        "collisions": "Save anyway. I accept that these repositories collide."
+      },
+      "blocked": {
+        "no-preview": "Preview the names before saving.",
+        "stale-preview": "Preview the names again: the rule changed.",
+        "preview-unavailable": "The preview could not run, so collisions cannot be checked. Narrow the rule or try again later.",
+        "collisions-unconfirmed": "Confirm the collisions to save this rule."
+      },
+      "finding": {
+        "naming_invalid": "Invalid name",
+        "naming_collision": "Collision",
+        "target_owned_by_other_migration": "Owned by another migration"
+      }
+    },
+    "webhooks": {
+      "noRoutes": "There are no Routes yet. The allowlist appears once a Route is configured.",
+      "add": "Add pattern",
+      "help": "A webhook is created on the target only when its URL matches a pattern here. Other hooks are reported, not copied.",
+      "empty": "No patterns yet. No webhook is created automatically until one matches.",
+      "column": {
+        "pattern": "Pattern",
+        "note": "Note",
+        "actions": "Actions"
+      },
+      "edit": "Edit",
+      "delete": "Delete",
+      "deleteTitle": "Remove this pattern?",
+      "deleteConfirm": "Remove",
+      "cancel": "Cancel",
+      "save": "Save",
+      "tester": {
+        "title": "Pattern tester",
+        "url": "Hook URL to test",
+        "urlPlaceholder": "https://ci.example.test/hooks/build",
+        "none": "No pattern matches this URL. A hook to it would not be created.",
+        "matched": "{count, plural, one {One pattern matches this URL.} other {# patterns match this URL.}}",
+        "match": "Matches",
+        "privacy": "The URL is checked in this browser only. It is not sent or stored."
+      },
+      "modal": {
+        "addTitle": "Add pattern",
+        "editTitle": "Edit pattern",
+        "pattern": "URL pattern",
+        "patternPlaceholder": "https://*.example.test/hooks/**",
+        "patternHelp": "Use * for one host label or path segment and ** for several segments. The scheme and port must match.",
+        "note": "Note",
+        "notePlaceholder": "Why this pattern is allowed"
+      },
+      "problem": {
+        "empty": "Enter a pattern.",
+        "tooLong": "The pattern is longer than 2048 characters.",
+        "shape": "Enter an http or https URL without spaces. * may stand for part of a host or path.",
+        "characters": "A pattern cannot contain a backslash or a control character.",
+        "hostDoubleStar": "** can only be used in the path. In the host, * stands for one label."
+      }
+    },
+    "overlays": {
+      "noRoutes": "There are no Routes yet. Overlays appear once a Route is configured.",
+      "add": "Add overlay",
+      "help": "An overlay is a partial document merged onto the desired target configuration, and its values win. Parity ignores the paths it sets.",
+      "empty": "No overlays yet.",
+      "column": {
+        "facet": "Facet",
+        "status": "Status",
+        "data": "Values",
+        "updated": "Updated",
+        "actions": "Actions"
+      },
+      "status": {
+        "enabled": "Enabled",
+        "disabled": "Disabled"
+      },
+      "edit": "Edit",
+      "delete": "Delete",
+      "deleteTitle": "Delete this overlay?",
+      "deleteConfirm": "Delete",
+      "cancel": "Cancel",
+      "save": "Save",
+      "modal": {
+        "addTitle": "Add overlay",
+        "editTitle": "Edit overlay",
+        "facet": "Facet",
+        "facetPlaceholder": "Choose a Facet",
+        "enabled": "Enabled",
+        "data": "Overlay document (JSON)",
+        "dataHelp": "Use the fields of the Facet's canonical document. Only the fields you set are overridden.",
+        "facetsUnavailable": "The list of Facets could not be loaded."
+      },
+      "problem": {
+        "notJson": "The overlay is not valid JSON.",
+        "notObject": "The overlay must be a JSON object.",
+        "schema": "The overlay does not match the Facet's document:",
+        "root": "(document)",
+        "more": "{count, plural, one {One more problem is not shown.} other {# more problems are not shown.}}"
+      }
+    },
+    "capabilities": {
+      "help": "What each Facet can carry from the source to the target. The matrix is the static ceiling for each pair of adapters. A field that is not exact may need an accepted lossy policy.",
+      "empty": "The capability matrix has no rows.",
+      "column": {
+        "facet": "Facet"
+      },
+      "scope": {
+        "repository": "Repository scope",
+        "endpoint": "Endpoint scope"
+      },
+      "notInScope": "not in scope",
+      "pair": "{source} to {target}",
+      "fidelity": {
+        "exact": "Exact",
+        "translated": "Translated",
+        "lossy": "Lossy",
+        "unreadable": "Unreadable",
+        "unsupported": "Unsupported"
+      },
+      "readWrite": "Read {read}, write {write}",
+      "yes": "yes",
+      "no": "no",
+      "fields": {
+        "title": "Fields that are not exact",
+        "pair": "Source and target",
+        "empty": "Every field is exact for this pair.",
+        "column": {
+          "facet": "Facet",
+          "path": "Field",
+          "source": "Source kind",
+          "target": "Target kind",
+          "fidelity": "Fidelity"
+        }
+      },
+      "policies": {
+        "title": "Policies that accept lossy fields",
+        "help": "A lossy field is accepted by a Route only when its policy key is listed here.",
+        "empty": "No Routes are configured.",
+        "none": "None",
+        "column": {
+          "route": "Route",
+          "pair": "Adapter pair",
+          "acceptLossy": "Accepted policy keys"
+        },
+        "endpoints": "{source} to {target}"
+      }
+    }
+  },
+  "admin": {
+    "actors": {
+      "create": "New service Actor",
+      "help": "Human Actors sign in with their own account. Service Actors hold API keys for automation. Disabling an Actor ends its sessions and stops its keys.",
+      "empty": "No Actors yet.",
+      "cancel": "Cancel",
+      "column": {
+        "name": "Name",
+        "kind": "Type",
+        "role": "Role",
+        "status": "Status",
+        "actions": "Actions"
+      },
+      "kind": {
+        "human": "Person",
+        "service": "Service"
+      },
+      "role": {
+        "viewer": "Viewer",
+        "operator": "Operator",
+        "admin": "Admin"
+      },
+      "status": {
+        "enabled": "Enabled",
+        "disabled": "Disabled"
+      },
+      "enable": "Enable",
+      "disable": "Disable",
+      "disableTitle": "Disable {name}?",
+      "disableBody": "The Actor cannot sign in or use its keys until it is enabled again.",
+      "selfHint": "You cannot disable your own account.",
+      "modal": {
+        "createTitle": "New service Actor",
+        "create": "Create",
+        "name": "Name",
+        "namePlaceholder": "For example, the release bot",
+        "role": "Role"
+      },
+      "keys": {
+        "issue": "Create API key",
+        "empty": "No API keys yet.",
+        "cancel": "Cancel",
+        "column": {
+          "name": "Name",
+          "prefix": "Key prefix",
+          "created": "Created",
+          "lastUsed": "Last used",
+          "expires": "Expires",
+          "status": "Status",
+          "actions": "Actions"
+        },
+        "neverUsed": "Never",
+        "noExpiry": "Never",
+        "status": {
+          "active": "Active",
+          "revoked": "Revoked",
+          "expired": "Expired"
+        },
+        "revoke": "Revoke",
+        "revokeTitle": "Revoke {name}?",
+        "revokeBody": "Anything that uses this key stops working at once.",
+        "issueTitle": "Create API key",
+        "issueSubmit": "Create key",
+        "issueName": "Key name",
+        "issueNamePlaceholder": "For example, the nightly sync",
+        "issueExpires": "Expiry (optional)",
+        "issueExpiresHelp": "Leave empty for a key that does not expire.",
+        "issueExpiresPast": "The expiry must be in the future.",
+        "once": {
+          "title": "Copy your new API key",
+          "warning": "This key is shown once. Copy it now and store it safely. It cannot be shown again; if it is lost, revoke it and create another.",
+          "keyLabel": "New API key",
+          "copy": "Copy",
+          "copied": "Copied",
+          "copyFailed": "The key could not be copied. Select it and copy it by hand.",
+          "done": "Done"
+        }
+      }
+    },
+    "audit": {
+      "filter": {
+        "actor": "Filter by Actor",
+        "actorPlaceholder": "All Actors",
+        "action": "Action",
+        "actionPlaceholder": "Action contains",
+        "subjectType": "Subject type",
+        "subjectTypePlaceholder": "Subject type",
+        "subjectId": "Subject id",
+        "subjectIdPlaceholder": "Subject id",
+        "from": "From",
+        "to": "To"
+      },
+      "empty": "No audit events match.",
+      "loadMore": "Load more",
+      "showMore": "Show all",
+      "showLess": "Show less",
+      "system": "System",
+      "column": {
+        "at": "When",
+        "actor": "Actor",
+        "action": "Action",
+        "subject": "Subject",
+        "data": "Change"
+      }
+    }
   }
 }
