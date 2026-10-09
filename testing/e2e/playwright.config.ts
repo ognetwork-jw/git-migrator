@@ -1,28 +1,9 @@
-import { existsSync, readdirSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { chromium, defineConfig } from '@playwright/test';
+import { defineConfig } from '@playwright/test';
+import { chromiumPath } from './harness/chromium.ts';
 
 const here = dirname(fileURLToPath(import.meta.url));
-
-/**
- * Playwright wants the Chromium build that matches its own version. Sandboxes with a pre-installed
- * browser (PLAYWRIGHT_BROWSERS_PATH) can hold an older build, so use that one instead of failing
- * on a missing download. `GM_CHROMIUM_PATH` overrides both. Never calls `playwright install`.
- */
-function chromiumPath(): string | undefined {
-  const explicit = process.env.GM_CHROMIUM_PATH;
-  if (explicit) return explicit;
-  if (existsSync(chromium.executablePath())) return undefined;
-  const root = process.env.PLAYWRIGHT_BROWSERS_PATH;
-  if (!root || !existsSync(root)) return undefined;
-  return readdirSync(root)
-    .filter((name) => /^chromium-\d+$/.test(name))
-    .sort()
-    .reverse()
-    .map((name) => join(root, name, 'chrome-linux', 'chrome'))
-    .find((path) => existsSync(path));
-}
 
 /**
  * The UI e2e tier with fakes (TST-021). `harness/global-setup.ts` starts the built web app, the

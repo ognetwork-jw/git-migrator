@@ -1,29 +1,8 @@
-import { existsSync, readdirSync } from 'node:fs';
-import { join } from 'node:path';
-import { chromium, defineConfig } from '@playwright/test';
+import { defineConfig } from '@playwright/test';
+import { chromiumPath } from '../harness/chromium.ts';
 
 const PORT = 3917;
 const BASE_URL = `http://127.0.0.1:${PORT}`;
-
-/**
- * Playwright wants the Chromium build that matches its own version. Sandboxes with a pre-installed
- * browser (PLAYWRIGHT_BROWSERS_PATH) can hold an older build, so use that one instead of failing
- * on a missing download. `GM_CHROMIUM_PATH` overrides both. Never calls `playwright install`.
- */
-function chromiumPath(): string | undefined {
-  const explicit = process.env.GM_CHROMIUM_PATH;
-  if (explicit) return explicit;
-  if (existsSync(chromium.executablePath())) return undefined;
-  const root = process.env.PLAYWRIGHT_BROWSERS_PATH;
-  if (!root || !existsSync(root)) return undefined;
-  const found = readdirSync(root)
-    .filter((name) => /^chromium-\d+$/.test(name))
-    .sort()
-    .reverse()
-    .map((name) => join(root, name, 'chrome-linux', 'chrome'))
-    .find((path) => existsSync(path));
-  return found;
-}
 
 /**
  * The visual regression suite of the web shell (T-080, UI-001, UI-010, UI-036). It runs against
