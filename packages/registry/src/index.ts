@@ -1,7 +1,7 @@
 /** @git-migrator/registry: build-time composition of adapters, facets and pair overrides (T-058). */
 export const PACKAGE_NAME = '@git-migrator/registry';
 
-export { createBuiltinRegistry } from './builtin.ts';
+export { type BuiltinRegistryOptions, createBuiltinRegistry } from './builtin.ts';
 export {
   type CapabilityMatrix,
   computeCell,

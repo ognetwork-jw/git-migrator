@@ -35,7 +35,15 @@ describe('control plane', () => {
       'GET /orgs/acme',
       'GET /orgs/acme/members',
     ]);
-    expect(log.every((r) => r.status === 200)).toBe(true);
+    expect(log.every((r) => r.status === 200 && !r.write)).toBe(true);
+    // A GraphQL query is a read, a mutation a write.
+    const rule = (query: string) => w.call('POST', '/graphql', { body: { query } });
+    await rule('query { viewer { login } }').catch(() => undefined);
+    await rule('mutation { createBranchProtectionRule(input: {}) { clientMutationId } }').catch(
+      () => undefined,
+    );
+    const graphql = w.fake.requests().filter((r) => r.path === '/graphql');
+    expect(graphql.map((r) => r.write)).toEqual([false, true]);
     w.fake.clearRequests();
     expect(w.fake.requests()).toEqual([]);
     await w.call('GET', '/orgs/acme');

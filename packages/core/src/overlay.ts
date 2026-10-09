@@ -39,7 +39,7 @@ export interface OverlayMerge<T> {
  * - objects merge field by field; any other value of the overlay replaces the desired one;
  * - keyed collections (ADP-021) merge by key: an element with a known key merges into it, a new
  *   key is added; elements the overlay does not name stay;
- * - sets of primitives are the union of both;
+ * - sets of primitives and any other value are replaced by the overlay's (as parity merges, T-072);
  * - a key that could reach a prototype (`__proto__`, `constructor`, `prototype`) anywhere in the
  *   overlay is refused, whatever validation happened before.
  * Neither input is changed. Throws `OverlayError` for an overlay that is not a plain object or
@@ -58,22 +58,12 @@ export function mergeOverlay<T>(
       c.key,
     ]),
   );
-  const sets = new Set(
-    (schema.sets ?? []).map((p) => formatFieldPath(p.split('/').filter(Boolean).map(seg))),
-  );
 
   const mergeValue = (base: unknown, over: unknown, names: string[]): unknown => {
     const schemaPath = formatFieldPath(names.map(seg));
     const keyField = collections.get(schemaPath);
     if (keyField !== undefined && Array.isArray(over)) {
       return mergeKeyed(Array.isArray(base) ? base : [], over, keyField, names);
-    }
-    if (sets.has(schemaPath) && Array.isArray(over)) {
-      const union = new Map<string, unknown>();
-      for (const v of [...(Array.isArray(base) ? base : []), ...over]) {
-        union.set(JSON.stringify(v), v);
-      }
-      return [...union.values()];
     }
     if (isPlainObject(over)) {
       const existing = isPlainObject(base) ? base : {};

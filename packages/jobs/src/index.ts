@@ -148,6 +148,20 @@ export {
   type VerdictApplied,
 } from './parity/verdict.ts';
 export {
+  branchPatternMatches,
+  chooseDefaultBranch,
+  connectSide,
+  createMigrationPlanner,
+  effectiveMaxPushBytes,
+  IMPLEMENTED_STEP_KEYS,
+  MIGRATION_RUN_KINDS,
+  type MigrationContext,
+  MigrationLinks,
+  type MigrationServices,
+  registerMigrationSteps,
+  type Side,
+} from './migrate/index.ts';
+export {
   InvalidPayloadError,
   isJobName,
   JOB_PAYLOADS,
@@ -202,6 +216,7 @@ export {
   RETRY_BASE_MS,
   RETRY_CAP_MS,
   retryDelayMs,
+  StepFailure,
   serializeStepError,
 } from './run/errors.ts';
 export {
@@ -229,11 +244,13 @@ export {
   settleOrphanedMigrations,
 } from './run/finish.ts';
 export {
+  ADOPTABLE_BLOCKERS,
   allowedReadiness,
   type CancelOutcome,
   type CreatedRun,
   type CreateRunInput,
   createRun,
+  effectiveReadiness,
   type RunGuardCode,
   RunGuardError,
   requestRunCancel,

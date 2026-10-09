@@ -17,6 +17,7 @@ export type Tx = Pick<
   | 'planItem'
   | 'parityResult'
   | 'auditEvent'
+  | 'repository'
   | '$executeRaw'
   | '$queryRaw'
 >;

@@ -19,6 +19,8 @@ import {
   type JobHandlers,
   JobRuntime,
   LeaderElection,
+  MigrationLinks,
+  type MigrationServices,
   maintenanceHandlers,
   noGitClient,
   type ParityDeps,
@@ -26,7 +28,9 @@ import {
   type QueueName,
   queuesForRole,
   RunStepRegistry,
+  registerMigrationSteps,
   resetQueueCounts,
+  runAnalysis,
   runHandlers,
   SchedulerManager,
   ScratchCleaner,
@@ -237,7 +241,10 @@ export async function startWorker(options: StartWorkerOptions): Promise<WorkerHa
     await jobs.waitUntilReady();
     checkpoint();
 
-    const registry = createBuiltinRegistry();
+    // The adapter asks for the Migration link of a target repository when it opens a Change Request
+    // (LIF-047); the Steps note it first.
+    const links = new MigrationLinks(config.publicUrl);
+    const registry = createBuiltinRegistry({ migrationUrl: links.resolve });
     const connector = createEndpointConnector({
       config,
       registry,
@@ -257,9 +264,6 @@ export async function startWorker(options: StartWorkerOptions): Promise<WorkerHa
       git,
       log,
     };
-    // The Steps of each Run kind are registered here by the migration tasks (T-071 and later); until
-    // then a Run of a kind without Steps fails with `run.kind_unsupported` (LIF-040).
-    const runSteps = new RunStepRegistry();
     // The Parity Check (LIF-060): the LFS object ids come from a mirror in scratch (FAC-GIT-005).
     const parityDeps: ParityDeps = {
       db: db.privileged,
@@ -270,6 +274,25 @@ export async function startWorker(options: StartWorkerOptions): Promise<WorkerHa
       log,
       lfs: createMirrorLfsSource({ scratchRoot: scratchRoot(env), log }),
     };
+    runSteps.register('verify', createVerifyPlanner(parityDeps));
+    // The Steps of the repository migration kinds (LIF-040 steps 1 to 12). `verify` and
+    // `source.read-only` join through `extraSteps` (T-072, T-073); other Run kinds register their
+    // own planners here.
+    const migrationServices: MigrationServices = {
+      db: db.privileged,
+      connector,
+      registry,
+      config,
+      quota,
+      scratchRoot: scratchRoot(env),
+      links,
+      logger: log,
+      reanalyze: async (migrationId, signal) => {
+        await runAnalysis(analysisDeps, migrationId, { shutdown: signal, pool: 'interactive' });
+      },
+    };
+    const runSteps = new RunStepRegistry<MigrationServices>();
+    registerMigrationSteps(runSteps, migrationServices);
     runSteps.register('verify', createVerifyPlanner(parityDeps));
     const handlers = {
       ...maintenanceHandlers({
@@ -300,7 +323,8 @@ export async function startWorker(options: StartWorkerOptions): Promise<WorkerHa
         log,
         registry: runSteps,
         runs: jobs,
-        services: {},
+        services: migrationServices,
+        scratchRoot: scratchRoot(env),
         workerId: `${hostname()}-${process.pid}`,
         analysis: createRunAnalysisPort(analysisDeps, analyzeForRun),
         metrics: recorders,

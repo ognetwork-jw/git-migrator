@@ -48,7 +48,7 @@ describe('[LIF-048] overlay merge', () => {
     expect(out.paths).toEqual(['/rules[pattern=main]/approvals', '/title']);
   });
 
-  it('[LIF-048] a new key is added to a keyed collection, nested collections merge by key, sets are a union', () => {
+  it('[LIF-048] a new key is added to a keyed collection, nested collections merge by key, sets are replaced', () => {
     const out = mergeOverlay(
       desired,
       {
@@ -65,7 +65,7 @@ describe('[LIF-048] overlay merge', () => {
       'main',
       'release',
     ]);
-    expect(out.merged.labels).toEqual(['a', 'b']);
+    expect(out.merged.labels).toEqual(['b']);
     const main = (out.merged.rules as { pattern: string; restrictPushes: unknown[] }[]).find(
       (r) => r.pattern === 'main',
     );

@@ -18,6 +18,8 @@ export interface GitHubRequestRecord {
   readonly method: string;
   readonly path: string;
   readonly status: number;
+  /** False for reads: GET, HEAD, and a GraphQL query (a GraphQL mutation is a write). */
+  readonly write: boolean;
 }
 
 export interface FakeGitHub {
@@ -65,6 +67,8 @@ export function createFakeGitHub(options: FakeGitHubOptions = {}): FakeGitHub {
   const limiter = new RateLimiter(state);
   const app = new Hono();
   const requestLog: GitHubRequestRecord[] = [];
+  /** GraphQL requests whose operation is a mutation, by request, for the log. */
+  const graphqlMutations = new WeakSet<Request>();
   const fixtures: Record<string, (s: GitHubState) => void | Promise<void>> = {
     empty: () => {},
     ...options.fixtures,
@@ -102,7 +106,14 @@ export function createFakeGitHub(options: FakeGitHubOptions = {}): FakeGitHub {
     inflight += 1;
     try {
       await next();
-      requestLog.push({ method: c.req.method, path: c.req.path, status: c.res.status });
+      const method = c.req.method;
+      const write =
+        method === 'GET' || method === 'HEAD'
+          ? false
+          : c.req.path === '/graphql'
+            ? graphqlMutations.has(c.req.raw)
+            : true;
+      requestLog.push({ method, path: c.req.path, status: c.res.status, write });
     } finally {
       inflight -= 1;
       if (inflight === 0) idle?.();
@@ -215,6 +226,7 @@ export function createFakeGitHub(options: FakeGitHubOptions = {}): FakeGitHub {
     }
     if (typeof body.query !== 'string')
       throw new GhError(400, 'A query attribute must be specified and must be a string.');
+    if (isMutation(body.query, body.operationName)) graphqlMutations.add(c.req.raw);
     const release = limiter.begin(auth);
     try {
       limiter.checkSecondary(auth, {

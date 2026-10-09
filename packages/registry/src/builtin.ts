@@ -6,9 +6,11 @@ import {
 import {
   bitbucketCloudToGithubPipelines,
   bitbucketCloudToGithubPipelinesDelivery,
+  createGitHubAdapter,
   githubAdapter,
   githubLimits,
 } from '@git-migrator/adapter-github';
+import type { RepositoryRef } from '@git-migrator/adapter-sdk';
 import {
   accessControl,
   branchRulesDefinition,
@@ -32,7 +34,15 @@ import {
 } from '@git-migrator/facets';
 import { ProviderRegistry } from './registry.ts';
 
-export function createBuiltinRegistry(): ProviderRegistry {
+export interface BuiltinRegistryOptions {
+  /** Link to the Migration of a target repository, appended to Change Request bodies (LIF-047). */
+  readonly migrationUrl?: (repo: RepositoryRef) => string | undefined;
+}
+
+export function createBuiltinRegistry(options: BuiltinRegistryOptions = {}): ProviderRegistry {
+  const github = options.migrationUrl
+    ? createGitHubAdapter({ migrationUrl: options.migrationUrl })
+    : githubAdapter;
   return new ProviderRegistry({
     facets: [
       gitRefsDefinition,
@@ -55,10 +65,10 @@ export function createBuiltinRegistry(): ProviderRegistry {
       orgSecretsDefinition,
       orgWebhooksDefinition,
     ] as never[],
-    adapters: [bitbucketCloudAdapter, githubAdapter],
+    adapters: [bitbucketCloudAdapter, github],
     limits: {
       [bitbucketCloudAdapter.type]: bitbucketCloudLimits,
-      [githubAdapter.type]: githubLimits,
+      [github.type]: githubLimits,
     },
     overrides: [bitbucketCloudToGithubPipelines as never],
     deliveries: [bitbucketCloudToGithubPipelinesDelivery],
