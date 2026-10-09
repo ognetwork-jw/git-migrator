@@ -804,6 +804,79 @@
       "gib": "{value} GiB",
       "tib": "{value} TiB"
     },
-    "routeNotFound": "Route {id} was not found. Showing {shown} instead."
+    "routeNotFound": "Route {id} was not found. Showing {shown} instead.",
+    "bulk": {
+      "label": "Bulk actions",
+      "analyze": "Analyze",
+      "migrateReady": "Migrate ready",
+      "migrateConfirm": "Start a migrate Run for each selected repository that is ready with a fresh Analysis? Others are skipped.",
+      "migrateConfirmOk": "Migrate ready",
+      "migrateConfirmCancel": "Cancel",
+      "assign": "Assign to wave",
+      "assignSelect": "Wave to assign",
+      "assignPlaceholder": "Choose a Wave",
+      "remove": "Remove from wave",
+      "tooMany": "Select at most {max} repositories for a bulk action.",
+      "running": "Working on {count} repositories.",
+      "resultTitle": "Bulk action finished",
+      "accepted": "{count, plural, one {# repository accepted.} other {# repositories accepted.}}",
+      "skipped": "{count, plural, one {# repository skipped.} other {# repositories skipped.}}",
+      "skippedItem": "{name}: {reason}",
+      "dismiss": "Dismiss",
+      "reason": {
+        "not_found": "No longer exists.",
+        "not_repository": "Not a repository Migration.",
+        "source_missing": "Its source is missing from the last inventory.",
+        "route_retired": "Its Route is retired.",
+        "not_ready": "Not ready.",
+        "not_analyzed": "Not analyzed yet.",
+        "analysis_stale": "Its Analysis is stale; analyze it again first.",
+        "run_active": "A Run is already queued or running.",
+        "not_permitted": "Its current status does not allow this.",
+        "already_in_wave": "Already in this Wave.",
+        "not_in_wave": "Not in a Wave.",
+        "queue_unavailable": "The job queue is unavailable; try again."
+      }
+    }
+  },
+  "waves": {
+    "title": "Waves",
+    "empty": "No Waves yet.",
+    "create": "New Wave",
+    "edit": "Edit",
+    "delete": "Delete",
+    "deleteConfirm": "Delete the Wave {name}? Its repositories stay, without a Wave.",
+    "deleteOk": "Delete",
+    "deleteCancel": "Cancel",
+    "save": "Save",
+    "cancel": "Cancel",
+    "createTitle": "New Wave",
+    "editTitle": "Edit Wave",
+    "column": {
+      "name": "Name",
+      "targetDate": "Target date",
+      "description": "Description",
+      "progress": "Progress",
+      "actions": "Actions"
+    },
+    "field": {
+      "name": "Name",
+      "targetDate": "Target date",
+      "description": "Description"
+    },
+    "noDate": "No target date",
+    "progress": "{done} of {total} done",
+    "truncated": "Progress is shown for the first {count} Waves only.",
+    "detail": {
+      "back": "All Waves",
+      "notFound": "This Wave does not exist.",
+      "breakdown": "Status breakdown",
+      "noMembers": "No repositories in this Wave yet.",
+      "repositories": "Repositories",
+      "loading": "Loading the status breakdown.",
+      "unknown": "The status breakdown is not available for this Wave. Reload, or open the dashboard."
+    },
+    "editLabel": "Edit {name}",
+    "deleteLabel": "Delete {name}"
   }
 }

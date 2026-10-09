@@ -25,6 +25,7 @@ import {
   repositoryPageKey,
   wavesKey,
 } from './api.ts';
+import { BulkBar } from './bulk-bar.tsx';
 import { FacetStrip } from './facet-strip.tsx';
 import { splitBytes } from './format.ts';
 import {
@@ -70,7 +71,7 @@ export interface RepositoriesViewProps {
   readonly initialRouteId?: string;
   /** Opens the list with these filters instead of the defaults. */
   readonly initialFilters?: Partial<FilterState>;
-  /** The bulk bar of T-088 renders here, from the selection that survives pages (UI-021). */
+  /** Replaces the default bulk bar (UI-021, T-088). */
   readonly bulkBar?: (selection: RepositorySelection) => ReactNode;
 }
 
@@ -387,7 +388,7 @@ export function RepositoriesView({
             </Button>
           </>
         ) : null}
-        {operator ? bulkBar?.(selection) : null}
+        {operator ? bulkBar ? bulkBar(selection) : <BulkBar selection={selection} /> : null}
       </div>
 
       {unknownRoute ? (
@@ -438,7 +439,11 @@ export function RepositoriesView({
             selection.replaceOnPage(
               pageIds,
               keys.map(String),
-              selected.map((r) => ({ id: r.id, readiness: r.readiness })),
+              selected.map((r) => ({
+                id: r.id,
+                readiness: r.readiness,
+                path: r.sourceRepository?.fullPath ?? r.id,
+              })),
             ),
         }}
         columns={columns}

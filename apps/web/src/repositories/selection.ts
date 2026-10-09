@@ -4,6 +4,8 @@ import { useCallback, useMemo, useState } from 'react';
 export interface SelectedRepository {
   readonly id: string;
   readonly readiness: string | null;
+  /** The source path, for naming the item in a bulk result. */
+  readonly path: string;
 }
 
 export interface RepositorySelection {

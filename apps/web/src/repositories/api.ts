@@ -113,3 +113,20 @@ export const analyzeMigration = (id: string) =>
 /** How many of `ids` the filters still show, so the view can say how many selected rows they hide. */
 export const countMatching = (filters: RepositoryFilters, ids: readonly string[]) =>
   rpc<number>('migration', 'count', { where: { AND: [buildWhere(filters), { id: { in: ids } }] } });
+
+export type BulkAction = 'analyze' | 'migrate-ready' | 'assign-to-wave' | 'remove-from-wave';
+
+/** `POST /migrations/bulk` (LIF-090): what was accepted, and what was skipped with a reason code. */
+export interface BulkResult {
+  readonly accepted: readonly string[];
+  readonly skipped: readonly { readonly id: string; readonly reason: string }[];
+}
+
+/** Most Migrations one bulk request takes (LIF-090). */
+export const BULK_MAX = 200;
+
+export const bulkAction = (body: {
+  readonly ids: readonly string[];
+  readonly action: BulkAction;
+  readonly waveId?: string;
+}) => apiRequest<BulkResult>('/api/v1/migrations/bulk', { method: 'POST', json: body });

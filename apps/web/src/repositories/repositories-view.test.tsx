@@ -346,8 +346,20 @@ describe('[UI-021] repositories list', () => {
     );
     renderView();
     await screen.findByText('acme/plat/repo-1');
-    fireEvent.click(screen.getByRole('button', { name: 'Analyze' }));
+    fireEvent.click(within(rowOf('acme/plat/repo-1')).getByRole('button', { name: 'Analyze' }));
     expect((await screen.findByRole('alert')).textContent).toContain('source is missing');
+  });
+
+  it('[UI-021] [LIF-090] an operator gets the bulk bar by default and a viewer does not', async () => {
+    mockApi();
+    renderView('operator');
+    await screen.findByText('acme/plat/repo-1');
+    expect(screen.getByRole('group', { name: 'Bulk actions' })).toBeTruthy();
+    cleanup();
+    mockApi();
+    renderView('viewer');
+    await screen.findByText('acme/plat/repo-1');
+    expect(screen.queryByRole('group', { name: 'Bulk actions' })).toBeNull();
   });
 
   it('[UI-021] a viewer sees the list without row actions', async () => {
