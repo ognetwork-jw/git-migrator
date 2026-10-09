@@ -10,6 +10,7 @@ export * from './jcs.ts';
 export * from './ledger.ts';
 export * from './lifecycle.ts';
 export * from './naming.ts';
+export * from './overlay.ts';
 export * from './pattern.ts';
 export * from './plan.ts';
 export * from './policy.ts';
