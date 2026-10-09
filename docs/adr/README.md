@@ -168,5 +168,8 @@
 | [0395](0395-parity-result-storage.md) | ParityResult storage: one row per Facet updated in place, diff shape, redaction at write | agent-decided |
 | [0396](0396-parity-engine-and-verified-status.md) | Parity Check, verifiable tasks completed by the system, `verified` through the lifecycle table at the end of a Run, parity outside a Run | agent-decided |
 | [0397](0397-parity-git-checks.md) | LFS parity through a mirror and the batch API, post-cutover containment applied to every check | agent-decided |
+| [0405](0405-bulk-endpoint-and-migrate-ready.md) | `POST /migrations/bulk` lives in packages/api and creates Runs through `createRun` | agent-decided |
+| [0406](0406-bulk-selection-filter-and-cap.md) | Bulk selection: explicit ids or a saved filter, 200 at most, a 422 above it | agent-decided |
+| [0407](0407-waves-membership-and-feeder-priority.md) | Wave membership: capability, no staleness, CRUD through the Model API, priority already in the feeder | agent-decided |
 
 New ADRs continue from 0028. Implementor decisions use `status: agent-decided` (PROC-005). T-002 uses 0065–0069.

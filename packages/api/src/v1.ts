@@ -10,6 +10,7 @@ import type { Actor, DbHandle } from '@git-migrator/db';
 import { createRoute, OpenAPIHono, z } from '@hono/zod-openapi';
 import type { Context } from 'hono';
 import { createBatch1 } from './batch1.ts';
+import { createBulk } from './bulk.ts';
 import type { EventHub } from './events.ts';
 import { eventsHandler, eventsRoute } from './events-route.ts';
 import {
@@ -408,6 +409,15 @@ export function createV1(deps: V1Deps) {
           : await renameGroupMapping(deps.db, id, mappingId, body.plannedSlug ?? '', by);
       return c.json(view, 200);
     })
+    .route(
+      '/',
+      createBulk({
+        db: deps.db,
+        services: deps.services ?? {},
+        ...(deps.onFault ? { onFault: deps.onFault } : {}),
+        validationHook,
+      }),
+    )
     .route('/', createOverlays({ db: deps.db, services: deps.services ?? {}, validationHook }))
     .route(
       '/',

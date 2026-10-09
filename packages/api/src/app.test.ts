@@ -627,6 +627,7 @@ describe('[API-001] OpenAPI document and typed client', () => {
       '/events',
       '/inventory/refresh',
       '/me',
+      '/migrations/bulk',
       '/migrations/{id}/analyze',
       '/migrations/{id}/diff',
       '/overlays',
