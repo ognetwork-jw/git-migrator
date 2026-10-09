@@ -30,7 +30,7 @@ Status: the API is mounted (T-021) and the UI shell exists (T-080). `pnpm dev` r
 - `messages/en.json` holds every user-facing string. `problem.<code>` has the text of each API problem code; `auth.error.<code>` the sign-in error page texts.
 - UI code takes display name and email from the Actor (`GET /api/v1/me`), never from `session.user`, which holds a synthetic address (ADR-0171). It must not import `@git-migrator/*/testing` from non-test files.
 
-Declared internal dependencies (ARC-012, checked by `pnpm lint`): @git-migrator/api, @git-migrator/auth, @git-migrator/config, @git-migrator/observability, @git-migrator/db, @git-migrator/facets (T-091, ADR-0366).
+Declared internal dependencies (ARC-012, checked by `pnpm lint`): @git-migrator/api, @git-migrator/auth, @git-migrator/config, @git-migrator/observability, @git-migrator/db, @git-migrator/facets (T-091, ADR-0366), @git-migrator/guidance (T-082, ADR-0446).
 
 ## Live updates (JOB-060)
 
@@ -54,7 +54,7 @@ Declared internal dependencies (ARC-012, checked by `pnpm lint`): @git-migrator/
 
 ## Dashboard and repositories (UI-020, UI-021, T-081)
 
-`/` (`src/dashboard/`) shows per-Route counts, Wave progress, quota gauges and the last 20 Runs from `GET /api/v1/dashboard` and `GET /api/v1/quota`; it renders `wavesTruncated` and `backlogTruncated` as notices. `/repositories` (`src/repositories/`) reads the Model API: `query.ts` builds the `findMany` arguments (filters, sort, `skip`/`take` of 50) so the server filters, sorts and pages; `selection.ts` keeps the selected Migration ids across pages, sorts and filters and `RepositoriesView` passes them to a `bulkBar(selection)` render prop for T-088. Row actions (operators): Analyze; Migrate on a `ready` row and Run anyway on a `needs_attention` row, each behind a confirmation dialog and posting `POST /migrations/{id}/runs` (T-074, ADR-0415); the 409 and 422 answers have their own texts under `repositories.runConfirm.error`. The typed `confirm` of `adoptNonEmpty` arrives with the repository detail page (T-082). `/repositories?route=&status=&readiness=` opens a pre-filtered list. Both pages call `authorizePage` first. Live updates: the shell owns the one connection (`src/shell/live-topics.tsx`); a view adds its topics with `useLiveTopics(topics, queryKeysFor)`. Never open a stream per page or row (16 per Actor, ADR-0270). Decisions: ADR-0350.
+`/` (`src/dashboard/`) shows per-Route counts, Wave progress, quota gauges and the last 20 Runs from `GET /api/v1/dashboard` and `GET /api/v1/quota`; it renders `wavesTruncated` and `backlogTruncated` as notices. `/repositories` (`src/repositories/`) reads the Model API: `query.ts` builds the `findMany` arguments (filters, sort, `skip`/`take` of 50) so the server filters, sorts and pages; `selection.ts` keeps the selected Migration ids across pages, sorts and filters and `RepositoriesView` passes them to a `bulkBar(selection)` render prop for T-088. Row actions (operators): Analyze; Migrate on a `ready` row and Run anyway on a `needs_attention` row, each behind a confirmation dialog and posting `POST /migrations/{id}/runs` (T-074, ADR-0415); the 409 and 422 answers have their own texts under `repositories.runConfirm.error`. The typed `confirm` of `adoptNonEmpty` is on the repository detail page (T-082). A row's last Run links to the Run page. `/repositories?route=&status=&readiness=` opens a pre-filtered list. Both pages call `authorizePage` first. Live updates: the shell owns the one connection (`src/shell/live-topics.tsx`); a view adds its topics with `useLiveTopics(topics, queryKeysFor)`. Never open a stream per page or row (16 per Actor, ADR-0270). Decisions: ADR-0350.
 
 ## Bulk actions and Waves (UI-021, UI-024, T-088)
 
@@ -63,3 +63,11 @@ Declared internal dependencies (ARC-012, checked by `pnpm lint`): @git-migrator/
 ## Endpoints and the endpoint migration (UI-025, UI-026, T-086)
 
 `/endpoints` (`src/endpoints/endpoints-view.tsx`) lists the configured Endpoints (counts, last inventory) and Routes, read-only, with a link per Route to `/endpoints/routes/[routeId]/migration` (`endpoint-migration-view.tsx`): header with status, readiness, Analyze and Migrate or Run anyway (operators; the server re-checks readiness), and tabs for findings, Facet diffs (`GET /api/v1/migrations/{id}/diff`) and Runs. Both follow `list:repositories`, `list:migrations`, `migration:<id>` and `list:runs` through `useLiveTopics`. Decisions: ADR-0435.
+
+## Repository and Run detail, guidance (UI-022, UI-023, UI-040, T-082)
+
+`/repositories/[migrationId]` (`src/migration-detail/`): a header (source, target, status, readiness, Wave selector, the actions of `rules.ts`), a clickable Facet strip and the tabs Overview (findings by blocker, pre task, post task and warning, each with guidance), Facets (source, desired and target as JSON trees, fidelity markers, parity differences with Accept, Expected Differences with Revoke), Tasks (done, reopen, dismiss, note, guidance), Runs and Audit. Every action calls its `/api/v1` endpoint (`api.ts`); a refusal shows the message `migrationDetail.error.<action>.<code>` or `problem.<code>`. Rollback, force adopt and undo source read-only need the exact target full name typed (`dialogs.tsx`). New tabs go in `DETAIL_TABS` and the `Tabs` items of `detail-view.tsx`; a task row is `TaskItem`.
+
+`/runs/[runId]` (`src/run-detail/`): Steps timeline, a virtualized log viewer (level filter, follows the tail, fetches only new lines after each `run.log` event), the Mutations made, and Cancel while queued or running.
+
+`src/guidance/` renders guidance (UI-040): `GuidanceView` is the reusable component (title, summary, steps with a copy button per command, verification), `guidanceParams` maps a finding's `params`, `CopyButton` and `InlineMarkdown` are the parts. `src/messages.ts` mounts the guidance catalog under `guidance` beside `messages/en.json` (ADR-0446). Decisions: ADR-0445, ADR-0446.

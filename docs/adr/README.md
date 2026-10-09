@@ -177,6 +177,8 @@
 | [0407](0407-waves-membership-and-feeder-priority.md) | Wave membership: capability, no staleness, CRUD through the Model API, priority already in the feeder | accepted (spec updated) |
 | [0415](0415-run-and-task-endpoints.md) | Run, cancel, complete, task and Expected Difference endpoints: one Run creation path, problem codes, task states, parity triggers | accepted (spec updated) |
 | [0425](0425-source-read-only-steps.md) | Source read-only: step 14 conditions, the two Run kinds, ledgering, undo, and what the Analysis filter removes | agent-decided |
+| [0445](0445-repository-and-run-detail-pages.md) | Repository and Run detail pages: names instead of provider links, action rules, rollback sequencing, log bounds | agent-decided |
+| [0446](0446-guidance-mount-and-reusable-view.md) | Mounting the guidance catalog and the reusable guidance view | agent-decided |
 | [0455](0455-ci-outage-local-gate.md) | Local gate while GitHub Actions cannot run jobs | agent-decided |
 | [0435](0435-endpoint-migration-steps.md) | Endpoint migration Steps through the planner's scope dispatch, team settlement (GroupMapping confirmed, repository Analyses stale), Teams slug of a mapped group, endpoint pages | accepted (spec updated) |
 | [0475](0475-integration-tier-and-phase1-scenario.md) | The integration tier (Vitest project, script, CI job) and how the Phase-1 scenario is composed | agent-decided |
