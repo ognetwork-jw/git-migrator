@@ -83,7 +83,6 @@ describe('maintenance handlers', () => {
       'maintenance.scratch-cleanup',
       'maintenance.run-reaper',
       'drift.sweep',
-      'parity.migration',
     ] as const) {
       expect(handlers[name]).toBeTypeOf('function');
     }
@@ -92,6 +91,8 @@ describe('maintenance handlers', () => {
     expect(handlers['analysis.migration']).toBeUndefined();
     // The feeder has its own processor now (T-061); the others still complete as skipped.
     expect(handlers['analysis.feeder']).toBeUndefined();
+    // `parity.migration` has its own processor now (T-072, parityHandlers).
+    expect(handlers['parity.migration']).toBeUndefined();
     const sweep = handlers['drift.sweep'] as unknown as () => Promise<unknown>;
     expect(await sweep()).toEqual({ skipped: true });
   });

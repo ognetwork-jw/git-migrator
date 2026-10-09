@@ -13,6 +13,7 @@ import {
 } from '@git-migrator/core';
 import type { Db } from '@git-migrator/db';
 import type { Logger } from '@git-migrator/observability';
+import { applyParityVerdict, PARITY_RUN_KINDS } from '../parity/verdict.ts';
 import { fenced, lockMigration, publishMigration, publishRun } from './store.ts';
 import type { Tx } from './types.ts';
 
@@ -116,8 +117,30 @@ export async function endRunIn(
       'run_finished was rejected by the lifecycle table; the Migration is unchanged',
     );
   }
+  if (applied.applied && PARITY_RUN_KINDS.has(run.kind)) {
+    await applyRunParity(tx, input);
+  }
   await publishRun(tx, { run: input.runId, migration: input.migrationId }, input.now);
   await publishMigration(tx, input.migrationId, input.now);
+}
+
+/**
+ * LIF-002: after `run_finished`, "`parity_*` from the Run's verify step applies". Only a Run whose
+ * `verify` Step succeeded speaks for parity; the ParityResults it stored decide (LIF-061), and the
+ * event goes through the lifecycle table, so an illegal move is rejected and logged (LIF-003).
+ */
+async function applyRunParity(tx: Tx, input: Omit<FinishInput, 'token'>): Promise<void> {
+  const verified = await tx.runStep.count({
+    where: { runId: input.runId, stepKey: 'verify', status: 'succeeded' },
+  });
+  if (verified === 0) return;
+  const result = await applyParityVerdict(tx, input.migrationId, input.now());
+  if (!result.applied) {
+    input.log?.error(
+      { runId: input.runId, migrationId: input.migrationId, reason: result.reason },
+      'the parity event was rejected by the lifecycle table; the Migration is unchanged',
+    );
+  }
 }
 
 /**

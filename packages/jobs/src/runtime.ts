@@ -79,6 +79,11 @@ export interface JobRuntimeOptions {
 export interface EnqueueOptions {
   /** BullMQ `deduplication.id` (JOB-011), for example `analysis-<migrationId>`. */
   readonly dedupeId?: string;
+  /**
+   * With `dedupeId`: a job added while one with that id is active is kept and added when the active
+   * one ends (the latest wins), so a trigger is never lost and never runs in parallel.
+   */
+  readonly keepLastIfActive?: boolean;
   readonly delayMs?: number;
   readonly priority?: number;
 }
@@ -156,7 +161,14 @@ export class JobRuntime {
     const data = parsePayload(name, payload);
     const jobOptions: JobsOptions = {
       attempts: attemptsFor(name),
-      ...(options.dedupeId ? { deduplication: { id: options.dedupeId } } : {}),
+      ...(options.dedupeId
+        ? {
+            deduplication: {
+              id: options.dedupeId,
+              ...(options.keepLastIfActive ? { keepLastIfActive: true } : {}),
+            },
+          }
+        : {}),
       ...(options.delayMs !== undefined ? { delay: options.delayMs } : {}),
       ...(options.priority !== undefined ? { priority: options.priority } : {}),
     };
@@ -174,6 +186,21 @@ export class JobRuntime {
       'analysis.migration',
       { migrationId },
       { dedupeId: `analysis-${migrationId}`, ...options },
+    );
+  }
+
+  /**
+   * `parity.migration` (LIF-062): a Parity Check outside a Run, after a task update, an Invitation
+   * status change or on demand. One waiting job per Migration (JOB-011); a trigger that arrives
+   * while a check is active is kept and runs after it (`keepLastIfActive`), because that check may
+   * already have read the state the trigger changed.
+   */
+  enqueueParity(migrationId: string, options: EnqueueOptions = {}): Promise<Job> {
+    return this.enqueue(
+      'parity',
+      'parity.migration',
+      { migrationId },
+      { dedupeId: `parity-${migrationId}`, keepLastIfActive: true, ...options },
     );
   }
 

@@ -7,6 +7,8 @@ import {
   type QuotaPool,
 } from '@git-migrator/adapter-sdk';
 import type { Config } from '@git-migrator/config';
+import { createGitQuota, type GitQuota } from '@git-migrator/git';
+import { bucketKey } from '@git-migrator/quota';
 import type { ProviderRegistry } from '@git-migrator/registry';
 
 type Env = Readonly<Record<string, string | undefined>>;
@@ -23,6 +25,12 @@ export interface ConnectOptions {
  */
 export interface EndpointConnector {
   connect(endpointId: string, options: ConnectOptions): Promise<EndpointConnection>;
+  /**
+   * Pre-acquires units in the `git` bucket of the credential `connect` selects for the Endpoint
+   * (JOB-041, JOB-043), for git commands the jobs run themselves (a mirror clone). A denial throws
+   * `rate_limited` with `retryAt`. Absent in test connectors: git commands then run unmetered.
+   */
+  gitQuota?(endpointId: string, options: Pick<ConnectOptions, 'pool'>): GitQuota;
 }
 
 export interface EndpointConnectorOptions {
@@ -78,48 +86,54 @@ function credentialsFrom(raw: string): unknown[] {
 }
 
 export function createEndpointConnector(options: EndpointConnectorOptions): EndpointConnector {
+  /** The Endpoint's entry, its adapter and the credential JOB-042 selects (the first valid one today). */
+  const select = (endpointId: string) => {
+    const entry = options.config.endpoints.find((e) => e.id === endpointId);
+    if (!entry) {
+      throw new AdapterError({
+        code: 'invalid',
+        provider: 'config',
+        message: `Endpoint ${endpointId} is not configured`,
+      });
+    }
+    const adapter = options.registry.adapter(entry.provider);
+    const raw = options.env[entry.credentialsSecret];
+    if (raw === undefined || raw.trim() === '') {
+      throw new AdapterError({
+        code: 'unauthorized',
+        provider: entry.provider,
+        message: `Secret ${entry.credentialsSecret} is not set for Endpoint ${endpointId}`,
+      });
+    }
+    let candidates: unknown[];
+    try {
+      candidates = credentialsFrom(raw);
+    } catch {
+      // The parser's message can quote the secret; report the name only.
+      throw new AdapterError({
+        code: 'invalid',
+        provider: entry.provider,
+        message: `Secret ${entry.credentialsSecret} is not valid JSON`,
+      });
+    }
+    const credentials = candidates.filter((c) => adapter.credentialSchema.safeParse(c).success);
+    // JOB-042 picks the credential with the most free capacity; that needs each adapter's
+    // bucket classifier, which the host cannot see yet (ADR-0280), so the first valid one is used.
+    const credential = credentials[0];
+    if (credential === undefined) {
+      throw new AdapterError({
+        code: 'invalid',
+        provider: entry.provider,
+        message: `Secret ${entry.credentialsSecret} holds no valid credential for Endpoint ${endpointId}`,
+      });
+    }
+    const accountId = (credential as { accountId?: unknown } | null)?.accountId;
+    const accountKey = typeof accountId === 'string' && accountId !== '' ? accountId : entry.id;
+    return { entry, adapter, credential, accountKey };
+  };
   return {
     async connect(endpointId, { pool, signal }) {
-      const entry = options.config.endpoints.find((e) => e.id === endpointId);
-      if (!entry) {
-        throw new AdapterError({
-          code: 'invalid',
-          provider: 'config',
-          message: `Endpoint ${endpointId} is not configured`,
-        });
-      }
-      const adapter = options.registry.adapter(entry.provider);
-      const raw = options.env[entry.credentialsSecret];
-      if (raw === undefined || raw.trim() === '') {
-        throw new AdapterError({
-          code: 'unauthorized',
-          provider: entry.provider,
-          message: `Secret ${entry.credentialsSecret} is not set for Endpoint ${endpointId}`,
-        });
-      }
-      let candidates: unknown[];
-      try {
-        candidates = credentialsFrom(raw);
-      } catch {
-        // The parser's message can quote the secret; report the name only.
-        throw new AdapterError({
-          code: 'invalid',
-          provider: entry.provider,
-          message: `Secret ${entry.credentialsSecret} is not valid JSON`,
-        });
-      }
-      const credentials = candidates.filter((c) => adapter.credentialSchema.safeParse(c).success);
-      // JOB-042 picks the credential with the most free capacity; that needs each adapter's
-      // bucket classifier, which the host cannot see yet (ADR-0280), so the first valid one is used.
-      const credential = credentials[0];
-      if (credential === undefined) {
-        throw new AdapterError({
-          code: 'invalid',
-          provider: entry.provider,
-          message: `Secret ${entry.credentialsSecret} holds no valid credential for Endpoint ${endpointId}`,
-        });
-      }
-      const accountId = (credential as { accountId?: unknown } | null)?.accountId;
+      const { entry, adapter, credential, accountKey } = select(endpointId);
       const context: AdapterContext = { ...options.environment, git: options.git, pool, signal };
       return adapter.connect(
         {
@@ -127,13 +141,27 @@ export function createEndpointConnector(options: EndpointConnectorOptions): Endp
           baseUrl: entry.baseUrl,
           config: adapterConfigFor(entry, options.config, adapter.configSchema),
           credential,
-          accountKey: typeof accountId === 'string' && accountId !== '' ? accountId : entry.id,
+          accountKey,
         },
         context,
       );
     },
+    gitQuota(endpointId, { pool }) {
+      const { entry, accountKey } = select(endpointId);
+      const overrides = entry.quota.overrides as Readonly<Record<string, number>> | undefined;
+      return createGitQuota({
+        gate: options.environment.quota,
+        bucketKey: bucketKey(endpointId, accountKey, 'git'),
+        limit: overrides?.git ?? GIT_BUCKET_LIMIT,
+        windowSeconds: 3600,
+        pool,
+      });
+    },
   };
 }
+
+/** JOB-043: the `git` bucket allows 60,000 requests an hour unless `quota.overrides.git` says otherwise. */
+const GIT_BUCKET_LIMIT = 60_000;
 
 /**
  * The `GitClient` for jobs that never touch git transport (inventory). It refuses every call, so a

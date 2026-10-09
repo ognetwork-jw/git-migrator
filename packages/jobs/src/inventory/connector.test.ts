@@ -90,6 +90,51 @@ function connectorWith(env: Record<string, string>, seen: Seen = {}, schema?: z.
   });
 }
 
+describe('git quota of an Endpoint (JOB-041, JOB-043)', () => {
+  const gate = (granted: boolean) => {
+    const calls: unknown[][] = [];
+    return {
+      calls,
+      gate: {
+        acquire: async (...args: unknown[]) => {
+          calls.push(args);
+          return granted
+            ? { granted: true }
+            : {
+                granted: false,
+                reason: 'limit',
+                bucketKey: 'x',
+                retryAt: new Date(Date.now() + 5000),
+              };
+        },
+      } as never,
+    };
+  };
+  const connector = (g: ReturnType<typeof gate>) =>
+    createEndpointConnector({
+      config,
+      registry: { adapter: () => fakeAdapter({}) },
+      env: { BITBUCKET_CREDENTIALS: JSON.stringify([{ accountId: 'acct-1', token: 'abc-1' }]) },
+      environment: { quota: g.gate, logger: {} as never },
+      git: noGitClient,
+    });
+
+  it('[JOB-041] acquires the units in the git bucket of the selected credential, in the given pool', async () => {
+    const g = gate(true);
+    await connector(g).gitQuota?.('src', { pool: 'background' }).acquire(3);
+    expect(g.calls).toEqual([
+      [[{ key: 'src:acct-1:git', limit: 60_000, windowSeconds: 3600, units: 3 }], 'background'],
+    ]);
+  });
+
+  it('[JOB-041] a denied grant is rate_limited with retryAt', async () => {
+    const g = gate(false);
+    await expect(
+      connector(g).gitQuota?.('src', { pool: 'interactive' }).acquire(3),
+    ).rejects.toMatchObject({ code: 'rate_limited' });
+  });
+});
+
 describe('endpoint connector', () => {
   it('[JOB-042] connects with the first valid credential and the account key of that credential', async () => {
     const seen: Seen = {};

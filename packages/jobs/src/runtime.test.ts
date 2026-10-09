@@ -180,6 +180,51 @@ describe('job runtime on the PostgreSQL backend', () => {
     await until(() => processed === 3);
   }, 60_000);
 
+  it('[LIF-062] enqueueParity puts parity.migration on the parity queue, one waiting job per Migration', async () => {
+    const runtime = makeRuntime(0);
+    await runtime.waitUntilReady();
+    await drainAll(runtime);
+    const first = await runtime.enqueueParity('m-parity');
+    const second = await runtime.enqueueParity('m-parity');
+    expect(first.queueName).toBe('parity');
+    expect(first.name).toBe('parity.migration');
+    expect(first.data).toEqual({ migrationId: 'm-parity' });
+    expect(second.id).toBe(first.id);
+    const other = await runtime.enqueueParity('m-parity-2');
+    expect(other.id).not.toBe(first.id);
+  }, 60_000);
+
+  it('[LIF-062] a parity trigger that arrives while a check is active runs after it, never in parallel', async () => {
+    const runtime = makeRuntime(6);
+    await runtime.waitUntilReady();
+    await drainAll(runtime);
+    let active = 0;
+    let maxActive = 0;
+    let runs = 0;
+    let release: () => void = () => undefined;
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    await runtime.startWorkers('standard', config, {
+      'parity.migration': async () => {
+        runs += 1;
+        active += 1;
+        maxActive = Math.max(maxActive, active);
+        if (runs === 1) await gate;
+        active -= 1;
+      },
+    });
+    await runtime.enqueueParity('m-active');
+    await until(() => runs === 1);
+    await runtime.enqueueParity('m-active');
+    await runtime.enqueueParity('m-active');
+    release();
+    await until(() => runs === 2);
+    await new Promise((r) => setTimeout(r, 300));
+    expect(runs).toBe(2); // the two triggers collapsed into one
+    expect(maxActive).toBe(1);
+  }, 60_000);
+
   it('[JOB-013] gives run.execute one attempt and every other job three, with exponential backoff', async () => {
     const runtime = makeRuntime(0);
     await runtime.waitUntilReady();

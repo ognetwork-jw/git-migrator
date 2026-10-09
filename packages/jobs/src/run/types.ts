@@ -15,6 +15,8 @@ export type Tx = Pick<
   | 'migration'
   | 'manualTask'
   | 'planItem'
+  | 'parityResult'
+  | 'auditEvent'
   | '$executeRaw'
   | '$queryRaw'
 >;

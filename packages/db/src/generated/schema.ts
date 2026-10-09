@@ -880,6 +880,12 @@ export class SchemaType implements SchemaDef {
                     attributes: [{ name: "@default", args: [{ name: "value", value: ExpressionUtils.literal(0) }] }, { name: "@map", args: [{ name: "name", value: ExpressionUtils.literal("stale_generation") }] }, { name: "@deny", args: [{ name: "operation", value: ExpressionUtils.literal("update") }, { name: "condition", value: ExpressionUtils.literal(true) }] }] as readonly AttributeApplication[],
                     default: 0 as FieldDefault
                 },
+                parityGeneration: {
+                    name: "parityGeneration",
+                    type: "BigInt",
+                    attributes: [{ name: "@default", args: [{ name: "value", value: ExpressionUtils.literal(0) }] }, { name: "@map", args: [{ name: "name", value: ExpressionUtils.literal("parity_generation") }] }, { name: "@deny", args: [{ name: "operation", value: ExpressionUtils.literal("update") }, { name: "condition", value: ExpressionUtils.literal(true) }] }] as readonly AttributeApplication[],
+                    default: 0 as FieldDefault
+                },
                 targetCreatedByFramework: {
                     name: "targetCreatedByFramework",
                     type: "Boolean",

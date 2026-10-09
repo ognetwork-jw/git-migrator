@@ -35,6 +35,15 @@ Internal dependencies (ARC-012, checked by `pnpm lint`): @git-migrator/core, @gi
   - `guard.ts`: `createRun` (DOM-010, LIF-005, LIF-002 `run_started`) and `requestRunCancel`. `finish.ts`: `finishRun`, `settleOrphanedMigrations`. `orphans.ts`: `requeueOrphanedQueuedRuns`. The last two run from `maintenance.run-reaper` when `MaintenanceDeps.db` is given.
 - `health.ts`, `queue-metrics.ts`: the worker health server (port 8081) and the `gm_queue_jobs` gauge.
 
+- `parity/`: the Parity Check (T-072, LIF-060 to LIF-062, FAC-GIT-005, FAC-GIT-006). Decisions: ADR-0395, ADR-0396, ADR-0397.
+  - `compute.ts`: `computeParity` re-reads the source and the target, applies LIF-045 source-side filtering, translates with the Analysis' inputs, merges Overlays (`overlay.ts`), compares per Facet and subtracts the masking Expected Differences (LIF-063). It writes nothing. A Facet that cannot be read or compared is `unverifiable`; a rate limit or an abort ends the check.
+  - `git.ts`: `applyContainment` (FAC-GIT-006: relaxes the strict `git-refs` diffs once `sourceReadOnlyApplied` is true) and `checkLfsObjects` (FAC-GIT-005: `verifyLfsParity` over the adapter's LFS `download` check). `lfs-source.ts`: `createMirrorLfsSource`, the LFS object ids from a mirror in scratch (credentials only through `GIT_ASKPASS`).
+  - `store.ts`: one ParityResult per Migration and Facet, updated in place and redacted (`redact.ts`); completes open verifiable tasks whose Facet reports `isTaskSatisfied` (`done`, `completedById` null, note `parity.auto-completed`, an AuditEvent with no actor) and recomputes readiness.
+  - `verdict.ts`: `parityVerdict` and `applyParityVerdict` (LIF-061) apply `parity_equal` or `parity_different` through `transition()`.
+  - `step.ts`: `createVerifyStep(deps)` is step 13 `verify` (severity `advisory`: it never fails a Run); T-071's migrate planners append it, and `createVerifyPlanner(deps)` is the `verify` Run kind. `run/finish.ts` applies the verdict when a Run whose `verify` Step succeeded ends, because the lifecycle table applies `parity_*` after `run_finished`.
+  - `ParityServices` (`compute.ts`): T-071's `git.prepare` leaves the source mirror and a Run's `services` implement `sourceMirror(runId)`; the `verify` Step reads the LFS object ids from it instead of cloning again. `Migration.parityGeneration` orders overlapping checks: one that started before the latest stored check is discarded (`superseded`).
+  - `run.ts`: `runParity` (LIF-062: on demand, after a task update or an Invitation status change; queue it with `JobRuntime.enqueueParity`) and `parityHandlers` for `parity.migration`.
+
 Handlers are registered by the process: `JobHandlers` maps a job name to `(payload, { job, queue, log, shutdown }) => Promise`. A job without a handler fails without retry.
 
 Tests use a throw-away Postgres database (`@git-migrator/db/testing`) and real BullMQ; no provider is contacted.

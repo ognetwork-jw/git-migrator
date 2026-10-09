@@ -81,6 +81,54 @@ export {
   RETENTION_INTERVAL_MS,
 } from './maintenance.ts';
 export {
+  computeParity,
+  type FacetParity,
+  type LfsObjectSource,
+  MAX_STORED_DIFFS,
+  type ParityComputation,
+  type ParityDeps,
+  ParityError,
+  type ParityOptions,
+  type ParityServices,
+  type ParitySkip,
+  ScratchInsufficientError,
+  type StoredDiff,
+  type StoredExclusion,
+} from './parity/compute.ts';
+export {
+  applyContainment,
+  checkLfsObjects,
+  MAX_LISTED_OIDS,
+  type RefRelation,
+} from './parity/git.ts';
+export { createMirrorLfsSource, type MirrorLfsSourceOptions } from './parity/lfs-source.ts';
+export { mergeOverlay } from './parity/overlay.ts';
+export { redactAtPath, redactFacetValue } from './parity/redact.ts';
+export {
+  PARITY_STATUSES,
+  type ParityRunResult,
+  parityHandlers,
+  runParity,
+} from './parity/run.ts';
+export {
+  createVerifyPlanner,
+  createVerifyStep,
+  VERIFY_STEP_KEY,
+} from './parity/step.ts';
+export {
+  PARITY_COMPLETION_ACTION,
+  PARITY_COMPLETION_NOTE,
+  type StoreResult,
+  storeParity,
+} from './parity/store.ts';
+export {
+  applyParityVerdict,
+  PARITY_RUN_KINDS,
+  type ParityVerdict,
+  parityVerdict,
+  type VerdictApplied,
+} from './parity/verdict.ts';
+export {
   InvalidPayloadError,
   isJobName,
   JOB_PAYLOADS,

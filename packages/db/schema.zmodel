@@ -298,6 +298,7 @@ model Migration {
     analysisFailureCount     Int                  @default(0) @map("analysis_failure_count") @deny('update', true)
     analysisRetryAt          DateTime?            @map("analysis_retry_at") @db.Timestamptz(3) @deny('update', true) // feeder backoff, database clock (ADR-0312)
     staleGeneration          BigInt               @default(0) @map("stale_generation") @deny('update', true) // bumped by every stale marker (ADR-0310)
+    parityGeneration         BigInt               @default(0) @map("parity_generation") @deny('update', true) // bumped by every stored Parity Check (ADR-0396)
     targetCreatedByFramework Boolean              @default(false) @map("target_created_by_framework") @deny('update', true)
     sourceReadOnlyApplied    Boolean              @default(false) @map("source_read_only_applied") @deny('update', true)
     waveId                   String?              @map("wave_id")
