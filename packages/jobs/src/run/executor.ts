@@ -519,11 +519,13 @@ class Driver<S> {
       await this.#markStep(row.id, 'running', { failures });
     }
     if (failures >= maxAttempts) {
-      await this.#failStep(row, {
+      const exhausted = {
         code: 'step.attempts_exhausted',
         message: `Step failed ${failures} times (limit ${maxAttempts})`,
         retryable: false,
-      });
+      };
+      await this.#failStep(row, exhausted);
+      await this.#notifyFailed(def, row, attempts, exhausted);
       return { kind: 'done' };
     }
     for (;;) {
@@ -581,6 +583,7 @@ class Driver<S> {
         }
         this.#log.error({ step: def.key, attempt: attempts, code: stored.code }, 'Step failed');
         await this.#failStep(row, stored);
+        await this.#notifyFailed(def, row, attempts, stored);
         return { kind: 'done' };
       }
     }
@@ -637,6 +640,23 @@ class Driver<S> {
         WHERE id = ${id} AND run_id = ${this.#runId}`;
       await publishRun(tx, { run: this.#runId, migration: this.#migrationId }, this.#now);
     });
+  }
+
+  /** `StepDefinition.onFailed`, once the Step is recorded failed. A fault in it never fails the Run. */
+  async #notifyFailed(
+    def: StepDefinition<S>,
+    row: StepRow,
+    attempts: number,
+    error: Record<string, unknown>,
+  ): Promise<void> {
+    if (!def.onFailed) return;
+    try {
+      const migration = await this.#loadMigration();
+      await def.onFailed(this.#context(def, row, attempts, migration), error);
+    } catch (hookError) {
+      this.#assertHeld();
+      this.#log.warn({ err: hookError, step: def.key }, 'a Step failure hook failed');
+    }
   }
 
   async #failStep(row: StepRow, error: Record<string, unknown>): Promise<void> {

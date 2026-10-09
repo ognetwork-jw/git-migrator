@@ -10,7 +10,7 @@ import type { FacetTarget, MutationRecord } from '@git-migrator/adapter-sdk';
 import { itemSeg, joinFieldPath } from '@git-migrator/core';
 import { endpointNames } from '../analysis/analysis.ts';
 import type { StepDefinition, StepResult } from '../run/types.ts';
-import { applyWithLedger, settleOpenIntents } from './facets.ts';
+import { applyWithLedger } from './facets.ts';
 import { connectSide, type MigrationContext, type MigrationServices } from './services.ts';
 import { loadRunWorld, repositoryTarget, targetOf } from './world.ts';
 
@@ -46,13 +46,12 @@ export function changeRequestsStep(): StepDefinition<MigrationServices> {
         );
         return { status: 'skipped', reason: 'git-refs.empty-repository' };
       }
-      await settleOpenIntents(ctx);
+      await recoverChangeRequestIntents(ctx, target, ref);
       const facetTarget = repositoryTarget(world, ref);
       let opened = 0;
-      // LIF-047 step 3: the request body links to the Migration. Noted here, from the database,
-      // so a Run resumed in another job or process has it.
-      ctx.services.links.note(ref.providerId, world.migrationId);
-      try {
+      // LIF-047 step 3: the request body links to the Migration. Noted around each write, from the
+      // database, so a Run resumed in another job or process has it.
+      {
         // code-ownership: the target driver renders CODEOWNERS and opens the request itself.
         const owners = world.facets.get('code-ownership');
         const ownersDriver = target.connection.facets['code-ownership'];
@@ -69,6 +68,7 @@ export function changeRequestsStep(): StepDefinition<MigrationServices> {
             origin: 'framework',
             differences: [branchDifference('codeowners')],
             umbrella: 'change-request-open',
+            refExtra: { purpose: 'codeowners' },
           });
           opened += 1;
         }
@@ -79,8 +79,6 @@ export function changeRequestsStep(): StepDefinition<MigrationServices> {
         if (pipelines && hasEntries(pipelines.desired, 'files')) {
           opened += await openPipelines(ctx, world, target, facetTarget, ref);
         }
-      } finally {
-        ctx.services.links.forget(ref.providerId);
       }
       return opened === 0
         ? { status: 'skipped', reason: 'no Change Request is needed' }
@@ -149,6 +147,7 @@ async function openPipelines(
     after: null,
   });
   ctx.checkpoint();
+  ctx.services.links.note(ref.providerId, world.migrationId);
   try {
     const result = await writer.upsert(ref, {
       purpose: rendered.purpose,
@@ -162,7 +161,67 @@ async function openPipelines(
     // The branch and commit written before the failure are real: ledger them, then fail.
     await ctx.ledger.record(write, partialMutationsOf(error));
     throw error;
+  } finally {
+    ctx.services.links.forget(ref.providerId);
   }
   await ctx.ledger.confirm(intentId, 'applied');
   return 1;
+}
+
+/**
+ * Settles the Change Request intents a previous attempt left open. The writer (and the driver that
+ * uses it) is idempotent and returns its records only when it finishes, so a worker that died
+ * after opening the request left none. The request is read back by purpose: when it exists, the
+ * framework's creation of it is ledgered (with the `framework_mutation` Expected Difference of its
+ * branch), so rollback can close it. A branch pushed without a request is adopted by the next
+ * `upsert`, which records it (LIF-045, LIF-047, ADR-0380).
+ */
+async function recoverChangeRequestIntents(
+  ctx: MigrationContext,
+  target: Awaited<ReturnType<typeof connectSide>>,
+  ref: Awaited<ReturnType<typeof targetOf>>['ref'],
+): Promise<void> {
+  const writer = target.connection.changeRequests;
+  for (const intent of await ctx.ledger.openIntents()) {
+    const purpose = intent.resourceRef.purpose;
+    if (
+      intent.resourceRef.kind !== 'change-request-open' ||
+      typeof purpose !== 'string' ||
+      !writer
+    ) {
+      await ctx.ledger.confirm(intent.id, 'applied');
+      continue;
+    }
+    const covered = await ctx.services.db.$queryRaw<{ n: number }[]>`
+      SELECT count(*)::int AS n FROM app.mutation
+      WHERE run_id = ${ctx.run.id} AND written_by_step = ${ctx.step.id} AND state = 'recorded'
+        AND seq > (SELECT seq FROM app.mutation WHERE id = ${intent.id})
+        AND resource_ref->>'kind' = 'change-request'`;
+    const state = await writer.status(ref, purpose);
+    if (state === 'none' || (covered[0]?.n ?? 0) > 0) {
+      await ctx.ledger.confirm(intent.id, 'applied');
+      continue;
+    }
+    await ctx.ledger.confirm(intent.id, 'applied', {
+      facetKey: 'git-refs',
+      action: 'create',
+      resourceRef: {
+        kind: 'change-request',
+        repository: ref.slug,
+        purpose,
+        state,
+        recovered: true,
+      },
+      paths: [branchDifference(purpose).path],
+      before: null,
+      after: { state },
+    });
+    await ctx.runLog(
+      'warn',
+      `Recovered an unrecorded Change Request (${purpose}) after a restart`,
+      {
+        state,
+      },
+    );
+  }
 }

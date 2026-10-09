@@ -427,3 +427,111 @@ describe('[JOB-060] the Run log never fails a Step', () => {
     expect(logs.find((l) => l.message === 'cyclic')).toBeUndefined(); // dropped, not thrown
   });
 });
+
+describe('[LIF-049] a Step that fails for good can name what the failure leaves behind', () => {
+  const failing = (seen: string[], body: StepDefinition<never>['run']) =>
+    step(
+      'git.push-refs',
+      body as never,
+      {
+        severity: 'fatal',
+        maxAttempts: 2,
+        onFailed: async (_ctx: unknown, error: Readonly<Record<string, unknown>>) => {
+          seen.push(String(error.code));
+        },
+      } as never,
+    );
+
+  it('[LIF-049] runs on a non-retryable failure', async () => {
+    const h = harness();
+    const seen: string[] = [];
+    h.registry.register('migrate', {
+      steps: () => [
+        failing(seen, async () => {
+          throw new Error('rejected');
+        }),
+      ],
+    });
+    const { runId } = await h.queuedRun();
+    expect(await h.execute(runId)).toEqual({ outcome: 'finished', status: 'failed' });
+    expect(seen).toEqual(['step.error']);
+  });
+
+  it('[LIF-049] runs when the retry budget is spent, and when earlier crashes spent it', async () => {
+    const h = harness();
+    const seen: string[] = [];
+    h.registry.register('migrate', {
+      steps: () => [
+        failing(seen, async () => {
+          throw transient();
+        }),
+      ],
+    });
+    const { runId } = await h.queuedRun();
+    expect(await h.execute(runId)).toEqual({ outcome: 'finished', status: 'failed' });
+    expect(seen).toEqual(['transient']);
+
+    const crashed = harness();
+    const seenCrash: string[] = [];
+    crashed.registry.register('migrate', {
+      steps: () => [failing(seenCrash, async () => undefined)],
+    });
+    const second = await crashed.queuedRun();
+    await crashed.t.db.pool.query(
+      "UPDATE app.run SET status = 'running', started_at = now(), lease_owner = NULL WHERE id = $1",
+      [second.runId],
+    );
+    await crashed.db.runStep.create({
+      data: {
+        runId: second.runId,
+        stepKey: 'git.push-refs',
+        order: 0,
+        status: 'running',
+        attempts: 2,
+        failures: 1,
+      },
+    });
+    expect(await crashed.execute(second.runId)).toEqual({ outcome: 'finished', status: 'failed' });
+    expect(seenCrash).toEqual(['step.attempts_exhausted']);
+  });
+
+  it('[LIF-049] does not run on success or on a retry that succeeds', async () => {
+    const h = harness();
+    const seen: string[] = [];
+    let tries = 0;
+    h.registry.register('migrate', {
+      steps: () => [
+        failing(seen, async () => {
+          tries += 1;
+          if (tries === 1) throw transient();
+          return { status: 'succeeded' };
+        }),
+      ],
+    });
+    const { runId } = await h.queuedRun();
+    expect(await h.execute(runId)).toEqual({ outcome: 'finished', status: 'succeeded' });
+    expect(seen).toEqual([]);
+  });
+
+  it('[LIF-049] a fault in the hook never changes how the Run ends', async () => {
+    const h = harness();
+    h.registry.register('migrate', {
+      steps: () => [
+        step(
+          'git.push-refs',
+          async () => {
+            throw new Error('rejected');
+          },
+          {
+            severity: 'fatal',
+            onFailed: async () => {
+              throw new Error('a broken hook');
+            },
+          } as never,
+        ),
+      ],
+    });
+    const { runId } = await h.queuedRun();
+    expect(await h.execute(runId)).toEqual({ outcome: 'finished', status: 'failed' });
+  });
+});

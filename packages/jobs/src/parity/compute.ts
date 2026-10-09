@@ -25,6 +25,7 @@ import {
   type FacetLookup,
   type FacetTranslation,
   type FieldDiff,
+  mergeOverlay,
   NO_CAPABILITY,
   type ParityStatus,
   resolveRoutePolicies,
@@ -56,7 +57,6 @@ import { databaseNow } from '../db-clock.ts';
 import type { EndpointConnector } from '../inventory/connector.ts';
 import { isRateLimited } from '../run/errors.ts';
 import { applyContainment, checkLfsObjects } from './git.ts';
-import { mergeOverlay } from './overlay.ts';
 import { redactAtPath } from './redact.ts';
 
 type Json = Record<string, unknown>;
@@ -642,7 +642,7 @@ async function compareOne(input: CompareOneInput): Promise<FacetParity> {
   const registry = deps.registry.facets;
   const schema = { collections: def.collections, sets: def.sets ?? [] };
   let desired = translation.desired;
-  for (const overlay of input.overlays) desired = mergeOverlay(schema, desired, overlay);
+  for (const overlay of input.overlays) desired = mergeOverlay(desired, overlay, schema).merged;
   const compareInput = {
     migrationId: input.migration.id,
     ctx: { targetCaps: input.caps, route: input.env.route, routeIndex: input.env.routeIndex },

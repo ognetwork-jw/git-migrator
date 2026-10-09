@@ -32,6 +32,7 @@ import {
   createProviderEnvironment,
   createRun,
   createRunAnalysisPort,
+  createVerifyStep,
   type EndpointConnector,
   type ExecuteResult,
   executeRun,
@@ -104,8 +105,16 @@ const faults: {
   createThenFail?: 'retryable' | 'fatal';
   /** After the repository is created, the job is asked to shut down (a hand-off follows). */
   createThenShutdown?: AbortController;
+  /** The create fails before anything is written (a fatal error), leaving the intent open. */
+  createFailsBeforeWrite?: boolean;
   /** The Facet driver writes, then fails before the records are returned. */
   loseRecordsOf?: string;
+  /** Runs after a lost write, for example another party changing the target meanwhile. */
+  afterLostWrite?: () => void;
+  /** The Facet driver yields its first record, then fails (a transient error mid-apply). */
+  failAfterFirstRecordOf?: string;
+  /** The Change Request is opened, then the call fails before its records are returned. */
+  upsertThenFail?: boolean;
 } = {};
 
 let freeBytes: (() => Promise<number>) | undefined;
@@ -223,6 +232,18 @@ beforeAll(async () => {
   fakes.git?.setTokens('source', ['fake-bitbucket-api-token']);
   const gh = fakes.github;
   if (!gh) throw new Error('the fake GitHub did not start');
+  // The fake Bitbucket meters the source by the hour as well (JOB-043); Parity re-reads it.
+  await fakes.bitbucket.app.request('/__config', {
+    method: 'POST',
+    body: JSON.stringify({
+      limits: {
+        'repository-data': null,
+        'raw-files': null,
+        webhooks: null,
+        'app-properties': null,
+      },
+    }),
+  });
   // The suite migrates many repositories in one hour of the fake's clock; the limits are not what
   // these tests are about (the rate-limit paths have their own tests).
   gh.state.config = {
@@ -322,6 +343,14 @@ routes:
           repositories: {
             ...connection.repositories,
             async create(ns, spec) {
+              if (faults.createFailsBeforeWrite) {
+                faults.createFailsBeforeWrite = undefined;
+                throw new AdapterError({
+                  code: 'invalid',
+                  provider: 'github',
+                  message: 'refused before anything was written',
+                });
+              }
               const created = await connection.repositories.create(ns, spec);
               const fault = faults.createThenFail;
               if (fault) {
@@ -348,6 +377,19 @@ routes:
                 ? {
                     ...driver,
                     async *apply(...args: Parameters<NonNullable<typeof driver.apply>>) {
+                      if (faults.failAfterFirstRecordOf === key) {
+                        faults.failAfterFirstRecordOf = undefined;
+                        for await (const record of driver.apply?.(...args) ?? []) {
+                          yield record;
+                          throw new AdapterError({
+                            code: 'transient',
+                            provider: 'github',
+                            message: 'the connection dropped mid-apply',
+                            retryable: true,
+                          });
+                        }
+                        return;
+                      }
                       if (faults.loseRecordsOf !== key) {
                         yield* driver.apply?.(...args) ?? [];
                         return;
@@ -357,6 +399,8 @@ routes:
                       for await (const _record of driver.apply?.(...args) ?? []) {
                         // dropped
                       }
+                      faults.afterLostWrite?.();
+                      faults.afterLostWrite = undefined;
                       throw new AdapterError({
                         code: 'transient',
                         provider: 'github',
@@ -379,7 +423,17 @@ routes:
               if (state && repo && !repo.git.refs.has(`refs/heads/${branch}`)) {
                 state.addBranch(repo, branch, { 'README.md': 'pushed' });
               }
-              return connection.changeRequests?.upsert(ref, req) as never;
+              const result = await connection.changeRequests?.upsert(ref, req);
+              if (faults.upsertThenFail) {
+                faults.upsertThenFail = undefined;
+                throw new AdapterError({
+                  code: 'transient',
+                  provider: 'github',
+                  message: 'the response was lost',
+                  retryable: true,
+                });
+              }
+              return result as never;
             },
           },
         };
@@ -414,6 +468,7 @@ routes:
     git: createAnalysisGitClient({ scratchDir: scratch }),
     log,
   };
+  const mirrors = new MirrorRegistry();
   services = {
     db: t.db.privileged,
     connector,
@@ -423,7 +478,22 @@ routes:
     scratchRoot: scratch,
     freeBytes: () => (freeBytes ? freeBytes() : Promise.resolve(Number.MAX_SAFE_INTEGER)),
     links,
-    mirrors: new MirrorRegistry(),
+    // Step 13 (T-072): the Parity Check, against the same fakes.
+    extraSteps: new Map([
+      [
+        'verify',
+        createVerifyStep<MigrationServices>({
+          db: t.db.privileged,
+          appPool: t.db.pool,
+          connector,
+          registry,
+          git: analysisDeps.git,
+          log,
+        }),
+      ],
+    ]),
+    mirrors,
+    sourceMirror: (runId) => mirrors.sourceMirror(runId),
     pool: t.db.pool,
     logger: log,
     reanalyze: async (migrationId, signal) => {
@@ -473,7 +543,12 @@ describe('plat/auto-ok migrates against the fakes', () => {
     expect(Object.values(statuses).every((s) => s === 'succeeded' || s === 'skipped')).toBe(true);
 
     const migration = await t.db.privileged.migration.findUniqueOrThrow({ where: { id: m.id } });
-    expect(migration.status).toBe('migrated');
+    // Step 13 stored a ParityResult for every Facet that compares (LIF-060, LIF-062).
+    expect(statuses.verify).toBe('succeeded');
+    expect(
+      await t.db.privileged.parityResult.count({ where: { migrationId: m.id } }),
+    ).toBeGreaterThan(0);
+    expect(['migrated', 'verified']).toContain(migration.status);
     expect(migration.targetCreatedByFramework).toBe(true);
     expect(migration.targetRepositoryId).toBeTruthy();
     const target = await t.db.privileged.repository.findUniqueOrThrow({
@@ -519,6 +594,18 @@ describe('plat/auto-ok migrates against the fakes', () => {
     expect(ledger.length).toBeGreaterThan(3);
     expect(ledger[0]).toMatchObject({ side: 'target', action: 'create', state: 'recorded' });
     expect(ledger.every((l) => l.state === 'recorded')).toBe(true);
+    // Rollback would undo the repository and nothing else here: pushes, LFS objects and the default
+    // branch are inert records (the repository's deletion takes them with it).
+    const undoable = mutationsToUndo(
+      ledger.map((l) => ({ ...l, resourceRef: l.resourceRef as Record<string, unknown> })),
+    );
+    const kinds = undoable.map((l) => (l.resourceRef as { kind?: string }).kind ?? '');
+    for (const inertKind of ['git-push', 'lfs-push', 'default-branch', 'git-reconcile']) {
+      expect(kinds).not.toContain(inertKind);
+    }
+    expect(
+      undoable.filter((l) => l.action === 'create' && l.facetKey === 'framework'),
+    ).toHaveLength(1);
 
     // The Migration was analyzed again at the end of the Run, so its target now counts as owned.
     const after = await t.db.privileged.migration.findUniqueOrThrow({ where: { id: m.id } });
@@ -810,7 +897,9 @@ describe('Change Requests (LIF-047)', () => {
 let extraCount = 0;
 
 /** A fresh, Ready source repository (two commits, optional variable), inventoried and analyzed. */
-async function addSourceRepo(options: { variable?: string } = {}) {
+async function addSourceRepo(
+  options: { variable?: string; variables?: string[]; pipelines?: string } = {},
+) {
   const slug = `extra-${++extraCount}`;
   const git = fakes.git;
   if (!git) throw new Error('no git server');
@@ -818,7 +907,13 @@ async function addSourceRepo(options: { variable?: string } = {}) {
   await createBareRepo(bare);
   const seeded = await seedBareRepo(
     bare,
-    { commits: 2, branches: [{ name: 'develop' }] },
+    {
+      commits: 2,
+      branches: [{ name: 'develop' }],
+      ...(options.pipelines
+        ? { bigBlobs: [{ path: 'bitbucket-pipelines.yml', content: options.pipelines }] }
+        : {}),
+    },
     { store: git.lfsStore('source'), repo: `${WORLD_WORKSPACE}/${slug}` },
   );
   const state = fakes.bitbucket.state;
@@ -835,8 +930,18 @@ async function addSourceRepo(options: { variable?: string } = {}) {
       }),
     ),
   });
-  if (options.variable) {
-    state.addVariable(WORLD_WORKSPACE, slug, { key: options.variable, value: 'x' });
+  for (const key of [
+    ...(options.variable ? [options.variable] : []),
+    ...(options.variables ?? []),
+  ]) {
+    state.addVariable(WORLD_WORKSPACE, slug, { key, value: 'x' });
+  }
+  if (options.pipelines) {
+    const repo = state.repository(WORLD_WORKSPACE, slug);
+    if (repo) {
+      repo.pipelinesEnabled = true;
+      repo.files['bitbucket-pipelines.yml'] = options.pipelines;
+    }
   }
   await runInventory(
     {
@@ -1054,11 +1159,13 @@ describe('intent and settle on resume (LIF-045)', () => {
       where: { id: repo.migration.id },
     });
     expect(migration.targetCreatedByFramework).toBe(true);
-    expect(
-      await t.db.privileged.mutation.count({
-        where: { runId, facetKey: 'framework', action: 'create' },
-      }),
-    ).toBe(0);
+    // The earlier intent vouches for the empty repository it created, and this Run records that.
+    const creates = await t.db.privileged.mutation.findMany({
+      where: { runId, facetKey: 'framework', action: 'create' },
+    });
+    expect(creates).toHaveLength(1);
+    expect(creates[0]).toMatchObject({ state: 'recorded' });
+    expect(creates[0]?.resourceRef).not.toHaveProperty('adopted');
   }, 300_000);
 
   it('[LIF-045] a Facet write whose record was lost is ledgered as an undoable record when the Step resumes', async () => {
@@ -1136,7 +1243,7 @@ describe('jobs, scratch and the mirror (JOB-015)', () => {
     const runId = await start(repo.migration.id);
     // Job 1 ends after the repository exists: the scratch directory (and the mirror) goes with it.
     expect(await execute(runId, stop.signal)).toEqual({ outcome: 'handed_off' });
-    expect(await services.mirrors.sourceMirror(runId)).toBeUndefined();
+    expect(services.sourceMirror(runId)).toBeUndefined();
     // Job 2 has no space for the rebuild: the push Step waits instead of filling the disk.
     freeBytes = async () => -1;
     try {
@@ -1150,5 +1257,280 @@ describe('jobs, scratch and the mirror (JOB-015)', () => {
     expect(logs.map((l) => l.message)).toContain('The source mirror was rebuilt and scanned');
     const source = await refsOf('source', `${WORLD_WORKSPACE}/${repo.slug}`);
     expect(migrated(await refsOf('target', `${ORG}/${repo.target}`))).toEqual(migrated(source));
+  }, 300_000);
+});
+
+// -- round 3 ----------------------------------------------------------------------------------------
+
+const PIPELINES_SIMPLE = `image: node:20
+pipelines:
+  default:
+    - step:
+        name: Build and test
+        script:
+          - npm ci
+          - npm test
+`;
+
+/** Removes a target repository, as an operator would before making their own. */
+function removeTarget(name: string): void {
+  const state = fakes.github?.state;
+  const repo = state?.findRepo(ORG, name);
+  if (state && repo) state.deleteRepository(repo);
+}
+
+describe('a repository the framework did not create is never counted as its own (LIF-031, LIF-077)', () => {
+  it("[LIF-077] a stale create intent does not make a foreign non-empty repository the framework's, so force-adopt records it adopted", async () => {
+    const repo = await addSourceRepo();
+    faults.createThenFail = 'fatal';
+    const first = await perform(repo.migration.id);
+    expect(first.result).toEqual({ outcome: 'finished', status: 'failed' });
+    // The operator replaces what was created with a repository of their own, and fills it.
+    removeTarget(repo.target);
+    await createTarget(repo.target);
+    await fillTarget(repo.target);
+    const { runId, result } = await perform(repo.migration.id, 'migrate', {
+      options: { adoptNonEmpty: true },
+      confirm: `${ORG}/${repo.target}`,
+    });
+    expect(result).toEqual({ outcome: 'finished', status: 'succeeded' });
+    const migration = await t.db.privileged.migration.findUniqueOrThrow({
+      where: { id: repo.migration.id },
+    });
+    expect(migration.targetCreatedByFramework).toBe(false);
+    const creates = await t.db.privileged.mutation.findMany({
+      where: { runId, facetKey: 'framework', action: 'create' },
+    });
+    expect(creates).toHaveLength(1);
+    expect(creates[0]?.resourceRef).toMatchObject({ adopted: true, forced: true });
+  }, 300_000);
+
+  it('[LIF-077] a foreign EMPTY repository that existed before the intent was written is adopted, not claimed as created', async () => {
+    const repo = await addSourceRepo();
+    faults.createFailsBeforeWrite = true;
+    const first = await perform(repo.migration.id);
+    expect(first.result).toEqual({ outcome: 'finished', status: 'failed' });
+    // The repository is older than the intent: the intent is moved after it.
+    await t.db.pool.query(
+      "UPDATE app.mutation SET created_at = now() + interval '1 hour' WHERE run_id = $1 AND state = 'intended'",
+      [first.runId],
+    );
+    await createTarget(repo.target);
+    const { runId, result } = await perform(repo.migration.id);
+    expect(result).toEqual({ outcome: 'finished', status: 'succeeded' });
+    const migration = await t.db.privileged.migration.findUniqueOrThrow({
+      where: { id: repo.migration.id },
+    });
+    expect(migration.targetCreatedByFramework).toBe(false);
+    const creates = await t.db.privileged.mutation.findMany({
+      where: { runId, facetKey: 'framework', action: 'create' },
+    });
+    expect(creates.map((c) => c.resourceRef)).toEqual([expect.objectContaining({ adopted: true })]);
+  }, 300_000);
+
+  it('[LIF-077] when nothing holds the name, an old create intent is settled not_applied before a new create', async () => {
+    const repo = await addSourceRepo();
+    faults.createFailsBeforeWrite = true;
+    const first = await perform(repo.migration.id);
+    expect(first.result).toEqual({ outcome: 'finished', status: 'failed' });
+    const second = await perform(repo.migration.id);
+    expect(second.result).toEqual({ outcome: 'finished', status: 'succeeded' });
+    const old = await t.db.privileged.mutation.findMany({
+      where: { runId: first.runId, facetKey: 'framework', action: 'create' },
+    });
+    expect(old.map((o) => o.state)).toEqual(['not_applied']);
+    expect(
+      (await t.db.privileged.migration.findUniqueOrThrow({ where: { id: repo.migration.id } }))
+        .targetCreatedByFramework,
+    ).toBe(true);
+  }, 300_000);
+});
+
+describe('recovering a lost record blames the framework only for its own write (LIF-045, LIF-077)', () => {
+  it("[LIF-077] a change somebody else made meanwhile is not recorded as the framework's", async () => {
+    const repo = await addSourceRepo({ variable: 'LOST_VAR' });
+    faults.loseRecordsOf = 'variables';
+    faults.afterLostWrite = () => {
+      const state = fakes.github?.state;
+      const target = state?.findRepo(ORG, repo.target);
+      if (state && target) state.addVariable(target, 'UNRELATED', 'v');
+    };
+    const { runId, result } = await perform(repo.migration.id);
+    expect(result).toEqual({ outcome: 'finished', status: 'succeeded' });
+    const recovered = (await t.db.privileged.mutation.findMany({ where: { runId } })).filter(
+      (l) => (l.resourceRef as { kind?: string }).kind === 'recovered-write',
+    );
+    expect(recovered).toHaveLength(1);
+    expect(recovered[0]?.paths.join(',')).toContain('LOST_VAR');
+    expect(recovered[0]?.paths.join(',')).not.toContain('UNRELATED');
+  }, 300_000);
+
+  it('[LIF-045] a transient error mid-apply leaves each change recorded once, and recovers nothing twice', async () => {
+    const repo = await addSourceRepo({ variables: ['VAR_A', 'VAR_B'] });
+    faults.failAfterFirstRecordOf = 'variables';
+    const { runId, result } = await perform(repo.migration.id);
+    expect(result).toEqual({ outcome: 'finished', status: 'succeeded' });
+    const ledger = await t.db.privileged.mutation.findMany({
+      where: { runId, facetKey: 'variables' },
+    });
+    expect(
+      ledger.filter((l) => (l.resourceRef as { kind?: string }).kind === 'recovered-write'),
+    ).toEqual([]);
+    const real = ledger.filter((l) => (l.resourceRef as { noop?: boolean }).noop !== true);
+    const paths = real.flatMap((l) => l.paths);
+    expect(paths.filter((p) => p.includes('VAR_A'))).toHaveLength(1);
+    expect(paths.filter((p) => p.includes('VAR_B'))).toHaveLength(1);
+    const variables = fakes.github?.state.findRepo(ORG, repo.target)?.variables.map((v) => v.name);
+    expect(variables?.sort()).toEqual(['VAR_A', 'VAR_B']);
+  }, 300_000);
+
+  it('[LIF-045] a lifted rule whose deletion record was lost is recovered as an undoable deletion', async () => {
+    const repo = await addSourceRepo();
+    expect((await perform(repo.migration.id)).result).toMatchObject({ status: 'succeeded' });
+    await protect(repo.target, 'develop');
+    await commitOnSource(repo.bare, 'develop');
+    await analyze(repo.migration.id);
+    faults.loseRecordsOf = 'branch-rules';
+    const { runId, result } = await perform(repo.migration.id, 'resync');
+    expect(result).toEqual({ outcome: 'finished', status: 'succeeded' });
+    const liftStep = await t.db.privileged.runStep.findFirstOrThrow({
+      where: { runId, stepKey: 'target.lift-protection' },
+    });
+    const ledger = await t.db.privileged.mutation.findMany({ where: { runId } });
+    const recovered = ledger.filter(
+      (l) =>
+        l.writtenByStep === liftStep.id &&
+        (l.resourceRef as { kind?: string }).kind === 'recovered-write',
+    );
+    expect(recovered).toHaveLength(1);
+    expect(recovered[0]).toMatchObject({ action: 'delete', paths: ['/rules[pattern=develop]'] });
+    expect(
+      mutationsToUndo(
+        ledger.map((l) => ({ ...l, resourceRef: l.resourceRef as Record<string, unknown> })),
+      ).map((l) => l.id),
+    ).toContain(recovered[0]?.id);
+  }, 300_000);
+
+  it('[LIF-047] a Change Request opened before the response was lost is found again and ledgered with its branch Expected Difference', async () => {
+    const repo = await addSourceRepo({ pipelines: PIPELINES_SIMPLE });
+    faults.upsertThenFail = true;
+    const { runId, result } = await perform(repo.migration.id);
+    expect(result).toEqual({ outcome: 'finished', status: 'succeeded' });
+    const recovered = (await t.db.privileged.mutation.findMany({ where: { runId } })).filter(
+      (l) => (l.resourceRef as { recovered?: boolean }).recovered === true,
+    );
+    expect(recovered).toHaveLength(1);
+    expect(recovered[0]).toMatchObject({ action: 'create', state: 'recorded' });
+    expect(recovered[0]?.resourceRef).toMatchObject({ kind: 'change-request', purpose: 'ci' });
+    const differences = await t.db.privileged.expectedDifference.findMany({
+      where: { migrationId: repo.migration.id, reason: 'framework_mutation' },
+    });
+    expect(differences.map((d) => d.path)).toContain('/refs[name=refs/heads/git-migrator/ci]');
+    expect(fakes.github?.state.findRepo(ORG, repo.target)?.pulls).toHaveLength(1);
+  }, 300_000);
+});
+
+// -- round 3, spec findings ---------------------------------------------------------------------
+
+const liftedTasks = (migrationId: string) =>
+  t.db.privileged.manualTask.findMany({
+    where: { migrationId, code: 'branch-rules.protection-lifted', origin: 'run' },
+  });
+
+/** A target that refuses every push (the pushed pack is over its limit). */
+function refusePushes(): () => void {
+  fakes.git?.setLimits('target', { maxPushBytes: 1 });
+  return () => fakes.git?.setLimits('target', { maxPushBytes: WORLD_LIMITS.maxPushBytes });
+}
+
+describe('the lifted protection is reported when the push then fails (LIF-049, LIF-040)', () => {
+  it('[LIF-049] a fatal push failure after the lift raises the post task with the lifted patterns, and the rule is not re-created', async () => {
+    const repo = await addSourceRepo();
+    expect((await perform(repo.migration.id)).result).toMatchObject({ status: 'succeeded' });
+    await protect(repo.target, 'develop');
+    await commitOnSource(repo.bare, 'develop');
+    await analyze(repo.migration.id);
+    const restore = refusePushes();
+    let runId: string;
+    try {
+      const run = await perform(repo.migration.id, 'resync');
+      runId = run.runId;
+      expect(run.result).toEqual({ outcome: 'finished', status: 'failed' });
+    } finally {
+      restore();
+    }
+    const steps = await stepStatuses(runId);
+    expect(steps['git.push-refs']).toBe('failed');
+    const tasks = await liftedTasks(repo.migration.id);
+    expect(tasks).toHaveLength(1);
+    expect(tasks[0]).toMatchObject({ phase: 'post', facetKey: 'branch-rules' });
+    expect(tasks[0]?.params).toMatchObject({ paths: ['develop'] });
+    // Nothing put the protection back on its own.
+    const after = fakes.github?.state.snapshot() as unknown as {
+      repositories: { fullName: string; branchProtectionRules: { pattern: string }[] }[];
+    };
+    const rules =
+      after.repositories.find((r) => r.fullName === `${ORG}/${repo.target}`)
+        ?.branchProtectionRules ?? [];
+    expect(rules.map((r) => r.pattern)).not.toContain('develop');
+  }, 300_000);
+
+  it('[LIF-049] nothing was lifted, so a failing push raises no such task', async () => {
+    const repo = await addSourceRepo();
+    expect((await perform(repo.migration.id)).result).toMatchObject({ status: 'succeeded' });
+    await commitOnSource(repo.bare, 'develop');
+    await analyze(repo.migration.id);
+    const restore = refusePushes();
+    try {
+      const run = await perform(repo.migration.id, 'resync');
+      expect(run.result).toEqual({ outcome: 'finished', status: 'failed' });
+    } finally {
+      restore();
+    }
+    expect(await liftedTasks(repo.migration.id)).toEqual([]);
+  }, 300_000);
+
+  it('[LIF-049] a Run whose push succeeds raises no such task even though it lifted a rule', async () => {
+    const repo = await addSourceRepo();
+    expect((await perform(repo.migration.id)).result).toMatchObject({ status: 'succeeded' });
+    await protect(repo.target, 'develop');
+    await commitOnSource(repo.bare, 'develop');
+    await analyze(repo.migration.id);
+    expect((await perform(repo.migration.id, 'resync')).result).toMatchObject({
+      status: 'succeeded',
+    });
+    expect(await liftedTasks(repo.migration.id)).toEqual([]);
+  }, 300_000);
+});
+
+describe('two Migrations that resolve to one target name (LIF-031)', () => {
+  it('[LIF-031] run at the same time, exactly one claims the repository and the other is blocked as owned by another Migration', async () => {
+    const a = await addSourceRepo();
+    const b = await addSourceRepo();
+    await t.db.privileged.migration.update({
+      where: { id: b.migration.id },
+      data: { plannedTargetName: a.target },
+    });
+    const [first, second] = await Promise.all([perform(a.migration.id), perform(b.migration.id)]);
+    const results = [first, second].map((r) => r.result);
+    expect(results).toContainEqual({ outcome: 'finished', status: 'succeeded' });
+    expect(results).toContainEqual({ outcome: 'finished', status: 'failed' });
+    const loser = 'status' in first.result && first.result.status === 'failed' ? first : second;
+    const loserMigration = loser === first ? a.migration : b.migration;
+    const step = await t.db.privileged.runStep.findFirstOrThrow({
+      where: { runId: loser.runId, stepKey: 'target.ensure-repository' },
+    });
+    expect(step.error).toMatchObject({ code: 'target.owned-by-other-migration' });
+    const claims = await t.db.privileged.migration.findMany({
+      where: { id: { in: [a.migration.id, b.migration.id] }, NOT: { targetRepositoryId: null } },
+    });
+    expect(claims).toHaveLength(1);
+    expect(claims[0]?.id).not.toBe(loserMigration.id);
+    const snapshot = fakes.github?.state.snapshot() as unknown as {
+      repositories: { fullName: string }[];
+    };
+    expect(snapshot.repositories.filter((r) => r.fullName === `${ORG}/${a.target}`)).toHaveLength(
+      1,
+    );
   }, 300_000);
 });

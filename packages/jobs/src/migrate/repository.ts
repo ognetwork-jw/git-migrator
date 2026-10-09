@@ -9,6 +9,7 @@ import { isAdapterError, type RepositoryRecord } from '@git-migrator/adapter-sdk
 import { parseFieldPath } from '@git-migrator/core';
 import { StepFailure } from '../run/errors.ts';
 import type { MutationLike, StepDefinition, StepResult } from '../run/types.ts';
+import { recoverOpenIntents } from './facets.ts';
 import { branchPatternMatches } from './glob.ts';
 import {
   connectSide,
@@ -98,23 +99,68 @@ async function claimTarget(
   );
 }
 
-/** True when this Migration's ledger holds a creation of the repository by the framework. */
+/** True when this Migration's ledger holds a recorded, non-adopted creation of exactly `record`. */
+async function creationRecorded(
+  ctx: MigrationContext,
+  world: RunWorld,
+  record: RepositoryRecord,
+): Promise<boolean> {
+  const recorded = await ctx.services.db.$queryRaw<{ n: number }[]>`
+    SELECT count(*)::int AS n FROM app.mutation
+    WHERE migration_id = ${world.migrationId} AND side = 'target' AND action = 'create'
+      AND state = 'recorded' AND resource_ref->>'kind' = ${REPOSITORY_KIND}
+      AND resource_ref->>'id' = ${record.providerId}
+      AND coalesce(resource_ref->>'adopted', 'false') <> 'true'`;
+  return (recorded[0]?.n ?? 0) > 0;
+}
+
+/**
+ * True when this Migration's ledger shows that the framework created `record` (LIF-031, LIF-077:
+ * rollback deletes what the framework created, so a doubt must resolve to "not ours").
+ * - A recorded, non-adopted creation of exactly this repository (by provider id) is proof.
+ * - An unsettled create intent for the name (a cancelled or crashed Run, response lost) counts
+ *   only when the repository is empty and the provider created it no earlier than the intent was
+ *   written (provider times have second resolution). A repository an operator made by hand and
+ *   filled is never ours, whatever intent is open.
+ */
 async function ledgerShowsCreation(
   ctx: MigrationContext,
   world: RunWorld,
-  providerId: string,
-  name: string,
+  record: RepositoryRecord,
+  empty: boolean,
 ): Promise<boolean> {
-  // A recorded creation of this repository, or a create intent for its name that was never
-  // settled (a cancelled or crashed Run): the response may have been lost, so it is ours.
-  const rows = await ctx.services.db.$queryRaw<{ n: number }[]>`
+  if (await creationRecorded(ctx, world, record)) return true;
+  const db = ctx.services.db;
+  if (!empty || record.createdAt === undefined) return false;
+  const intents = await db.$queryRaw<{ n: number }[]>`
     SELECT count(*)::int AS n FROM app.mutation
     WHERE migration_id = ${world.migrationId} AND side = 'target' AND action = 'create'
-      AND resource_ref->>'kind' = ${REPOSITORY_KIND}
+      AND state = 'intended' AND resource_ref->>'kind' = ${REPOSITORY_KIND}
       AND coalesce(resource_ref->>'adopted', 'false') <> 'true'
-      AND ((state = 'recorded' AND resource_ref->>'id' = ${providerId})
-        OR (state = 'intended' AND lower(resource_ref->>'name') = ${name.toLowerCase()}))`;
-  return (rows[0]?.n ?? 0) > 0;
+      AND lower(resource_ref->>'name') = ${record.name.toLowerCase()}
+      AND date_trunc('second', created_at) <= ${record.createdAt}`;
+  return (intents[0]?.n ?? 0) > 0;
+}
+
+/**
+ * Nothing holds the name now, so an unsettled create intent for it from an earlier Run did not
+ * create anything that is still there: it is settled `not_applied` before a new create is made, so
+ * it cannot later vouch for a repository somebody else makes (LIF-077).
+ */
+async function settleStaleCreateIntents(
+  ctx: MigrationContext,
+  world: RunWorld,
+  name: string,
+): Promise<void> {
+  const now = (ctx.services.now ?? (() => new Date()))();
+  await ctx.transaction(async (tx) => {
+    await tx.$executeRaw`
+      UPDATE app.mutation SET state = 'not_applied', updated_at = ${now}
+      WHERE migration_id = ${world.migrationId} AND side = 'target' AND action = 'create'
+        AND state = 'intended' AND run_id <> ${ctx.run.id}
+        AND resource_ref->>'kind' = ${REPOSITORY_KIND}
+        AND lower(resource_ref->>'name') = ${name.toLowerCase()}`;
+  });
 }
 
 async function blockAndFail(
@@ -147,6 +193,7 @@ export function ensureRepositoryStep(): StepDefinition<MigrationServices> {
         ctx.services.pool,
         `target-name:${world.targetEndpointId}:${world.plannedName.toLowerCase()}`,
         () => ensure(ctx, world),
+        { signal: ctx.signal },
       );
     },
   };
@@ -159,10 +206,24 @@ async function ensure(ctx: MigrationContext, world: RunWorld): Promise<StepResul
     const write = { side: 'target', origin: 'desired' } as const;
 
     // A resumed Step reconciles what a dead worker left open before it does anything (ADR-0342).
+    // A repository found now is ours only by the same test as in `adopt`: a foreign one that
+    // appeared meanwhile settles the intent `not_applied` and is judged below.
     for (const intent of await ctx.ledger.openIntents()) {
       if (intent.resourceRef.kind === REPOSITORY_KIND && intent.action === 'create') {
         const found = await inventory.findRepository(world.targetNamespaceRef, world.plannedName);
-        if (found) await ctx.ledger.confirm(intent.id, 'applied', createdRecord(found));
+        const ours =
+          found !== null &&
+          (await ledgerShowsCreation(
+            ctx,
+            world,
+            found,
+            await target.connection.repositories.isEmpty({
+              providerId: found.providerId,
+              namespace: world.targetNamespaceRef,
+              slug: found.slug,
+            }),
+          ));
+        if (found && ours) await ctx.ledger.confirm(intent.id, 'applied', createdRecord(found));
         else await ctx.ledger.confirm(intent.id, 'not_applied');
       } else {
         await ctx.ledger.confirm(intent.id, 'applied');
@@ -193,6 +254,7 @@ async function ensure(ctx: MigrationContext, world: RunWorld): Promise<StepResul
     if (existing) return adopt(ctx, world, target, existing, row.targetCreatedByFramework);
 
     // Not there: create it. The intent comes first, so a lost response leaves a trace.
+    await settleStaleCreateIntents(ctx, world, world.plannedName);
     const settings = world.facets.get('repository-settings')?.desired as
       | { visibility?: 'private' | 'public'; description?: string }
       | undefined;
@@ -257,15 +319,28 @@ async function adopt(
     namespace: world.targetNamespaceRef,
     slug: existing.slug,
   };
+  // Another Migration's claim is the more telling reason, whatever has been pushed since.
+  const heldBy = await ctx.services.db.migration.findFirst({
+    where: {
+      id: { not: world.migrationId },
+      targetRepository: {
+        endpointId: world.targetEndpointId,
+        providerId: existing.providerId,
+      },
+    },
+    select: { id: true },
+  });
+  if (heldBy) return blockAndFail(ctx, 'target.owned-by-other-migration', existing.name);
   const empty = await target.connection.repositories.isEmpty(ref);
   if (!empty && !world.adoptNonEmpty) {
     return blockAndFail(ctx, 'target.exists-nonempty', existing.name);
   }
   // A repository this Migration created in an earlier attempt whose claim was never saved is ours.
-  const createdByUs =
-    createdBefore || (await ledgerShowsCreation(ctx, world, existing.providerId, existing.name));
-  await claimOrBlock(ctx, world, existing, createdByUs);
-  if (!createdByUs) {
+  const recorded = await creationRecorded(ctx, world, existing);
+  const proven =
+    createdBefore || recorded || (await ledgerShowsCreation(ctx, world, existing, empty));
+  await claimOrBlock(ctx, world, existing, proven);
+  if (!proven) {
     await ctx.ledger.record({ side: 'target', origin: 'desired' }, [
       adoptedRecord(existing, !empty),
     ]);
@@ -276,6 +351,9 @@ async function adopt(
         : 'Force-adopted a non-empty target repository (adoptNonEmpty)',
       { name: existing.name },
     );
+  } else if (!createdBefore && !recorded) {
+    // Proven by an unsettled intent: record the creation, so the ledger says what rollback will do.
+    await ctx.ledger.record({ side: 'target', origin: 'desired' }, [createdRecord(existing)]);
   }
   return { status: 'succeeded' };
 }
@@ -339,9 +417,7 @@ export function liftProtectionStep(): StepDefinition<MigrationServices> {
       const { ref } = await targetOf(ctx, world);
       const facetTarget = repositoryTarget(world, ref);
 
-      for (const intent of await ctx.ledger.openIntents()) {
-        await ctx.ledger.confirm(intent.id, 'applied');
-      }
+      await recoverOpenIntents(ctx, target, facetTarget);
       const current = (await driver.read(target.driver, facetTarget)).data as {
         rules: { pattern: string }[];
       };
@@ -365,10 +441,11 @@ export function liftProtectionStep(): StepDefinition<MigrationServices> {
       const intentId = await ctx.ledger.intend(write, {
         facetKey: 'branch-rules',
         action: 'delete',
-        resourceRef: { kind: 'lift-protection', noop: true },
+        // The rules before and after the lift: a resumed Step recovers a deletion whose record was lost.
+        resourceRef: { kind: 'lift-protection', noop: true, meant: keep as never },
         paths: [],
-        before: null,
-        after: null,
+        before: current,
+        after: current,
       });
       await ctx.ledger.recordAll(
         write,

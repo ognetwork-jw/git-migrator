@@ -54,6 +54,8 @@ export interface RepositoryRecord {
   readonly sizeBytes?: number;
   readonly defaultBranch?: string | null;
   readonly providerUpdatedAt?: Date;
+  /** When the provider created the repository (second resolution); used to tell ours from foreign. */
+  readonly createdAt?: Date;
 }
 
 export interface IdentityRecord {

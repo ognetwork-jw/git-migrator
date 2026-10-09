@@ -4,6 +4,7 @@
  * empty again) rebuilds it from the source, and so passes the same gates again: the disk
  * precheck with its reservation (JOB-015) and the blob scan (FAC-GIT-004).
  */
+import { statSync } from 'node:fs';
 import { stat } from 'node:fs/promises';
 import { join } from 'node:path';
 import { StepFailure } from '../run/errors.ts';
@@ -25,6 +26,14 @@ export function mirrorDir(ctx: MigrationContext): string {
 async function isMirror(dir: string): Promise<boolean> {
   try {
     return (await stat(join(dir, 'objects'))).isDirectory();
+  } catch {
+    return false;
+  }
+}
+
+function isMirrorSync(dir: string): boolean {
+  try {
+    return statSync(join(dir, 'objects')).isDirectory();
   } catch {
     return false;
   }
@@ -188,10 +197,10 @@ export class MirrorRegistry {
   }
 
   /** The Run's mirror directory, or `undefined` when this job has none. */
-  async sourceMirror(runId: string): Promise<string | undefined> {
+  sourceMirror(runId: string): string | undefined {
     const dir = this.#dirs.get(runId);
     if (dir === undefined) return undefined;
-    if (await isMirror(dir)) return dir;
+    if (isMirrorSync(dir)) return dir;
     this.#dirs.delete(runId);
     return undefined;
   }

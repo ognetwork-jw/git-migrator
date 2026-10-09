@@ -7,7 +7,7 @@
  * docs/adr/0380-migration-steps.md.
  */
 import type { FacetDriver, MutationRecord } from '@git-migrator/adapter-sdk';
-import { diffDocuments, parseFieldPath } from '@git-migrator/core';
+import { diffDocuments, formatFieldPath, parseFieldPath } from '@git-migrator/core';
 import type { StepDefinition, StepResult } from '../run/types.ts';
 import {
   connectSide,
@@ -47,6 +47,8 @@ export async function applyWithLedger(
     /** Parity paths of a `framework` write whose records name no Facet path (LIF-045). */
     readonly differences?: readonly { readonly facetKey: string; readonly path: string }[];
     readonly umbrella: string;
+    /** More fields of the umbrella's `resourceRef` (for example the Change Request purpose). */
+    readonly refExtra?: Readonly<Record<string, unknown>>;
   },
 ): Promise<MutationRecord[]> {
   const { driver, side } = options;
@@ -59,29 +61,44 @@ export async function applyWithLedger(
   const intentId = await ctx.ledger.intend(write, {
     facetKey: options.facetKey,
     action: 'update',
-    resourceRef: { kind: options.umbrella, noop: true },
+    resourceRef: {
+      kind: options.umbrella,
+      noop: true,
+      // What the write is meant to leave: only the part of a later change that is meant is ours.
+      // (An inert record's `after` is normalized to its `before`, so it cannot carry this.)
+      meant: (options.desired ?? null) as never,
+      ...options.refExtra,
+    },
     paths: [],
     // What the target held before the write, so a resumed Step can tell what a lost record changed.
     before: options.current ?? null,
-    after: null,
+    after: options.current ?? null,
   });
   ctx.checkpoint();
   const apply = driver.apply;
   if (!apply) throw new Error(`The ${options.facetKey} driver cannot apply`);
-  await ctx.ledger.recordAll(
-    write,
-    tap(
-      apply.call(
-        driver,
-        side.driver,
-        options.target,
-        options.desired,
-        options.current,
-        options.decisions,
+  // A Change Request an apply opens or updates links to the Migration (LIF-047 step 3): the note
+  // covers every apply, so an Overlay on `code-ownership` keeps it too.
+  const repository = options.target.scope === 'repository' ? options.target.repository : undefined;
+  if (repository) ctx.services.links.note(repository.providerId, ctx.migration.id);
+  try {
+    await ctx.ledger.recordAll(
+      write,
+      tap(
+        apply.call(
+          driver,
+          side.driver,
+          options.target,
+          options.desired,
+          options.current,
+          options.decisions,
+        ),
+        records,
       ),
-      records,
-    ),
-  );
+    );
+  } finally {
+    if (repository) ctx.services.links.forget(repository.providerId);
+  }
   await ctx.ledger.confirm(intentId, 'applied');
   return records;
 }
@@ -93,15 +110,31 @@ export async function settleOpenIntents(ctx: MigrationContext): Promise<void> {
   }
 }
 
-/** Umbrella intents of `applyWithLedger` whose effect shows in a read of the Facet. */
-const RECOVERABLE_UMBRELLAS: ReadonlySet<string> = new Set(['facet-apply', 'overlay-apply']);
+/** Umbrella intents whose effect shows in a read of the Facet. */
+const RECOVERABLE_UMBRELLAS: ReadonlySet<string> = new Set([
+  'facet-apply',
+  'overlay-apply',
+  'lift-protection',
+]);
+
+/** `/rules[pattern=x]/enforcement` to `/rules[pattern=x]`: the element a leaf path belongs to. */
+const elementPath = (path: string): string => {
+  const first = parseFieldPath(path)[0];
+  return first ? formatFieldPath([first]) : path;
+};
 
 /**
  * Settles the open intents of a resumed Facet Step. A driver `apply` that died between a provider
  * write and the record of it left a change nobody ledgered. The umbrella intent kept what the
- * target held before, so what differs now is what the lost record would have said: it is ledgered
- * as a real record (kind `recovered-write`, undoable by its paths), where the umbrella itself is
- * inert. An umbrella whose read shows no change was not applied (LIF-045, ADR-0342, ADR-0380).
+ * target held before (`before`) and what the write is meant to leave (`after`). What the lost
+ * record would have said is the change since `before` that the write was meant to make, and that
+ * no record of this Step already covers:
+ *   (diff(before, fresh) intersect diff(before, after)) minus the paths of the Step's own records
+ * written after the umbrella. A change somebody else made meanwhile is not in `after`, so it is
+ * not blamed on the framework (rollback would undo it, LIF-077). The remainder is ledgered as a
+ * real record (kind `recovered-write`, undoable by its paths); with nothing left the umbrella
+ * stays inert, and when nothing changed at all it was not applied (LIF-045, ADR-0342, ADR-0380).
+ * The protection lift is recovered the same way, per rule element, as deletions.
  */
 export async function recoverOpenIntents(
   ctx: MigrationContext,
@@ -118,26 +151,44 @@ export async function recoverOpenIntents(
       await ctx.ledger.confirm(intent.id, 'applied');
       continue;
     }
+    const lift = kind === 'lift-protection';
     const def = ctx.services.registry.facets.get(key as never);
+    const schema = { collections: def.collections, sets: def.sets ?? [] };
     const fresh = (await driver.read(target.driver, facetTarget)).data;
-    const diffs = diffDocuments(fresh, intent.before, {
-      collections: def.collections,
-      sets: def.sets ?? [],
-    });
-    if (diffs.length === 0) {
+    const norm = (path: string): string => (lift ? elementPath(path) : path);
+    const changed = new Set(diffDocuments(fresh, intent.before, schema).map((d) => norm(d.path)));
+    if (changed.size === 0) {
       await ctx.ledger.confirm(intent.id, 'not_applied');
+      continue;
+    }
+    const wanted = intent.resourceRef.meant;
+    const meant =
+      wanted == null
+        ? changed
+        : new Set(diffDocuments(wanted, intent.before, schema).map((d) => norm(d.path)));
+    const covered = (
+      await ctx.services.db.$queryRaw<{ paths: string[] }[]>`
+        SELECT paths FROM app.mutation
+        WHERE run_id = ${ctx.run.id} AND written_by_step = ${ctx.step.id} AND state = 'recorded'
+          AND seq > (SELECT seq FROM app.mutation WHERE id = ${intent.id})`
+    ).flatMap((r) => r.paths.map(norm));
+    const isCovered = (p: string): boolean =>
+      covered.some((c) => p === c || p.startsWith(`${c}/`) || p.startsWith(`${c}[`));
+    const remaining = [...changed].filter((p) => meant.has(p) && !isCovered(p)).sort();
+    if (remaining.length === 0) {
+      await ctx.ledger.confirm(intent.id, 'applied');
       continue;
     }
     await ctx.ledger.confirm(intent.id, 'applied', {
       facetKey: key,
-      action: 'update',
+      action: lift ? 'delete' : 'update',
       resourceRef: { kind: 'recovered-write', umbrella: kind },
-      paths: diffs.map((d) => d.path),
+      paths: remaining,
       before: intent.before,
-      after: fresh,
+      after: lift ? null : fresh,
     });
     await ctx.runLog('warn', `Recovered an unrecorded write to ${key} after a restart`, {
-      paths: diffs.map((d) => d.path).slice(0, 50),
+      paths: remaining.slice(0, 50),
     });
   }
 }

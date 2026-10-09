@@ -100,6 +100,21 @@ export {
   RETENTION_INTERVAL_MS,
 } from './maintenance.ts';
 export {
+  branchPatternMatches,
+  chooseDefaultBranch,
+  connectSide,
+  createMigrationPlanner,
+  effectiveMaxPushBytes,
+  IMPLEMENTED_STEP_KEYS,
+  MIGRATION_RUN_KINDS,
+  type MigrationContext,
+  MigrationLinks,
+  type MigrationServices,
+  MirrorRegistry,
+  registerMigrationSteps,
+  type Side,
+} from './migrate/index.ts';
+export {
   computeParity,
   type FacetParity,
   type LfsObjectSource,
@@ -121,7 +136,6 @@ export {
   type RefRelation,
 } from './parity/git.ts';
 export { createMirrorLfsSource, type MirrorLfsSourceOptions } from './parity/lfs-source.ts';
-export { mergeOverlay } from './parity/overlay.ts';
 export { redactAtPath, redactFacetValue } from './parity/redact.ts';
 export {
   PARITY_STATUSES,
@@ -147,21 +161,6 @@ export {
   parityVerdict,
   type VerdictApplied,
 } from './parity/verdict.ts';
-export {
-  branchPatternMatches,
-  chooseDefaultBranch,
-  connectSide,
-  createMigrationPlanner,
-  effectiveMaxPushBytes,
-  IMPLEMENTED_STEP_KEYS,
-  MIGRATION_RUN_KINDS,
-  type MigrationContext,
-  MigrationLinks,
-  type MigrationServices,
-  MirrorRegistry,
-  registerMigrationSteps,
-  type Side,
-} from './migrate/index.ts';
 export {
   InvalidPayloadError,
   isJobName,

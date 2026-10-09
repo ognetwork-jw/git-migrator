@@ -59,6 +59,12 @@ export interface StepDefinition<S = unknown> {
    */
   readonly clearsBlockers?: readonly string[];
   /**
+   * Called once when the Step has failed for good: a non-retryable error, or the retry budget
+   * spent over attempts and crashes. Not called for a cancel, a lost lease, a delay or a retry.
+   * For findings the failure itself calls for (LIF-049); an error here is logged, never raised.
+   */
+  onFailed?(ctx: StepContext<S>, error: Readonly<Record<string, unknown>>): Promise<void>;
+  /**
    * Idempotent: a Step runs again after a crash, a lost lease or a delay, and must change only what
    * differs. Check `ctx.signal` during long work; throw to fail the Step.
    */

@@ -11,6 +11,7 @@ import {
   createProviderEnvironment,
   createRunAnalysisPort,
   createVerifyPlanner,
+  createVerifyStep,
   feederHandlers,
   HEALTH_PORT,
   type HealthServer,
@@ -275,10 +276,10 @@ export async function startWorker(options: StartWorkerOptions): Promise<WorkerHa
       log,
       lfs: createMirrorLfsSource({ scratchRoot: scratchRoot(env), log }),
     };
-    runSteps.register('verify', createVerifyPlanner(parityDeps));
     // The Steps of the repository migration kinds (LIF-040 steps 1 to 12). `verify` and
     // `source.read-only` join through `extraSteps` (T-072, T-073); other Run kinds register their
     // own planners here.
+    const mirrors = new MirrorRegistry();
     const migrationServices: MigrationServices = {
       db: db.privileged,
       connector,
@@ -287,7 +288,10 @@ export async function startWorker(options: StartWorkerOptions): Promise<WorkerHa
       quota,
       scratchRoot: scratchRoot(env),
       links,
-      mirrors: new MirrorRegistry(),
+      mirrors,
+      sourceMirror: (runId) => mirrors.sourceMirror(runId),
+      // Step 13 of the migration kinds (LIF-040); the `verify` Run kind has its own planner below.
+      extraSteps: new Map([['verify', createVerifyStep<MigrationServices>(parityDeps)]]),
       pool: db.pool,
       logger: log,
       reanalyze: async (migrationId, signal) => {

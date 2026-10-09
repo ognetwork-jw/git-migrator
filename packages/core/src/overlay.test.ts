@@ -102,3 +102,45 @@ describe('[LIF-048] overlay merge', () => {
     );
   });
 });
+
+describe('[LIF-048] overlay merge, cases carried over from the parity check', () => {
+  const merge = (desired: unknown, overlay: unknown, sch = schema) =>
+    mergeOverlay(desired, overlay, sch).merged;
+
+  it('[LIF-048] overlay values win over the translated document and the inputs are not changed', () => {
+    const sets = { ...schema, sets: ['/tags'] };
+    const desired = { a: { b: 1, c: 2 }, tags: ['x'], name: 'old' };
+    const before = structuredClone(desired);
+    expect(merge(desired, { a: { b: 9 }, name: 'new', tags: ['y'] }, sets)).toEqual({
+      a: { b: 9, c: 2 },
+      tags: ['y'],
+      name: 'new',
+    });
+    expect(desired).toEqual(before);
+  });
+
+  it('[LIF-048] nested collections merge by their own key, principals key by kind and id', () => {
+    const desired = {
+      rules: [
+        { pattern: 'main', restrictPushes: [{ principal: { kind: 'identity', id: '1' }, n: 1 }] },
+      ],
+    };
+    const overlay = {
+      rules: [
+        {
+          pattern: 'main',
+          restrictPushes: [
+            { principal: { kind: 'identity', id: '1' }, n: 2 },
+            { principal: { kind: 'group', id: 'ops' }, n: 3 },
+          ],
+        },
+      ],
+    };
+    const out = merge(desired, overlay) as { rules: { restrictPushes: { n: number }[] }[] };
+    expect(out.rules[0]?.restrictPushes.map((p) => p.n).sort()).toEqual([2, 3]);
+  });
+
+  it('[LIF-048] an overlay may add a member the desired document lacks', () => {
+    expect(merge({ a: 1 }, { b: { c: 2 } })).toEqual({ a: 1, b: { c: 2 } });
+  });
+});

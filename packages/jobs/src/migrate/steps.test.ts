@@ -1,12 +1,17 @@
 import { createTestDatabase, type TestDatabase } from '@git-migrator/db/testing';
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import { seedBasics } from '../world.fixture.ts';
-import { afterApply } from './facets.ts';
+import { afterApply, applyWithLedger } from './facets.ts';
 import { MirrorRegistry } from './mirror.ts';
 import { createMigrationPlanner } from './plan.ts';
 import { chooseDefaultBranch } from './push.ts';
 import { branchesAboutToChange } from './repository.ts';
-import type { MigrationContext, MigrationServices } from './services.ts';
+import {
+  type MigrationContext,
+  MigrationLinks,
+  type MigrationServices,
+  withSessionLock,
+} from './services.ts';
 import type { RunWorld } from './world.ts';
 
 vi.setConfig({ testTimeout: 30_000 });
@@ -78,6 +83,18 @@ describe('[LIF-040] the Steps of a migration Run', () => {
       migration: { scope: 'endpoint' },
     } as never);
     expect(endpoint.map((s) => s.key)).toEqual(['run.scope']);
+  });
+
+  it('[LIF-040] a Run with no Analysis plans one fatal Step that fails with run.analysis_missing', async () => {
+    const planner = createMigrationPlanner({ db: t.db.privileged } as unknown as MigrationServices);
+    const steps = await planner.steps({
+      run: { analysisId: null },
+      migration: { scope: 'repository' },
+    } as never);
+    expect(steps.map((s) => `${s.key}:${s.severity}`)).toEqual(['run.analysis:fatal']);
+    await expect(steps[0]?.run({} as never)).rejects.toMatchObject({
+      code: 'run.analysis_missing',
+    });
   });
 
   it('[LIF-044] the default branch is the source default, else main, else the first branch', () => {
@@ -198,10 +215,116 @@ describe('[JOB-015] the mirror registry', () => {
     const root = mkdtempSync(join(tmpdir(), 'gm-mirrors-'));
     mkdirSync(join(root, 'objects'));
     const registry = new MirrorRegistry(2);
-    expect(await registry.sourceMirror('run-1')).toBeUndefined();
+    expect(registry.sourceMirror('run-1')).toBeUndefined();
     registry.note('run-1', root);
-    expect(await registry.sourceMirror('run-1')).toBe(root);
+    expect(registry.sourceMirror('run-1')).toBe(root);
     rmSync(root, { recursive: true, force: true });
-    expect(await registry.sourceMirror('run-1')).toBeUndefined();
+    expect(registry.sourceMirror('run-1')).toBeUndefined();
+  });
+});
+
+describe('[LIF-047] the Migration link in a Change Request body', () => {
+  const ref = {
+    providerId: 'R_1',
+    namespace: { providerId: 'ns', slug: 'acme' },
+    slug: 'repo',
+  };
+
+  it('[LIF-047] every apply carries the link while it writes, so an Overlay on code-ownership keeps it, and nested notes share one', async () => {
+    const links = new MigrationLinks('https://gm.example/');
+    const seen: (string | undefined)[] = [];
+    const ctx = {
+      migration: { id: 'mig-1' },
+      services: { links },
+      checkpoint: () => undefined,
+      ledger: {
+        intend: async () => 'intent',
+        confirm: async () => undefined,
+        recordAll: async (_write: unknown, records: AsyncIterable<unknown>) => {
+          for await (const _record of records) {
+            // consumed
+          }
+          return 0;
+        },
+      },
+    } as unknown as MigrationContext;
+    const driver = {
+      async *apply() {
+        seen.push(links.resolve(ref));
+        yield* [] as never[];
+      },
+    };
+    links.note(ref.providerId, 'mig-1'); // an outer holder, as the pipelines upsert is
+    await applyWithLedger(ctx, {
+      facetKey: 'code-ownership',
+      driver: driver as never,
+      side: {} as never,
+      target: { scope: 'repository', repository: ref, namespace: ref.namespace },
+      desired: {},
+      decisions: [],
+      current: {},
+      umbrella: 'overlay-apply',
+    });
+    expect(seen).toEqual(['https://gm.example/repositories/mig-1']);
+    // The inner apply ended its note; the outer holder's is still there.
+    expect(links.resolve(ref)).toBe('https://gm.example/repositories/mig-1');
+    links.forget(ref.providerId);
+    expect(links.resolve(ref)).toBeUndefined();
+  });
+});
+
+describe('[LIF-046] the name lock around the target repository', () => {
+  it('[LIF-046] a lock held by another connection times out with a retryable error', async () => {
+    const holder = await t.db.pool.connect();
+    try {
+      await holder.query('SELECT pg_advisory_lock(hashtextextended($1, 0))', ['k-timeout']);
+      await expect(
+        withSessionLock(t.db.pool, 'k-timeout', async () => 'ran', { waitMs: 120, pollMs: 20 }),
+      ).rejects.toMatchObject({ code: 'transient', retryable: true });
+    } finally {
+      await holder.query('SELECT pg_advisory_unlock(hashtextextended($1, 0))', ['k-timeout']);
+      holder.release();
+    }
+    // Free again: it runs, and unlocks.
+    await expect(withSessionLock(t.db.pool, 'k-timeout', async () => 'ran')).resolves.toBe('ran');
+  });
+
+  it('[LIF-046] the wait stops at once when the Run is cancelled', async () => {
+    const holder = await t.db.pool.connect();
+    const abort = new AbortController();
+    try {
+      await holder.query('SELECT pg_advisory_lock(hashtextextended($1, 0))', ['k-abort']);
+      setTimeout(() => abort.abort(), 50);
+      await expect(
+        withSessionLock(t.db.pool, 'k-abort', async () => 'ran', {
+          signal: abort.signal,
+          waitMs: 60_000,
+          pollMs: 20,
+        }),
+      ).rejects.toMatchObject({ name: 'AbortError' });
+    } finally {
+      await holder.query('SELECT pg_advisory_unlock(hashtextextended($1, 0))', ['k-abort']);
+      holder.release();
+    }
+  });
+
+  it('[LIF-046] a connection whose unlock failed is destroyed, not returned to the pool, and the outcome of the work is kept', async () => {
+    const released: unknown[] = [];
+    const client = {
+      query: async (sql: string) => {
+        if (sql.includes('pg_advisory_unlock')) throw new Error('connection reset');
+        return { rows: [{ ok: true }] };
+      },
+      release: (error?: Error) => released.push(error),
+    };
+    const pool = { connect: async () => client } as never;
+    await expect(withSessionLock(pool, 'k', async () => 42)).resolves.toBe(42);
+    expect(released).toHaveLength(1);
+    expect(released[0]).toBeInstanceOf(Error);
+    await expect(
+      withSessionLock(pool, 'k', async () => {
+        throw new Error('work failed');
+      }),
+    ).rejects.toThrow('work failed');
   });
 });

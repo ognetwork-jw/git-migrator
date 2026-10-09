@@ -4,12 +4,13 @@
  * worker builds one `MigrationServices` and passes it as `services` to the Run executor.
  * Decisions: docs/adr/0380-migration-steps.md.
  */
-import type {
-  DriverContext,
-  EndpointConnection,
-  GitCredential,
-  QuotaGate,
-  RepositoryRef,
+import {
+  AdapterError,
+  type DriverContext,
+  type EndpointConnection,
+  type GitCredential,
+  type QuotaGate,
+  type RepositoryRef,
 } from '@git-migrator/adapter-sdk';
 import type { Config } from '@git-migrator/config';
 import type { Db } from '@git-migrator/db';
@@ -33,27 +34,38 @@ import type { MirrorRegistry } from './mirror.ts';
  * its start (read from the database, so a resumed Run has it too) and forgets it at its end.
  */
 export class MigrationLinks {
-  readonly #links = new Map<string, string>();
+  readonly #links = new Map<string, { url: string; holders: number }>();
   readonly #base: string;
 
   constructor(publicUrl: string) {
     this.#base = publicUrl.replace(/\/+$/, '');
   }
 
+  /** Notes the link; every `note` is paired with a `forget` (nested writers share one note). */
   note(targetRepositoryProviderId: string, migrationId: string): void {
-    this.#links.set(targetRepositoryProviderId, `${this.#base}/repositories/${migrationId}`);
+    const url = `${this.#base}/repositories/${migrationId}`;
+    const held = this.#links.get(targetRepositoryProviderId);
+    this.#links.set(targetRepositoryProviderId, { url, holders: (held?.holders ?? 0) + 1 });
   }
 
-  /** Ends the note: the map holds only the repositories a Step is writing a Change Request for. */
+  /** Ends one note: the map holds only the repositories a Step is writing for right now. */
   forget(targetRepositoryProviderId: string): void {
-    this.#links.delete(targetRepositoryProviderId);
+    const held = this.#links.get(targetRepositoryProviderId);
+    if (!held) return;
+    if (held.holders <= 1) this.#links.delete(targetRepositoryProviderId);
+    else this.#links.set(targetRepositoryProviderId, { ...held, holders: held.holders - 1 });
   }
 
   /** The `migrationUrl` option of the adapter. */
-  resolve = (repo: RepositoryRef): string | undefined => this.#links.get(repo.providerId);
+  resolve = (repo: RepositoryRef): string | undefined => this.#links.get(repo.providerId)?.url;
 }
 
 export interface MigrationServices {
+  /**
+   * The directory of this Run's bare source mirror while it exists in this job, else `undefined`
+   * (the `verify` Step reads LFS object ids from it, T-072 `ParityServices`).
+   */
+  sourceMirror(runId: string): string | undefined;
   /** The privileged client, for reads. Writes go through `ctx.transaction`. */
   readonly db: Db;
   readonly connector: EndpointConnector;
@@ -175,24 +187,67 @@ export async function gitCredentialOf(
 
 /**
  * Runs `fn` while holding a session advisory lock on `key`, taken on a connection of its own, so
- * it spans provider calls and is released if the worker dies (the connection closes). Without a
- * pool (unit tests) `fn` runs unlocked.
+ * it spans provider calls and is released if the worker dies (the connection closes). The lock is
+ * tried (`pg_try_advisory_lock`) until `waitMs` has passed, and the wait stops at once when
+ * `signal` aborts (cancel, lost lease), so a held lock never pins the Run past its own limits; the
+ * timeout is a retryable `transient` error. If the unlock fails, the connection is destroyed
+ * instead of going back to the pool, because it would still hold the lock; `fn`'s outcome is kept.
+ * Without a pool (unit tests) `fn` runs unlocked.
  */
 export async function withSessionLock<T>(
   pool: import('pg').Pool | undefined,
   key: string,
   fn: () => Promise<T>,
+  options: {
+    readonly signal?: AbortSignal;
+    readonly waitMs?: number;
+    readonly pollMs?: number;
+  } = {},
 ): Promise<T> {
   if (!pool) return fn();
+  const waitMs = options.waitMs ?? 60_000;
+  const pollMs = options.pollMs ?? 200;
   const client = await pool.connect();
+  let destroy: Error | undefined;
   try {
-    await client.query('SELECT pg_advisory_lock(hashtextextended($1, 0))', [key]);
+    const started = Date.now();
+    for (;;) {
+      options.signal?.throwIfAborted();
+      const got = await client.query<{ ok: boolean }>(
+        'SELECT pg_try_advisory_lock(hashtextextended($1, 0)) AS ok',
+        [key],
+      );
+      if (got.rows[0]?.ok) break;
+      if (Date.now() - started >= waitMs) {
+        throw new AdapterError({
+          code: 'transient',
+          provider: 'framework',
+          message: `Another Run holds the lock ${key}`,
+          retryable: true,
+        });
+      }
+      await new Promise<void>((resolve) => {
+        const timer = setTimeout(resolve, pollMs);
+        options.signal?.addEventListener(
+          'abort',
+          () => {
+            clearTimeout(timer);
+            resolve();
+          },
+          { once: true },
+        );
+      });
+    }
     try {
       return await fn();
     } finally {
-      await client.query('SELECT pg_advisory_unlock(hashtextextended($1, 0))', [key]);
+      try {
+        await client.query('SELECT pg_advisory_unlock(hashtextextended($1, 0))', [key]);
+      } catch (error) {
+        destroy = error instanceof Error ? error : new Error('unlock failed');
+      }
     }
   } finally {
-    client.release();
+    client.release(destroy);
   }
 }

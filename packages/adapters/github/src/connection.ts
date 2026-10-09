@@ -67,6 +67,7 @@ function repoRecord(r: Json, org: string): RepositoryRecord {
     ...(typeof r.size === 'number' ? { sizeBytes: r.size * 1024 } : {}),
     defaultBranch: typeof r.default_branch === 'string' ? r.default_branch : null,
     ...(typeof r.updated_at === 'string' ? { providerUpdatedAt: new Date(r.updated_at) } : {}),
+    ...(typeof r.created_at === 'string' ? { createdAt: new Date(r.created_at) } : {}),
   };
 }
 
