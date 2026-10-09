@@ -165,5 +165,8 @@
 | [0367](0367-capability-matrix-page.md) | The capability matrix page pivots the matrix and reads the lossy policies from Route.policies | agent-decided |
 | [0368](0368-audit-log-pagination.md) | Audit log paging and date bounds | agent-decided |
 | [0369](0369-actor-administration-surface.md) | What the Actors page offers: creation, disable and enable, keys; no role change in the UI | agent-decided |
+| [0395](0395-parity-result-storage.md) | ParityResult storage: one row per Facet updated in place, diff shape, redaction at write | agent-decided |
+| [0396](0396-parity-engine-and-verified-status.md) | Parity Check, verifiable tasks completed by the system, `verified` through the lifecycle table at the end of a Run, parity outside a Run | agent-decided |
+| [0397](0397-parity-git-checks.md) | LFS parity through a mirror and the batch API, post-cutover containment applied to every check | agent-decided |
 
 New ADRs continue from 0028. Implementor decisions use `status: agent-decided` (PROC-005). T-002 uses 0065–0069.
