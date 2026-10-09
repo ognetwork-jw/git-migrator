@@ -3,7 +3,7 @@
 import { can } from '@git-migrator/auth/capabilities';
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import type { TableColumnsType } from 'antd';
-import { Alert, Button, Checkbox, Input, Select, Space, Table, Typography } from 'antd';
+import { Alert, Button, Checkbox, Input, Modal, Select, Space, Table, Typography } from 'antd';
 import type { SorterResult } from 'antd/es/table/interface';
 import Link from 'next/link';
 import { useTranslations } from 'next-intl';
@@ -21,8 +21,10 @@ import {
   fetchWaves,
   namespacesKey,
   type RepositoryRow,
+  type RowRunKind,
   repositoriesKey,
   repositoryPageKey,
+  startMigrationRun,
   wavesKey,
 } from './api.ts';
 import { BulkBar } from './bulk-bar.tsx';
@@ -105,6 +107,10 @@ export function RepositoriesView({
   const [page, setPage] = useState(1);
   const selection = useRepositorySelection();
   const [accepted, setAccepted] = useState(false);
+  // The Run a row action asks to start, until the operator confirms or cancels it (LIF-005).
+  const [pendingRun, setPendingRun] = useState<
+    { readonly row: RepositoryRow; readonly kind: RowRunKind } | undefined
+  >(undefined);
 
   useLiveTopics(REPOSITORY_TOPICS, repositoryKeys);
 
@@ -143,6 +149,26 @@ export function RepositoriesView({
     },
   });
 
+  const startRun = useMutation({
+    mutationFn: (input: { id: string; kind: RowRunKind }) =>
+      startMigrationRun(input.id, input.kind),
+    onMutate: () => {
+      setAccepted(false);
+      act.reset();
+    },
+    onSuccess: () => {
+      setPendingRun(undefined);
+      setAccepted(true);
+      return queryClient.invalidateQueries({ queryKey: repositoriesKey });
+    },
+    // The dialog closes on failure too: the error is shown on the page, and a 409 or 422 means the
+    // list it was opened from is out of date.
+    onError: () => {
+      setPendingRun(undefined);
+      return queryClient.invalidateQueries({ queryKey: repositoriesKey });
+    },
+  });
+
   // How many selected rows the current filters hide (the selection outlives filter changes).
   const selectedIds = useDebounced(selection.ids, 200);
   const matching = useQuery({
@@ -161,6 +187,7 @@ export function RepositoriesView({
   const data = useMemo(() => [...rows], [rows]);
   const pageIds = useMemo(() => rows.map((r) => r.id), [rows]);
   const analyzing = act.isPending ? act.variables : undefined;
+  const starting = startRun.isPending ? startRun.variables?.id : undefined;
 
   const columns = useMemo(() => {
     const sortOrderOf = (field: SortField) =>
@@ -272,21 +299,47 @@ export function RepositoriesView({
             {
               title: t('column.actions'),
               key: 'actions',
-              render: (_: unknown, row: RepositoryRow) => (
-                <Button
-                  size="small"
-                  loading={analyzing === row.id}
-                  onClick={() => act.mutate(row.id)}
-                >
-                  {t('action.analyze')}
-                </Button>
-              ),
+              render: (_: unknown, row: RepositoryRow) => {
+                // Only a Migration that can take the Run offers it; the server decides again.
+                const idle = row.status !== 'running' && row.status !== 'source_missing';
+                return (
+                  <Space size="small" wrap>
+                    <Button
+                      size="small"
+                      loading={analyzing === row.id}
+                      onClick={() => act.mutate(row.id)}
+                    >
+                      {t('action.analyze')}
+                    </Button>
+                    {row.readiness === 'ready' && idle ? (
+                      <Button
+                        size="small"
+                        type="primary"
+                        loading={starting === row.id}
+                        onClick={() => setPendingRun({ row, kind: 'migrate' })}
+                      >
+                        {t('action.migrate')}
+                      </Button>
+                    ) : null}
+                    {row.readiness === 'needs_attention' && idle ? (
+                      <Button
+                        size="small"
+                        danger
+                        loading={starting === row.id}
+                        onClick={() => setPendingRun({ row, kind: 'run_anyway' })}
+                      >
+                        {t('action.runAnyway')}
+                      </Button>
+                    ) : null}
+                  </Space>
+                );
+              },
             },
           ]
         : []),
     ];
     return cols;
-  }, [sort, operator, analyzing, t, tRun, tRunStatus, act.mutate]);
+  }, [sort, operator, analyzing, starting, t, tRun, tRunStatus, act.mutate]);
 
   if (routesQuery.isError) return <ErrorAlert error={routesQuery.error} />;
   if (routesQuery.isSuccess && routeId === undefined) {
@@ -400,7 +453,8 @@ export function RepositoriesView({
       ) : null}
       {list.isError ? <ErrorAlert error={list.error} /> : null}
       {act.isError ? <ActionError error={act.error} /> : null}
-      {accepted && !act.isError ? (
+      {startRun.isError ? <ActionError error={startRun.error} run /> : null}
+      {accepted && !act.isError && !startRun.isError ? (
         <Alert type="success" showIcon title={t('action.queued')} />
       ) : null}
 
@@ -448,13 +502,64 @@ export function RepositoriesView({
         }}
         columns={columns}
       />
+      <RunConfirmModal
+        pending={
+          // Read the row from the live list: its counts may have changed since the dialog opened.
+          pendingRun
+            ? { ...pendingRun, row: rows.find((r) => r.id === pendingRun.row.id) ?? pendingRun.row }
+            : undefined
+        }
+        loading={startRun.isPending}
+        onCancel={() => setPendingRun(undefined)}
+        onConfirm={(pending) => startRun.mutate({ id: pending.row.id, kind: pending.kind })}
+      />
     </div>
   );
 }
 
+/**
+ * The confirmation before a Run starts (LIF-005, LIF-006). Run anyway names what it skips: the open
+ * pre tasks the Migration still has.
+ */
+function RunConfirmModal({
+  pending,
+  loading,
+  onCancel,
+  onConfirm,
+}: {
+  readonly pending: { readonly row: RepositoryRow; readonly kind: RowRunKind } | undefined;
+  readonly loading: boolean;
+  readonly onCancel: () => void;
+  readonly onConfirm: (pending: { readonly row: RepositoryRow; readonly kind: RowRunKind }) => void;
+}) {
+  const t = useTranslations('repositories.runConfirm');
+  const name = pending?.row.sourceRepository?.fullPath ?? pending?.row.id ?? '';
+  const target = pending?.row.plannedTargetName ?? '';
+  const kind = pending?.kind ?? 'migrate';
+  const preTasks = pending?.row.readinessCounts?.preTasks ?? 0;
+  return (
+    <Modal
+      open={pending !== undefined}
+      title={t(`${kind}.title`, { name })}
+      okText={t(`${kind}.ok`)}
+      cancelText={t('cancel')}
+      okButtonProps={{ danger: kind === 'run_anyway', loading }}
+      cancelButtonProps={{ disabled: loading }}
+      onOk={() => pending && onConfirm(pending)}
+      onCancel={loading ? undefined : onCancel}
+      destroyOnHidden
+    >
+      <Typography.Paragraph>{t(`${kind}.body`, { name, target })}</Typography.Paragraph>
+      {kind === 'run_anyway' ? (
+        <Alert type="warning" showIcon title={t('run_anyway.warning', { count: preTasks })} />
+      ) : null}
+    </Modal>
+  );
+}
+
 /** A failed row action: 409 and 422 have their own texts, the rest use the generic problem text. */
-function ActionError({ error }: { readonly error: unknown }) {
-  const t = useTranslations('repositories.action.error');
+function ActionError({ error, run = false }: { readonly error: unknown; readonly run?: boolean }) {
+  const t = useTranslations(run ? 'repositories.runConfirm.error' : 'repositories.action.error');
   if (error instanceof ApiError && t.has(error.code as never)) {
     return <Alert type="error" showIcon role="alert" title={t(error.code as never)} />;
   }

@@ -175,6 +175,10 @@
     "internal_error": "Something went wrong on our side. Try again, or contact an administrator if it keeps happening.",
     "bad_request": "The request could not be understood. Reload the page and try again.",
     "unsupported_media_type": "The request was sent in a format the service does not accept.",
+    "run_active": "This repository already has a queued or running Run. Wait for it to finish or cancel it first.",
+    "run_not_permitted": "This repository's current status does not allow this Run. Reload to see its status.",
+    "readiness_required": "This repository's readiness does not allow this Run. Reload to see its current readiness.",
+    "confirmation_required": "This Run needs the exact target name typed as confirmation.",
     "last_admin": "This change would leave the system without an enabled administrator. Make another account an administrator first.",
     "revoke_first": "An invitation is pending for this person. Revoke it in its invitation batch first."
   },
@@ -784,11 +788,36 @@
     "lastRun": "{kind}, {status}, {when}",
     "action": {
       "analyze": "Analyze",
+      "migrate": "Migrate",
+      "runAnyway": "Run anyway",
       "queued": "Request accepted.",
       "error": {
         "conflict": "This repository's source is missing from the last inventory, so it cannot be analyzed. Refresh the inventory or check the source.",
         "validation_failed": "The request was not accepted for this repository. Reload and try again.",
         "not_found": "This repository no longer exists. Reload the list."
+      }
+    },
+    "runConfirm": {
+      "cancel": "Cancel",
+      "migrate": {
+        "title": "Migrate {name}?",
+        "body": "This starts a migration Run to {target}. The repository is ready: it has no blockers and no open tasks that must be done first.",
+        "ok": "Migrate"
+      },
+      "run_anyway": {
+        "title": "Run {name} anyway?",
+        "body": "This starts a migration Run to {target} without waiting for the open tasks to be done. The Run can leave work for you to finish by hand.",
+        "ok": "Run anyway",
+        "warning": "{count, plural, =0 {No tasks are open.} one {# open task will not be done by the Run.} other {# open tasks will not be done by the Run.}}"
+      },
+      "error": {
+        "conflict": "This repository cannot start a Run right now, for example because its Route is retired. Reload the list.",
+        "validation_failed": "The Run was not accepted for this repository. Reload and try again.",
+        "not_found": "This repository no longer exists. Reload the list.",
+        "run_active": "This repository already has a queued or running Run. Wait for it to finish or cancel it first.",
+        "run_not_permitted": "This repository's current status does not allow this Run. Reload the list to see its status.",
+        "readiness_required": "This repository's readiness changed and no longer allows this Run. Reload the list to see why.",
+        "confirmation_required": "This Run needs the exact target name typed as confirmation."
       }
     },
     "selection": {

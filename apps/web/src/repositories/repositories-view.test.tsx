@@ -322,20 +322,91 @@ describe('[UI-021] repositories list', () => {
     expect(screen.getByLabelText('hooks: 1 blocker')).toBeTruthy();
   });
 
-  it('[UI-021] the only row action is Analyze; Migrate and Run anyway wait for the Run endpoint', async () => {
-    source = [row(1, { readiness: 'ready' }), row(2, { readiness: 'needs_attention' })];
+  it('[UI-021] [LIF-005] Migrate is offered on a ready row, Run anyway on a needs-attention row, neither on a blocked one', async () => {
+    source = [
+      row(1, { readiness: 'ready' }),
+      row(2, { readiness: 'needs_attention' }),
+      row(3, { readiness: 'blocked' }),
+      row(4, { readiness: 'ready', status: 'running' }),
+    ];
+    mockApi();
+    renderView();
+    await screen.findByText('acme/plat/repo-1');
+    const names = (path: string) =>
+      within(rowOf(path))
+        .getAllByRole('button')
+        .map((b) => b.textContent);
+    expect(names('acme/plat/repo-1')).toEqual(['Analyze', 'Migrate']);
+    expect(names('acme/plat/repo-2')).toEqual(['Analyze', 'Run anyway']);
+    expect(names('acme/plat/repo-3')).toEqual(['Analyze']);
+    expect(names('acme/plat/repo-4')).toEqual(['Analyze']);
+  });
+
+  it('[UI-021] [LIF-005] Migrate asks for confirmation, then posts a migrate Run', async () => {
+    source = [row(1, { readiness: 'ready' })];
     mockApi((url, init) =>
-      init?.method === 'POST' ? json({ migrationId: url.pathname }, 202) : undefined,
+      init?.method === 'POST' ? json({ runId: 'run1', migrationId: url.pathname }, 202) : undefined,
     );
     renderView();
     await screen.findByText('acme/plat/repo-1');
-    expect(screen.queryByRole('button', { name: 'Migrate' })).toBeNull();
-    expect(screen.queryByRole('button', { name: 'Run anyway' })).toBeNull();
-    fireEvent.click(within(rowOf('acme/plat/repo-2')).getByRole('button', { name: 'Analyze' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Migrate' }));
+    const dialog = await screen.findByRole('dialog');
+    expect(within(dialog).getByText('Migrate acme/plat/repo-1?')).toBeTruthy();
+    expect(posts()).toHaveLength(0);
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Migrate' }));
     await waitFor(() => expect(posts()).toHaveLength(1));
-    expect(posts()[0]?.url.pathname).toBe('/api/v1/migrations/m2/analyze');
+    expect(posts()[0]?.url.pathname).toBe('/api/v1/migrations/m1/runs');
+    expect(JSON.parse(posts()[0]?.init?.body as string)).toEqual({ kind: 'migrate' });
     expect(await screen.findByText('Request accepted.')).toBeTruthy();
   });
+
+  it('[UI-021] [LIF-006] Run anyway confirms, names the open tasks it skips and posts a run_anyway Run', async () => {
+    source = [
+      row(2, { readiness: 'needs_attention', readinessCounts: { blockers: 0, preTasks: 3 } }),
+    ];
+    mockApi((url, init) =>
+      init?.method === 'POST' ? json({ runId: 'run2', migrationId: url.pathname }, 202) : undefined,
+    );
+    renderView();
+    await screen.findByText('acme/plat/repo-2');
+    fireEvent.click(screen.getByRole('button', { name: 'Run anyway' }));
+    const dialog = await screen.findByRole('dialog');
+    expect(within(dialog).getByText('3 open tasks will not be done by the Run.')).toBeTruthy();
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Cancel' }));
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+    expect(posts()).toHaveLength(0);
+    fireEvent.click(screen.getByRole('button', { name: 'Run anyway' }));
+    fireEvent.click(
+      within(await screen.findByRole('dialog')).getByRole('button', { name: 'Run anyway' }),
+    );
+    await waitFor(() => expect(posts()).toHaveLength(1));
+    expect(posts()[0]?.url.pathname).toBe('/api/v1/migrations/m2/runs');
+    expect(JSON.parse(posts()[0]?.init?.body as string)).toEqual({ kind: 'run_anyway' });
+  });
+
+  it.each([
+    [409, 'run_active', 'already has a queued or running Run'],
+    [409, 'conflict', 'cannot start a Run right now'],
+    [409, 'run_not_permitted', 'current status does not allow this Run'],
+    [422, 'readiness_required', 'readiness changed'],
+    [422, 'validation_failed', 'was not accepted for this repository'],
+  ])(
+    '[UI-021] [DOM-010] [LIF-005] a %i %s answer to a Run has its own message',
+    async (status, code, text) => {
+      source = [row(1, { readiness: 'ready' })];
+      mockApi((_url, init) =>
+        init?.method === 'POST' ? json({ type: 'x', title: 'x', status, code }, status) : undefined,
+      );
+      renderView();
+      await screen.findByText('acme/plat/repo-1');
+      fireEvent.click(screen.getByRole('button', { name: 'Migrate' }));
+      fireEvent.click(
+        within(await screen.findByRole('dialog')).getByRole('button', { name: 'Migrate' }),
+      );
+      expect((await screen.findByRole('alert')).textContent).toContain(text);
+      expect(screen.queryByText('Request accepted.')).toBeNull();
+    },
+  );
 
   it('[UI-021] a conflict on Analyze has its own message', async () => {
     source = [row(1)];

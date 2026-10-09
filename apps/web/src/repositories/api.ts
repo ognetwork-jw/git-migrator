@@ -106,9 +106,19 @@ export const fetchWaves = () =>
     take: 200,
   });
 
-/** Row action (UI-021): `POST /migrations/{id}/analyze`. Migrate and Run anyway arrive with the Run endpoint (T-074). */
+/** Row action (UI-021): `POST /migrations/{id}/analyze`. */
 export const analyzeMigration = (id: string) =>
   apiRequest<unknown>(`/api/v1/migrations/${enc(id)}/analyze`, { method: 'POST' });
+
+/** The Run kinds the list starts (LIF-005): Migrate needs ready, Run anyway ready or needs attention. */
+export type RowRunKind = 'migrate' | 'run_anyway';
+
+/** Row action (UI-021): `POST /migrations/{id}/runs`. The server re-checks readiness (LIF-005). */
+export const startMigrationRun = (id: string, kind: RowRunKind) =>
+  apiRequest<{ runId: string }>(`/api/v1/migrations/${enc(id)}/runs`, {
+    method: 'POST',
+    json: { kind },
+  });
 
 /** How many of `ids` the filters still show, so the view can say how many selected rows they hide. */
 export const countMatching = (filters: RepositoryFilters, ids: readonly string[]) =>
