@@ -37,28 +37,45 @@ These are the one-time steps to prepare real Bitbucket and GitHub test accounts,
 
 ## 3. Local configuration
 
-1. Copy `testing/e2e/live/config.e2e.example.yaml` to `testing/e2e/live/config.e2e.yaml`.
-2. Fill in the workspace, project key, org, App ID and Installation ID.
+1. Copy `testing/e2e/live/config.e2e.example.yaml` to `testing/e2e/live/config.e2e.yaml` (git-ignored).
+2. Fill in the workspace, the org, the App ID and the Installation ID, and replace every `<placeholder>`. Leave `environment: e2e` and `auth.testSignIn.enabled: true`. `publicUrl` must stay `http://127.0.0.1:<port>`: the test starts the web app there, so the port must be free. The project key (`E2E`) and the repository name (`e2e-auto-ok`) are fixed by this guide and are not configuration.
 3. Store the secrets under secretspec profile `e2e` (keyring or dotenv):
    ```sh
    secretspec set BITBUCKET_CREDENTIALS --profile e2e   # [{"id":"e2e","accountId":"…","email":"…","apiToken":"…"}]
    secretspec set GITHUB_APP_PRIVATE_KEY --profile e2e  # PEM contents
-   secretspec set POSTGRES_PASSWORD --profile e2e
+   secretspec set POSTGRES_PASSWORD --profile e2e       # the password of the local `git_migrator` Postgres role
    secretspec set BETTER_AUTH_SECRET --profile e2e
    secretspec set ENTRA_CLIENT_ID --profile e2e         # any placeholder unless running the Entra smoke test
    secretspec set ENTRA_CLIENT_SECRET --profile e2e     # same
-   secretspec set GM_TEST_USER_PASSWORD --profile e2e
+   secretspec set GM_TEST_USER_PASSWORD --profile e2e   # the test sign-in password of the seeded Actors
    ```
-4. Start Postgres (`devenv up postgres` or `docker compose up -d postgres`).
+4. Start Postgres (`devenv up postgres` or `docker compose up -d postgres`). The test creates and drops its own throw-away database in it, as role `git_migrator` on `127.0.0.1:5432` with `POSTGRES_PASSWORD`. Set `GM_TEST_DATABASE_URL` to use another server or role.
 
 ## 4. Run
 
 ```sh
-pnpm e2e:live:reset        # safe to run anytime; restores the starting state
+pnpm e2e:live:reset        # restores the starting state after a run
 pnpm test:e2e:live
 ```
 
-The test first checks every precondition above (TST-031) and stops with a specific message if one fails. If `e2e-auto-ok` is not classified **Ready**, the test prints the readiness findings, which usually point straight at a fixture deviation (for example, a workspace group with default access).
+`pnpm test:e2e:live` builds the web app, then runs Playwright under `secretspec run --profile e2e` with `GM_E2E_TARGET=live` and `GM_CONFIG_FILE=live/config.e2e.yaml` (relative to `testing/e2e`, so the file you copied in section 3; set `GM_CONFIG_FILE` to use another file). The test starts the worker and the web app itself; do not run `pnpm dev` on the same port at the same time.
+
+**It never runs in CI.** It refuses to start when `CI`, `GITHUB_ACTIONS` or a similar variable is set, when `GM_ENVIRONMENT` is not `e2e`, when the configuration is missing, still holds placeholders or points at a local address, or when a secret is missing. Every reason is printed with the command that fixes it. CI runs the same spec in a dry mode against the provider fakes (`GM_E2E_TARGET=fakes`, `pnpm test:e2e:live:dry`) to keep it type-checked and working.
+
+**`GM_CONFIG_FILE`** may be absolute, relative to `testing/e2e`, or relative to the repository root; the test resolves it to an absolute path once and hands that path to the web app.
+
+**Artefacts hold real secrets.** A live run writes the web and worker logs to `testing/e2e/live-artifacts/` and failure screenshots to `testing/e2e/live-artifacts/test-results/` (git-ignored, never uploaded by CI), not to the `logs/` and `test-results/` of the fakes tier. No Playwright trace is recorded, because a trace holds the sign-in password. The web log is raw Next.js output: read it before you share it, and delete the directory when you are done.
+
+**Preconditions (TST-031).** Before it starts anything, the test reads both providers and stops with one message per unmet precondition, for example `Bitbucket repository e2e-auto-ok not found in project E2E` or `GitHub App lacks permission administration:write`. It checks:
+
+- Bitbucket: the token is valid, belongs to the `accountId` in `BITBUCKET_CREDENTIALS` and is a workspace admin; the repository, its project, visibility, description, website, fork policy and default branch; the branches and tags; `.gitattributes` and `assets/sample.bin`; the branch restrictions on `main` (and none left on `*` by an earlier run); the access key; the variables; no pipelines file, webhooks, open pull requests or explicit permissions.
+- GitHub: the App is installed on the org with access to all repositories, is not suspended, has the IDs from the configuration and every permission of [providers/github](providers/github.md#required-app-permissions); the org is on the Team plan; the target `e2e-e2e-auto-ok` does not exist yet.
+
+Not checked by the test, so verify them by hand: that `v1.0.0` is an annotated tag and `v1.0.1` a lightweight one, that `assets/sample.bin` is about 1 MB, and that the org lets the App delete repositories (the reset reports a 403 if not).
+
+If `e2e-auto-ok` is not classified **Ready**, the test prints the readiness findings, which usually point straight at a fixture deviation (for example, a workspace group with default access).
+
+**After a run, reset before running again.** The test leaves the target repository and the read-only changes in place so you can look at them. `pnpm e2e:live:reset` (TST-032) deletes the target repository, removes the push restriction on `*` and the `[MIGRATED → …]` description prefix, and does nothing for what is already clean (running it twice is harmless). It prints the workspace, repository and organization first, deletes the target only if its description and homepage are the fixture's (otherwise it refuses and you delete it by hand), and still cleans the Bitbucket side if the GitHub side fails. If a running local app (`GM_E2E_APP_URL=http://127.0.0.1:3000`, local addresses only, signed in with `GM_TEST_USER_PASSWORD`) still has the Migration, it first uses the app's own `undo_source_read_only` and `rollback` Runs; otherwise, and for whatever is left, it calls the providers directly. It needs the App's `administration:write` and an org that lets the App delete repositories.
 
 **What success means:**
 

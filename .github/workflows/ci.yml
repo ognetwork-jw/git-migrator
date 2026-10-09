@@ -147,6 +147,12 @@ jobs:
       - name: UI e2e tests
         run: pnpm test:e2e
 
+      # TST-030, ADR-0491: the live e2e spec in its dry mode, against the same fakes stack. The
+      # live mode never runs in CI: it refuses to start when CI is set. The web build is the one
+      # the previous step made.
+      - name: Live e2e spec, dry mode (fakes)
+        run: pnpm --filter @git-migrator/e2e test:e2e:live:dry
+
       # Traces, screenshots and the web and worker logs of a failed run.
       - name: Upload traces
         if: failure()
