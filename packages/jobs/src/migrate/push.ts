@@ -51,7 +51,9 @@ export function pushLfsStep(): StepDefinition<MigrationServices> {
       }
       const source = await connectSide(ctx, world.sourceEndpointId, world.sourceType);
       const target = await connectSide(ctx, world.targetEndpointId, world.targetType);
-      const dir = await ensureMirror(ctx, world, source);
+      const ensured = await ensureMirror(ctx, world, source);
+      if ('stop' in ensured) return ensured.stop;
+      const dir = ensured.dir;
       const objects = await source.git.listLfsObjects(dir, ctx.signal);
       if (objects.length === 0)
         return { status: 'skipped', reason: 'the repository has no LFS objects' };
@@ -69,7 +71,8 @@ export function pushLfsStep(): StepDefinition<MigrationServices> {
       const intentId = await ctx.ledger.intend(write, {
         facetKey: 'git-refs',
         action: 'update',
-        resourceRef: { kind: 'lfs-push', repository: ref.slug },
+        // Pushed objects are not undone (the repository goes, or the refs stay): inert (LIF-077).
+        resourceRef: { kind: 'lfs-push', repository: ref.slug, noop: true },
         paths: ['/lfs'],
         before: null,
         after: { count: absent.length },
@@ -97,7 +100,9 @@ export function pushRefsStep(): StepDefinition<MigrationServices> {
       }
       const source = await connectSide(ctx, world.sourceEndpointId, world.sourceType);
       const target = await connectSide(ctx, world.targetEndpointId, world.targetType);
-      const dir = await ensureMirror(ctx, world, source);
+      const ensured = await ensureMirror(ctx, world, source);
+      if ('stop' in ensured) return ensured.stop;
+      const dir = ensured.dir;
       const { ref, record } = await targetOf(ctx, world);
       const { url, credential } = await gitCredentialOf(target, ref);
       const desired = world.facets.get('git-refs')?.desired as
@@ -156,7 +161,9 @@ export function pushRefsStep(): StepDefinition<MigrationServices> {
         resourceRef: {
           kind: 'git-push',
           repository: ref.slug,
-          ...(pushed.length === 0 ? { noop: true } : {}),
+          // Pushed refs are not undone: a created repository is deleted whole, an adopted one
+          // keeps its refs (LIF-077). Inert, as the reconcile record is.
+          noop: true,
         },
         paths: [...new Set(pushed)].map(refPath),
         before: null,
@@ -197,13 +204,16 @@ async function setDefaultBranch(
     const intentId = await ctx.ledger.intend(write, {
       facetKey: 'repository-settings',
       action: 'update',
-      resourceRef: { kind: 'default-branch', repository: ref.slug },
+      resourceRef: { kind: 'default-branch', repository: ref.slug, noop: true },
       paths: ['/defaultBranch'],
       before: { defaultBranch: current?.defaultBranch ?? null },
       after: { defaultBranch: branch },
     });
     const record = await target.connection.refs.setDefaultBranch(ref, branch);
-    await ctx.ledger.confirm(intentId, 'applied', record);
+    await ctx.ledger.confirm(intentId, 'applied', {
+      ...record,
+      resourceRef: { ...record.resourceRef, noop: true },
+    });
   }
   await ctx.transaction(async (tx) => {
     await tx.repository.update({ where: { id: repositoryRowId }, data: { defaultBranch: branch } });

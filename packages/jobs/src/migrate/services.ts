@@ -25,10 +25,12 @@ import type { ProviderRegistry } from '@git-migrator/registry';
 import type { EndpointConnector } from '../inventory/connector.ts';
 import { StepFailure } from '../run/errors.ts';
 import type { StepContext, StepDefinition } from '../run/types.ts';
+import type { MirrorRegistry } from './mirror.ts';
 
 /**
  * The link a Change Request body carries to the Migration (LIF-047 step 3). The adapter asks for
- * it by repository, so the Steps note which Migration a target repository belongs to first.
+ * it by repository, so the Change Request Step notes which Migration the repository belongs to at
+ * its start (read from the database, so a resumed Run has it too) and forgets it at its end.
  */
 export class MigrationLinks {
   readonly #links = new Map<string, string>();
@@ -40,6 +42,11 @@ export class MigrationLinks {
 
   note(targetRepositoryProviderId: string, migrationId: string): void {
     this.#links.set(targetRepositoryProviderId, `${this.#base}/repositories/${migrationId}`);
+  }
+
+  /** Ends the note: the map holds only the repositories a Step is writing a Change Request for. */
+  forget(targetRepositoryProviderId: string): void {
+    this.#links.delete(targetRepositoryProviderId);
   }
 
   /** The `migrationUrl` option of the adapter. */
@@ -60,6 +67,12 @@ export interface MigrationServices {
   /** `$GM_SCRATCH_DIR` (JOB-015). */
   readonly scratchRoot: string;
   readonly links: MigrationLinks;
+  /** The Run's source mirror in this job, for readers such as parity (T-072). */
+  readonly mirrors: MirrorRegistry;
+  /** Test seam: free bytes of the scratch volume (JOB-015). */
+  readonly freeBytes?: (path: string) => Promise<number>;
+  /** The application pool: session locks that span provider calls. */
+  readonly pool?: import('pg').Pool;
   readonly logger: Logger;
   /**
    * Re-analyzes the Migration at the end of a Run, so an Analysis taken meanwhile is superseded
@@ -158,4 +171,28 @@ export async function gitCredentialOf(
     url: side.connection.git.remoteUrl(repo),
     credential: await side.connection.git.credential(repo),
   };
+}
+
+/**
+ * Runs `fn` while holding a session advisory lock on `key`, taken on a connection of its own, so
+ * it spans provider calls and is released if the worker dies (the connection closes). Without a
+ * pool (unit tests) `fn` runs unlocked.
+ */
+export async function withSessionLock<T>(
+  pool: import('pg').Pool | undefined,
+  key: string,
+  fn: () => Promise<T>,
+): Promise<T> {
+  if (!pool) return fn();
+  const client = await pool.connect();
+  try {
+    await client.query('SELECT pg_advisory_lock(hashtextextended($1, 0))', [key]);
+    try {
+      return await fn();
+    } finally {
+      await client.query('SELECT pg_advisory_unlock(hashtextextended($1, 0))', [key]);
+    }
+  } finally {
+    client.release();
+  }
 }

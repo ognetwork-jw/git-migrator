@@ -38,6 +38,8 @@ export const branchRulesDefinition: FacetDefinition<BranchRules> = {
   findingCodes: {
     'branch-rules.accept-lossy': { kind: 'pre', completion: 'accept' },
     'branch-rules.configure-status-checks': { kind: 'post', completion: 'parity' },
+    'branch-rules.exemptions-not-applied': { kind: 'post' },
+    'branch-rules.protection-lifted': { kind: 'post' },
     'branch-rules.unknown-kind': { kind: 'warning' },
     'branch-rules.branching-model': { kind: 'warning' },
     'branch-rules.unmapped-principal': { kind: 'pre', completion: 'resolution' },

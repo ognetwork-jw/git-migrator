@@ -21,6 +21,7 @@ export function registerMigrationSteps(
 export { changeRequestsStep, partialMutationsOf } from './change-requests.ts';
 export { facetApplyStep } from './facets.ts';
 export { branchPatternMatches } from './glob.ts';
+export { MirrorRegistry } from './mirror.ts';
 export { overlaysStep } from './overlays.ts';
 export { createMigrationPlanner, IMPLEMENTED_STEP_KEYS, refreshAnalysisStep } from './plan.ts';
 export { gitPrepareStep, preflightStep } from './prepare.ts';

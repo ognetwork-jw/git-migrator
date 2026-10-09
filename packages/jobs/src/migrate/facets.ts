@@ -7,7 +7,7 @@
  * docs/adr/0380-migration-steps.md.
  */
 import type { FacetDriver, MutationRecord } from '@git-migrator/adapter-sdk';
-import { parseFieldPath } from '@git-migrator/core';
+import { diffDocuments, parseFieldPath } from '@git-migrator/core';
 import type { StepDefinition, StepResult } from '../run/types.ts';
 import {
   connectSide,
@@ -61,7 +61,8 @@ export async function applyWithLedger(
     action: 'update',
     resourceRef: { kind: options.umbrella, noop: true },
     paths: [],
-    before: null,
+    // What the target held before the write, so a resumed Step can tell what a lost record changed.
+    before: options.current ?? null,
     after: null,
   });
   ctx.checkpoint();
@@ -89,6 +90,55 @@ export async function applyWithLedger(
 export async function settleOpenIntents(ctx: MigrationContext): Promise<void> {
   for (const intent of await ctx.ledger.openIntents()) {
     await ctx.ledger.confirm(intent.id, 'applied');
+  }
+}
+
+/** Umbrella intents of `applyWithLedger` whose effect shows in a read of the Facet. */
+const RECOVERABLE_UMBRELLAS: ReadonlySet<string> = new Set(['facet-apply', 'overlay-apply']);
+
+/**
+ * Settles the open intents of a resumed Facet Step. A driver `apply` that died between a provider
+ * write and the record of it left a change nobody ledgered. The umbrella intent kept what the
+ * target held before, so what differs now is what the lost record would have said: it is ledgered
+ * as a real record (kind `recovered-write`, undoable by its paths), where the umbrella itself is
+ * inert. An umbrella whose read shows no change was not applied (LIF-045, ADR-0342, ADR-0380).
+ */
+export async function recoverOpenIntents(
+  ctx: MigrationContext,
+  target: Side,
+  facetTarget: ReturnType<typeof repositoryTarget>,
+): Promise<void> {
+  for (const intent of await ctx.ledger.openIntents()) {
+    const kind = String(intent.resourceRef.kind ?? '');
+    const key = intent.facetKey;
+    const driver = key
+      ? target.connection.facets[key as keyof typeof target.connection.facets]
+      : undefined;
+    if (!key || !driver || !RECOVERABLE_UMBRELLAS.has(kind) || intent.before == null) {
+      await ctx.ledger.confirm(intent.id, 'applied');
+      continue;
+    }
+    const def = ctx.services.registry.facets.get(key as never);
+    const fresh = (await driver.read(target.driver, facetTarget)).data;
+    const diffs = diffDocuments(fresh, intent.before, {
+      collections: def.collections,
+      sets: def.sets ?? [],
+    });
+    if (diffs.length === 0) {
+      await ctx.ledger.confirm(intent.id, 'not_applied');
+      continue;
+    }
+    await ctx.ledger.confirm(intent.id, 'applied', {
+      facetKey: key,
+      action: 'update',
+      resourceRef: { kind: 'recovered-write', umbrella: kind },
+      paths: diffs.map((d) => d.path),
+      before: intent.before,
+      after: fresh,
+    });
+    await ctx.runLog('warn', `Recovered an unrecorded write to ${key} after a restart`, {
+      paths: diffs.map((d) => d.path).slice(0, 50),
+    });
   }
 }
 
@@ -170,7 +220,7 @@ export function facetApplyStep(facetKey: string): StepDefinition<MigrationServic
         return { status: 'skipped', reason: 'the target cannot write this Facet' };
       const { ref } = await targetOf(ctx, world);
       const facetTarget = repositoryTarget(world, ref);
-      await settleOpenIntents(ctx);
+      await recoverOpenIntents(ctx, target, facetTarget);
 
       const current = (await driver.read(target.driver, facetTarget)).data;
       const records = await applyWithLedger(ctx, {

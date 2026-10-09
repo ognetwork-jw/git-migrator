@@ -158,6 +158,7 @@ export {
   type MigrationContext,
   MigrationLinks,
   type MigrationServices,
+  MirrorRegistry,
   registerMigrationSteps,
   type Side,
 } from './migrate/index.ts';

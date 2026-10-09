@@ -129,6 +129,13 @@ export const FINDING_SPECS = [
     ref: 'FAC-BRR-002',
   },
   {
+    code: 'branch-rules.protection-lifted',
+    facet: 'branch-rules',
+    severity: 'post',
+    verifiable: false,
+    ref: 'LIF-040',
+  },
+  {
     code: 'branch-rules.unknown-kind',
     facet: 'branch-rules',
     severity: 'warning',

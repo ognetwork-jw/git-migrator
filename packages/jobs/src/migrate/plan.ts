@@ -5,14 +5,15 @@
  * through `MigrationServices.extraSteps`) is left out. After the last planned Step the Migration is
  * analyzed again. Decisions: docs/adr/0380-migration-steps.md.
  */
-import { StepFailure } from '../run/errors.ts';
+import { isRateLimited, isRetryable, StepFailure } from '../run/errors.ts';
 import type { RunPlanner, StepDefinition } from '../run/types.ts';
+import { RunCancelledError } from '../run/types.ts';
 import { changeRequestsStep } from './change-requests.ts';
 import { facetApplyStep } from './facets.ts';
 import { overlaysStep } from './overlays.ts';
 import { gitPrepareStep, preflightStep } from './prepare.ts';
 import { pushLfsStep, pushRefsStep } from './push.ts';
-import { ensureRepositoryStep, liftProtectionStep } from './repository.ts';
+import { ensureRepositoryStep, liftProtectionStep, warnIfProtectionLifted } from './repository.ts';
 import type { MigrationServices } from './services.ts';
 
 /** Step 13's neighbour: re-analyzes at the end of the Run (T-062 follow-up, ADR-0380). */
@@ -43,6 +44,26 @@ const FIXED: Readonly<Record<string, () => StepDefinition<MigrationServices>>> =
 /** Keys of the Steps this task implements, in LIF-040 order. */
 export const IMPLEMENTED_STEP_KEYS: readonly string[] = Object.keys(FIXED);
 
+/**
+ * Wraps a fatal Step that runs after step 3a: when it fails for good, the rules that step lifted
+ * are named in a post task, because the target is left without them (LIF-049, ADR-0380).
+ */
+function afterLift(def: StepDefinition<MigrationServices>): StepDefinition<MigrationServices> {
+  return {
+    ...def,
+    async run(ctx) {
+      try {
+        return await def.run(ctx);
+      } catch (error) {
+        if (!isRateLimited(error) && !isRetryable(error) && !(error instanceof RunCancelledError)) {
+          await warnIfProtectionLifted(ctx).catch(() => undefined);
+        }
+        throw error;
+      }
+    },
+  };
+}
+
 export function createMigrationPlanner(services: MigrationServices): RunPlanner<MigrationServices> {
   return {
     async steps({ run, migration }) {
@@ -61,6 +82,17 @@ export function createMigrationPlanner(services: MigrationServices): RunPlanner<
           },
         ];
       }
+      if (run.analysisId === null) {
+        return [
+          {
+            key: 'run.analysis',
+            severity: 'fatal',
+            async run() {
+              throw new StepFailure('run.analysis_missing', 'The Run has no Analysis to apply');
+            },
+          },
+        ];
+      }
       const items =
         run.analysisId === null
           ? []
@@ -74,7 +106,9 @@ export function createMigrationPlanner(services: MigrationServices): RunPlanner<
         const facet = FACET_STEP.exec(item.code)?.[1];
         const fixed = FIXED[item.code];
         const extra = services.extraSteps?.get(item.code);
-        const def = facet ? facetApplyStep(facet) : fixed ? fixed() : extra;
+        let def = facet ? facetApplyStep(facet) : fixed ? fixed() : extra;
+        if (def && (item.code === 'git.push-lfs' || item.code === 'git.push-refs'))
+          def = afterLift(def);
         if (def) defs.push(def);
       }
       defs.push(refreshAnalysisStep());

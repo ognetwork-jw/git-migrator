@@ -6,20 +6,10 @@ import { markAnalysesStale } from '@git-migrator/db';
 import { collectPrincipals, groupResolver } from '../analysis/context.ts';
 import { StepFailure } from '../run/errors.ts';
 import type { StepDefinition, StepResult } from '../run/types.ts';
-import {
-  checkScratchSpace,
-  classifySize,
-  estimateScratchNeed,
-  SCRATCH_INSUFFICIENT,
-} from '../scratch.ts';
-import { buildMirror } from './mirror.ts';
+import { classifySize } from '../scratch.ts';
+import { buildMirror, formatSize, precheckScratch, scanMirror } from './mirror.ts';
 import type { Side } from './services.ts';
-import {
-  connectSide,
-  effectiveMaxPushBytes,
-  type MigrationContext,
-  type MigrationServices,
-} from './services.ts';
+import { connectSide, type MigrationContext, type MigrationServices } from './services.ts';
 import { loadRunWorld, type RunWorld } from './world.ts';
 
 /** Run-origin blocker codes that `git.prepare` guards (LIF-049). */
@@ -27,7 +17,6 @@ export const PREPARE_BLOCKERS = ['git-refs.blob-too-large'] as const;
 
 const DEPENDENCY_FACETS = ['access-control', 'branch-rules', 'code-ownership'] as const;
 /** Most blobs listed in one run-origin blocker's params, so the row stays small. */
-const MAX_LISTED_BLOBS = 20;
 
 interface NewBlocker {
   readonly code: string;
@@ -154,31 +143,8 @@ export function gitPrepareStep(): StepDefinition<MigrationServices> {
     clearsBlockers: PREPARE_BLOCKERS,
     async run(ctx): Promise<StepResult> {
       const world = await loadRunWorld(ctx);
-      const { services } = ctx;
-      const need = estimateScratchNeed(
-        world.sourceRepository.sizeBytes,
-        world.sourceRepository.lfsBytes,
-      );
-      const space = await checkScratchSpace({
-        root: services.scratchRoot,
-        needBytes: need,
-        delaysSoFar: ctx.step.delays,
-        runId: ctx.run.id,
-      });
-      if (space.outcome === 'delay') {
-        await ctx.runLog('warn', 'Not enough scratch space; the Run waits and tries again', {
-          needBytes: need,
-          delays: ctx.step.delays + 1,
-        });
-        return { status: 'delay', delayMs: space.delayMs, reason: 'not enough scratch space' };
-      }
-      if (space.outcome === 'fail') {
-        throw new StepFailure(
-          SCRATCH_INSUFFICIENT,
-          'There is not enough scratch space for this repository; run it on a large worker',
-          { needBytes: need },
-        );
-      }
+      const stop = await precheckScratch(ctx, world);
+      if (stop) return stop;
 
       const source = await connectSide(ctx, world.sourceEndpointId, world.sourceType);
       const target = await connectSide(ctx, world.targetEndpointId, world.targetType);
@@ -186,43 +152,19 @@ export function gitPrepareStep(): StepDefinition<MigrationServices> {
       const { dir, sizeBytes } = await buildMirror(ctx, world, source);
       ctx.checkpoint();
 
-      const maxBlobBytes = target.connection.limits.maxBlobBytes;
-      const scan = await source.git.scanBlobs({
-        dir,
-        ...(maxBlobBytes !== undefined ? { maxBlobBytes } : {}),
-        signal: ctx.signal,
-      });
-      for (const warning of scan.warnings.slice(0, MAX_LISTED_BLOBS)) {
-        await ctx.runLog('warn', `${warning.code}: ${warning.params.path}`, { ...warning.params });
-      }
-
       const lfs = await source.git.listLfsObjects(dir, ctx.signal);
       const lfsBytes = lfs.reduce((sum, o) => sum + o.size, 0);
       await updateRepositorySize(ctx, world, lfsBytes);
-      await ctx.runLog('info', 'The source mirror is ready', {
-        mirrorBytes: sizeBytes,
-        lfsObjects: lfs.length,
-        lfsBytes,
-        blobsScanned: scan.scannedBlobs,
-      });
-
-      if (scan.blockers.length > 0) {
-        const listed = scan.blockers.slice(0, MAX_LISTED_BLOBS);
-        for (const blocker of listed) {
-          await ctx.findings.addBlocker({
-            code: blocker.code,
-            params: {
-              path: blocker.params.path,
-              size: formatSize(blocker.params.size),
-              limit: formatSize(blocker.params.limit).replace(' ', ''),
-            },
-          });
-        }
-        throw new StepFailure(
-          'git-refs.blob-too-large',
-          `${scan.blockers.length} blob(s) exceed the target limit of ${maxBlobBytes} bytes`,
-          { count: scan.blockers.length, largestBytes: scan.blockers[0]?.params.size },
-        );
+      let blobsScanned = 0;
+      try {
+        blobsScanned = (await scanMirror(ctx, source, target, dir)).blobsScanned;
+      } finally {
+        await ctx.runLog('info', 'The source mirror is ready', {
+          mirrorBytes: sizeBytes,
+          lfsObjects: lfs.length,
+          lfsBytes,
+          blobsScanned,
+        });
       }
       return { status: 'succeeded' };
     },
@@ -247,14 +189,4 @@ async function updateRepositorySize(
   });
 }
 
-/** `1.5 MiB`: the text the guidance parameters `size` and `limit` take. */
-export function formatSize(bytes: number): string {
-  const units = ['B', 'KiB', 'MiB', 'GiB', 'TiB'];
-  let value = bytes;
-  let unit = 0;
-  while (value >= 1024 && unit < units.length - 1) {
-    value /= 1024;
-    unit += 1;
-  }
-  return `${Number.isInteger(value) ? value : value.toFixed(1)} ${units[unit]}`;
-}
+export { formatSize };

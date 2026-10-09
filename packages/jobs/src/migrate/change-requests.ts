@@ -49,32 +49,38 @@ export function changeRequestsStep(): StepDefinition<MigrationServices> {
       await settleOpenIntents(ctx);
       const facetTarget = repositoryTarget(world, ref);
       let opened = 0;
+      // LIF-047 step 3: the request body links to the Migration. Noted here, from the database,
+      // so a Run resumed in another job or process has it.
+      ctx.services.links.note(ref.providerId, world.migrationId);
+      try {
+        // code-ownership: the target driver renders CODEOWNERS and opens the request itself.
+        const owners = world.facets.get('code-ownership');
+        const ownersDriver = target.connection.facets['code-ownership'];
+        if (owners && ownersDriver?.apply && hasEntries(owners.desired, 'owners')) {
+          const current = (await ownersDriver.read(target.driver, facetTarget)).data;
+          await applyWithLedger(ctx, {
+            facetKey: 'code-ownership',
+            driver: ownersDriver,
+            side: target,
+            target: facetTarget,
+            desired: owners.desired,
+            decisions: [...owners.decisions],
+            current,
+            origin: 'framework',
+            differences: [branchDifference('codeowners')],
+            umbrella: 'change-request-open',
+          });
+          opened += 1;
+        }
 
-      // code-ownership: the target driver renders CODEOWNERS and opens the request itself.
-      const owners = world.facets.get('code-ownership');
-      const ownersDriver = target.connection.facets['code-ownership'];
-      if (owners && ownersDriver?.apply && hasEntries(owners.desired, 'owners')) {
-        const current = (await ownersDriver.read(target.driver, facetTarget)).data;
-        await applyWithLedger(ctx, {
-          facetKey: 'code-ownership',
-          driver: ownersDriver,
-          side: target,
-          target: facetTarget,
-          desired: owners.desired,
-          decisions: [...owners.decisions],
-          current,
-          origin: 'framework',
-          differences: [branchDifference('codeowners')],
-          umbrella: 'change-request-open',
-        });
-        opened += 1;
-      }
-
-      // pipelines: the workflows are generated from the source file by the target adapter's
-      // delivery, which the registry reaches (ARC-012).
-      const pipelines = world.facets.get('pipelines');
-      if (pipelines && hasEntries(pipelines.desired, 'files')) {
-        opened += await openPipelines(ctx, world, target, facetTarget, ref);
+        // pipelines: the workflows are generated from the source file by the target adapter's
+        // delivery, which the registry reaches (ARC-012).
+        const pipelines = world.facets.get('pipelines');
+        if (pipelines && hasEntries(pipelines.desired, 'files')) {
+          opened += await openPipelines(ctx, world, target, facetTarget, ref);
+        }
+      } finally {
+        ctx.services.links.forget(ref.providerId);
       }
       return opened === 0
         ? { status: 'skipped', reason: 'no Change Request is needed' }

@@ -38,3 +38,14 @@ T-070 gave the executor a Step framework. The spec describes what each Step does
 ## Affected requirements
 
 LIF-031, LIF-040 to LIF-045, LIF-047 to LIF-049, JOB-015, JOB-041, FAC-DKY-002, FAC-BRR-002.
+
+## Round 2 (review of PR 48)
+
+- **Blocker clearing.** `target.ensure-repository` declares `clearsBlockers` for `target.exists-nonempty` and `target.owned-by-other-migration`, so a later Run that passes the Step (for example a force-adopt) clears them.
+- **Lost create response.** The adapter's create already never retries in process; a lost response is settled by the Step's retry (read back by name). `ledgerShowsCreation` also counts an unsettled `intended` create row of this Migration for the same name, across Steps and Runs, so a repository left behind by a failed or cancelled Run is the framework's own, not foreign. The lookup, create and claim of one target name are serialized by a session advisory lock (`target-name:<endpoint>:<name>`) on a connection of its own (released if the worker dies).
+- **Recovering lost Facet records.** The umbrella intent of a Facet apply stores the document the target held before (`before`). A resumed Step diffs it against a fresh read: a difference is ledgered as a real record (`resourceRef.kind = recovered-write`, undoable by its paths), no difference settles the intent `not_applied`. Records that were ledgered before the crash may be repeated in the recovered one; undo is idempotent. Change Request umbrellas are settled as before (the writer is idempotent and ledgers an existing branch as adopted).
+- **Migration link.** The Change Request Step notes the link from the database at its start and forgets it at its end; the map never outlives a Step.
+- **Rebuilt mirror.** A mirror rebuilt in a later job passes the disk precheck (with its reservation, delay and `scratch.insufficient`) and the blob scan before anything is pushed. `MirrorRegistry.sourceMirror(runId)` returns the Run's bare source mirror while it exists in this job (for parity, T-072).
+- **Inert records.** Git-push, LFS-push and default-branch records are `noop` (rollback deletes a created repository and leaves an adopted one's refs alone).
+- **No Analysis.** A repository Run without an Analysis plans one fatal Step `run.analysis_missing`.
+- **Failure after the lift.** When `git.push-lfs` or `git.push-refs` fails for good after step 3a lifted rules, a run-origin post task `branch-rules.protection-lifted` names them. Nothing re-applies them automatically. New agent-decided code, with guidance.

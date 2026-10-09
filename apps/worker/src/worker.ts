@@ -21,6 +21,7 @@ import {
   LeaderElection,
   MigrationLinks,
   type MigrationServices,
+  MirrorRegistry,
   maintenanceHandlers,
   noGitClient,
   type ParityDeps,
@@ -286,6 +287,8 @@ export async function startWorker(options: StartWorkerOptions): Promise<WorkerHa
       quota,
       scratchRoot: scratchRoot(env),
       links,
+      mirrors: new MirrorRegistry(),
+      pool: db.pool,
       logger: log,
       reanalyze: async (migrationId, signal) => {
         await runAnalysis(analysisDeps, migrationId, { shutdown: signal, pool: 'interactive' });

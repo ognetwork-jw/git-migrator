@@ -4,7 +4,9 @@
  * a confirmation after it, so a worker that dies in between leaves a record rollback can find
  * (ADR-0342). Decisions: docs/adr/0380-migration-steps.md.
  */
+
 import { isAdapterError, type RepositoryRecord } from '@git-migrator/adapter-sdk';
+import { parseFieldPath } from '@git-migrator/core';
 import { StepFailure } from '../run/errors.ts';
 import type { MutationLike, StepDefinition, StepResult } from '../run/types.ts';
 import { branchPatternMatches } from './glob.ts';
@@ -13,6 +15,7 @@ import {
   type MigrationContext,
   type MigrationServices,
   type Side,
+  withSessionLock,
 } from './services.ts';
 import { loadRunWorld, type RunWorld, repositoryRow, repositoryTarget, targetOf } from './world.ts';
 
@@ -93,7 +96,6 @@ async function claimTarget(
     },
     { migration: true },
   );
-  ctx.services.links.note(record.providerId, world.migrationId);
 }
 
 /** True when this Migration's ledger holds a creation of the repository by the framework. */
@@ -101,13 +103,17 @@ async function ledgerShowsCreation(
   ctx: MigrationContext,
   world: RunWorld,
   providerId: string,
+  name: string,
 ): Promise<boolean> {
+  // A recorded creation of this repository, or a create intent for its name that was never
+  // settled (a cancelled or crashed Run): the response may have been lost, so it is ours.
   const rows = await ctx.services.db.$queryRaw<{ n: number }[]>`
     SELECT count(*)::int AS n FROM app.mutation
     WHERE migration_id = ${world.migrationId} AND side = 'target' AND action = 'create'
-      AND state <> 'not_applied' AND resource_ref->>'kind' = ${REPOSITORY_KIND}
-      AND resource_ref->>'id' = ${providerId}
-      AND coalesce(resource_ref->>'adopted', 'false') <> 'true'`;
+      AND resource_ref->>'kind' = ${REPOSITORY_KIND}
+      AND coalesce(resource_ref->>'adopted', 'false') <> 'true'
+      AND ((state = 'recorded' AND resource_ref->>'id' = ${providerId})
+        OR (state = 'intended' AND lower(resource_ref->>'name') = ${name.toLowerCase()}))`;
   return (rows[0]?.n ?? 0) > 0;
 }
 
@@ -131,84 +137,95 @@ export function ensureRepositoryStep(): StepDefinition<MigrationServices> {
   return {
     key: 'target.ensure-repository',
     severity: 'fatal',
+    // LIF-049: the Step passed, so the blockers it raised are gone.
+    clearsBlockers: ['target.exists-nonempty', 'target.owned-by-other-migration'],
     async run(ctx): Promise<StepResult> {
       const world = await loadRunWorld(ctx);
-      const target = await connectSide(ctx, world.targetEndpointId, world.targetType);
-      const inventory = target.connection.inventory;
-      const write = { side: 'target', origin: 'desired' } as const;
-
-      // A resumed Step reconciles what a dead worker left open before it does anything (ADR-0342).
-      for (const intent of await ctx.ledger.openIntents()) {
-        if (intent.resourceRef.kind === REPOSITORY_KIND && intent.action === 'create') {
-          const found = await inventory.findRepository(world.targetNamespaceRef, world.plannedName);
-          if (found) await ctx.ledger.confirm(intent.id, 'applied', createdRecord(found));
-          else await ctx.ledger.confirm(intent.id, 'not_applied');
-        } else {
-          await ctx.ledger.confirm(intent.id, 'applied');
-        }
-      }
-
-      const row = await ctx.services.db.migration.findUniqueOrThrow({
-        where: { id: world.migrationId },
-        select: { targetCreatedByFramework: true, targetRepository: true },
-      });
-      let existing: RepositoryRecord | null = null;
-      let owned = false;
-      if (row.targetRepository) {
-        existing = await inventory.getRepository({
-          providerId: row.targetRepository.providerId,
-          namespace: world.targetNamespaceRef,
-          slug: row.targetRepository.slug,
-        });
-        owned = existing !== null;
-      }
-      existing ??= await inventory.findRepository(world.targetNamespaceRef, world.plannedName);
-
-      if (existing && owned) {
-        // Ours already (resync, or a resumed Run): refresh the row, change nothing on the target.
-        await claimOrBlock(ctx, world, existing, row.targetCreatedByFramework);
-        return { status: 'succeeded' };
-      }
-      if (existing) return adopt(ctx, world, target, existing, row.targetCreatedByFramework);
-
-      // Not there: create it. The intent comes first, so a lost response leaves a trace.
-      const settings = world.facets.get('repository-settings')?.desired as
-        | { visibility?: 'private' | 'public'; description?: string }
-        | undefined;
-      const spec = {
-        name: world.plannedName,
-        visibility: settings?.visibility ?? 'private',
-        description: settings?.description ?? '',
-      } as const;
-      const intentId = await ctx.ledger.intend(write, {
-        facetKey: null,
-        action: 'create',
-        resourceRef: { kind: REPOSITORY_KIND, name: spec.name },
-        paths: [],
-        before: null,
-        after: { name: spec.name, isPrivate: spec.visibility === 'private' },
-      });
-      let created: RepositoryRecord;
-      try {
-        created = await target.connection.repositories.create(world.targetNamespaceRef, spec);
-      } catch (error) {
-        if (isAdapterError(error) && error.code === 'conflict') {
-          // Taken between the lookup and the create. Whoever holds the name is judged as above.
-          await ctx.ledger.confirm(intentId, 'not_applied');
-          const racing = await inventory.findRepository(
-            world.targetNamespaceRef,
-            world.plannedName,
-          );
-          if (racing) return adopt(ctx, world, target, racing, row.targetCreatedByFramework);
-        }
-        // A timeout or a crash may have created it: the intent stays open for the retry to settle.
-        throw error;
-      }
-      await ctx.ledger.confirm(intentId, 'applied', createdRecord(created));
-      await claimOrBlock(ctx, world, created, true);
-      return { status: 'succeeded' };
+      // One Migration at a time looks up, creates and claims a given name on the target, so a
+      // repository created here cannot be claimed by another Migration before this one claims it.
+      return withSessionLock(
+        ctx.services.pool,
+        `target-name:${world.targetEndpointId}:${world.plannedName.toLowerCase()}`,
+        () => ensure(ctx, world),
+      );
     },
   };
+}
+
+async function ensure(ctx: MigrationContext, world: RunWorld): Promise<StepResult> {
+  {
+    const target = await connectSide(ctx, world.targetEndpointId, world.targetType);
+    const inventory = target.connection.inventory;
+    const write = { side: 'target', origin: 'desired' } as const;
+
+    // A resumed Step reconciles what a dead worker left open before it does anything (ADR-0342).
+    for (const intent of await ctx.ledger.openIntents()) {
+      if (intent.resourceRef.kind === REPOSITORY_KIND && intent.action === 'create') {
+        const found = await inventory.findRepository(world.targetNamespaceRef, world.plannedName);
+        if (found) await ctx.ledger.confirm(intent.id, 'applied', createdRecord(found));
+        else await ctx.ledger.confirm(intent.id, 'not_applied');
+      } else {
+        await ctx.ledger.confirm(intent.id, 'applied');
+      }
+    }
+
+    const row = await ctx.services.db.migration.findUniqueOrThrow({
+      where: { id: world.migrationId },
+      select: { targetCreatedByFramework: true, targetRepository: true },
+    });
+    let existing: RepositoryRecord | null = null;
+    let owned = false;
+    if (row.targetRepository) {
+      existing = await inventory.getRepository({
+        providerId: row.targetRepository.providerId,
+        namespace: world.targetNamespaceRef,
+        slug: row.targetRepository.slug,
+      });
+      owned = existing !== null;
+    }
+    existing ??= await inventory.findRepository(world.targetNamespaceRef, world.plannedName);
+
+    if (existing && owned) {
+      // Ours already (resync, or a resumed Run): refresh the row, change nothing on the target.
+      await claimOrBlock(ctx, world, existing, row.targetCreatedByFramework);
+      return { status: 'succeeded' };
+    }
+    if (existing) return adopt(ctx, world, target, existing, row.targetCreatedByFramework);
+
+    // Not there: create it. The intent comes first, so a lost response leaves a trace.
+    const settings = world.facets.get('repository-settings')?.desired as
+      | { visibility?: 'private' | 'public'; description?: string }
+      | undefined;
+    const spec = {
+      name: world.plannedName,
+      visibility: settings?.visibility ?? 'private',
+      description: settings?.description ?? '',
+    } as const;
+    const intentId = await ctx.ledger.intend(write, {
+      facetKey: null,
+      action: 'create',
+      resourceRef: { kind: REPOSITORY_KIND, name: spec.name },
+      paths: [],
+      before: null,
+      after: { name: spec.name, isPrivate: spec.visibility === 'private' },
+    });
+    let created: RepositoryRecord;
+    try {
+      created = await target.connection.repositories.create(world.targetNamespaceRef, spec);
+    } catch (error) {
+      if (isAdapterError(error) && error.code === 'conflict') {
+        // Taken between the lookup and the create. Whoever holds the name is judged as above.
+        await ctx.ledger.confirm(intentId, 'not_applied');
+        const racing = await inventory.findRepository(world.targetNamespaceRef, world.plannedName);
+        if (racing) return adopt(ctx, world, target, racing, row.targetCreatedByFramework);
+      }
+      // A timeout or a crash may have created it: the intent stays open for the retry to settle.
+      throw error;
+    }
+    await ctx.ledger.confirm(intentId, 'applied', createdRecord(created));
+    await claimOrBlock(ctx, world, created, true);
+    return { status: 'succeeded' };
+  }
 }
 
 async function claimOrBlock(
@@ -245,7 +262,8 @@ async function adopt(
     return blockAndFail(ctx, 'target.exists-nonempty', existing.name);
   }
   // A repository this Migration created in an earlier attempt whose claim was never saved is ours.
-  const createdByUs = createdBefore || (await ledgerShowsCreation(ctx, world, existing.providerId));
+  const createdByUs =
+    createdBefore || (await ledgerShowsCreation(ctx, world, existing.providerId, existing.name));
   await claimOrBlock(ctx, world, existing, createdByUs);
   if (!createdByUs) {
     await ctx.ledger.record({ side: 'target', origin: 'desired' }, [
@@ -281,7 +299,7 @@ const shortBranch = (name: string): string => name.replace(/^refs\/heads\//, '')
  * deletes, and the framework's branches when a Change Request will be opened. A rule matching
  * only branches that stay as they are is left alone.
  */
-function branchesAboutToChange(
+export function branchesAboutToChange(
   world: RunWorld,
   targetRefs: readonly { name: string; kind: string; target: string }[],
 ): string[] {
@@ -363,4 +381,34 @@ export function liftProtectionStep(): StepDefinition<MigrationServices> {
       return { status: 'succeeded' };
     },
   };
+}
+
+/**
+ * A fatal Step failed after step 3a lifted protection rules: the target is left without them
+ * until step 10 runs again. A run-origin post task names them (LIF-049); nothing re-applies them
+ * automatically (ADR-0380).
+ */
+export async function warnIfProtectionLifted(ctx: MigrationContext): Promise<void> {
+  const rows = await ctx.services.db.$queryRaw<{ paths: string[] }[]>`
+    SELECT paths FROM app.mutation
+    WHERE run_id = ${ctx.run.id} AND side = 'target' AND facet_key = 'branch-rules'
+      AND action = 'delete' AND state <> 'not_applied'
+      AND coalesce(resource_ref->>'noop', 'false') <> 'true'`;
+  const patterns = [
+    ...new Set(
+      rows.flatMap((r) =>
+        r.paths.flatMap((p) => {
+          const key = parseFieldPath(p)[0]?.key?.value;
+          return key === undefined ? [] : [key];
+        }),
+      ),
+    ),
+  ].sort();
+  if (patterns.length === 0) return;
+  await ctx.findings.addTask({
+    code: 'branch-rules.protection-lifted',
+    facetKey: 'branch-rules',
+    phase: 'post',
+    params: { paths: patterns },
+  });
 }

@@ -9,7 +9,7 @@ import { randomUUID } from 'node:crypto';
 import { mergeOverlay, OverlayError } from '@git-migrator/core';
 import { StepFailure } from '../run/errors.ts';
 import type { StepDefinition, StepResult } from '../run/types.ts';
-import { applyWithLedger, settleOpenIntents } from './facets.ts';
+import { applyWithLedger, recoverOpenIntents } from './facets.ts';
 import { connectSide, type MigrationContext, type MigrationServices } from './services.ts';
 import { loadRunWorld, type RunWorld, repositoryTarget, targetOf } from './world.ts';
 
@@ -53,7 +53,7 @@ export function overlaysStep(): StepDefinition<MigrationServices> {
       const target = await connectSide(ctx, world.targetEndpointId, world.targetType);
       const { ref } = await targetOf(ctx, world);
       const facetTarget = repositoryTarget(world, ref);
-      await settleOpenIntents(ctx);
+      await recoverOpenIntents(ctx, target, facetTarget);
 
       const byFacet = new Map<string, unknown[]>();
       for (const overlay of overlays) {

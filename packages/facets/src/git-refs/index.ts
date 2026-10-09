@@ -97,6 +97,7 @@ export const gitRefsDefinition: FacetDefinition<GitRefs> = {
   compare: (desired, actual) => compareGitRefs(desired, actual),
   findingCodes: {
     'git-refs.blob-too-large': { kind: 'blocker' },
+    'git-refs.push-too-large': { kind: 'blocker' },
     'git-refs.blob-large': { kind: 'warning' },
     'git-refs.hidden-refs-skipped': { kind: 'warning' },
     'git-refs.empty-repository': { kind: 'warning' },

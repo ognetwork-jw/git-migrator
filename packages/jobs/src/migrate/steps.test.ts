@@ -2,8 +2,10 @@ import { createTestDatabase, type TestDatabase } from '@git-migrator/db/testing'
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import { seedBasics } from '../world.fixture.ts';
 import { afterApply } from './facets.ts';
+import { MirrorRegistry } from './mirror.ts';
 import { createMigrationPlanner } from './plan.ts';
 import { chooseDefaultBranch } from './push.ts';
+import { branchesAboutToChange } from './repository.ts';
 import type { MigrationContext, MigrationServices } from './services.ts';
 import type { RunWorld } from './world.ts';
 
@@ -52,7 +54,7 @@ describe('[LIF-040] the Steps of a migration Run', () => {
     const input = {
       run: { analysisId: analysis.id },
       migration: { scope: 'repository' },
-    } as never;
+    } as unknown as Parameters<typeof planner.steps>[0];
     const keys = async () => (await planner.steps(input)).map((s) => `${s.key}:${s.severity}`);
     expect(await keys()).toEqual([
       'preflight:fatal',
@@ -145,5 +147,61 @@ describe('[LIF-049] findings that only the write shows', () => {
         params: { keyName: 'deploy-key', publicKey: 'ssh-ed25519 AAAA2' },
       },
     ]);
+  });
+});
+
+describe('[LIF-040] step 3a chooses what to lift', () => {
+  const world = (facets: Record<string, Record<string, unknown>>, adoptNonEmpty = false) =>
+    ({
+      adoptNonEmpty,
+      facets: new Map(
+        Object.entries(facets).map(([k, desired]) => [k, { desired, decisions: [] }]),
+      ),
+    }) as unknown as RunWorld;
+  const refs = [
+    { name: 'refs/heads/main', kind: 'branch', target: 'a' },
+    { name: 'refs/heads/dev', kind: 'branch', target: 'b' },
+    { name: 'refs/tags/v1', kind: 'tag', target: 'c' },
+  ];
+
+  it('[LIF-040] only branches the target lacks or has elsewhere count', () => {
+    const w = world({ 'git-refs': { refs } });
+    const have = [
+      { name: 'refs/heads/main', kind: 'branch', target: 'a' },
+      { name: 'refs/heads/dev', kind: 'branch', target: 'old' },
+    ];
+    expect(branchesAboutToChange(w, have)).toEqual(['dev']);
+  });
+
+  it('[LIF-040] target branches the reconcile deletes and the framework branches of a Change Request count', () => {
+    const have = [
+      { name: 'refs/heads/main', kind: 'branch', target: 'a' },
+      { name: 'refs/heads/dev', kind: 'branch', target: 'b' },
+      { name: 'refs/heads/stray', kind: 'branch', target: 'z' },
+    ];
+    expect(branchesAboutToChange(world({ 'git-refs': { refs } }), have)).toEqual([]);
+    expect(branchesAboutToChange(world({ 'git-refs': { refs } }, true), have)).toEqual(['stray']);
+    expect(
+      branchesAboutToChange(
+        world({ 'git-refs': { refs }, pipelines: { files: [{ path: 'x' }] } }),
+        have,
+      ),
+    ).toEqual(['git-migrator/ci', 'git-migrator/codeowners']);
+  });
+});
+
+describe('[JOB-015] the mirror registry', () => {
+  it('[JOB-015] offers a mirror only while its directory exists', async () => {
+    const { mkdtempSync, mkdirSync, rmSync } = await import('node:fs');
+    const { tmpdir } = await import('node:os');
+    const { join } = await import('node:path');
+    const root = mkdtempSync(join(tmpdir(), 'gm-mirrors-'));
+    mkdirSync(join(root, 'objects'));
+    const registry = new MirrorRegistry(2);
+    expect(await registry.sourceMirror('run-1')).toBeUndefined();
+    registry.note('run-1', root);
+    expect(await registry.sourceMirror('run-1')).toBe(root);
+    rmSync(root, { recursive: true, force: true });
+    expect(await registry.sourceMirror('run-1')).toBeUndefined();
   });
 });

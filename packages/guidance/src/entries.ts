@@ -138,6 +138,9 @@ export const GUIDANCE: Readonly<Record<FindingCode, Guidance>> = {
   'branch-rules.exemptions-not-applied': plain('branch-rules.exemptions-not-applied', [
     step('branch-rules.exemptions-not-applied', 1),
   ]),
+  'branch-rules.protection-lifted': plain('branch-rules.protection-lifted', [
+    step('branch-rules.protection-lifted', 1),
+  ]),
   'branch-rules.unknown-kind': plain('branch-rules.unknown-kind', [
     step('branch-rules.unknown-kind', 1),
   ]),
