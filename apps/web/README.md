@@ -59,3 +59,7 @@ Declared internal dependencies (ARC-012, checked by `pnpm lint`): @git-migrator/
 ## Bulk actions and Waves (UI-021, UI-024, T-088)
 
 `RepositoriesView` renders `BulkBar` (`src/repositories/bulk-bar.tsx`) for operators unless a `bulkBar` render prop replaces it: Analyze, Migrate ready (asks first), Assign to wave and Remove from wave over the ids selected across pages, through `POST /api/v1/migrations/bulk`. It sends ids only; the server re-checks everything, and the result lists each skipped repository with a reason string (`repositories.bulk.reason.*`). More than 200 selected rows disables the bar. `/waves` and `/waves/[id]` (`src/waves/`): create, edit and delete through the Model API (operators), progress and the status breakdown from `GET /api/v1/dashboard`, and the repository list filtered to the Wave. Decisions: ADR-0405 to ADR-0407.
+
+## Endpoints and the endpoint migration (UI-025, UI-026, T-086)
+
+`/endpoints` (`src/endpoints/endpoints-view.tsx`) lists the configured Endpoints (counts, last inventory) and Routes, read-only, with a link per Route to `/endpoints/routes/[routeId]/migration` (`endpoint-migration-view.tsx`): header with status, readiness, Analyze and Migrate or Run anyway (operators; the server re-checks readiness), and tabs for findings, Facet diffs (`GET /api/v1/migrations/{id}/diff`) and Runs. Both follow `list:repositories`, `list:migrations`, `migration:<id>` and `list:runs` through `useLiveTopics`. Decisions: ADR-0435.

@@ -1018,5 +1018,85 @@
       "cancel": "Keep"
     },
     "unknownHelp": "An entry with an unknown outcome may or may not have been invited. The person and the address stay held until you check the target organization and say which it was."
+  },
+  "endpoints": {
+    "title": "Endpoints",
+    "migrationTitle": "Endpoint migration",
+    "endpoints": {
+      "title": "Endpoints",
+      "empty": "No Endpoints are configured.",
+      "neverInventoried": "Not inventoried yet",
+      "column": {
+        "name": "Endpoint",
+        "provider": "Provider",
+        "url": "Address",
+        "status": "Status",
+        "repositories": "Repositories",
+        "identities": "People",
+        "groups": "Groups",
+        "inventoried": "Last inventory"
+      }
+    },
+    "routes": {
+      "title": "Routes",
+      "empty": "There are no Routes yet. Counts appear once a Route is configured and its endpoints have been inventoried.",
+      "direction": "{source} to {target} ({namespace})",
+      "none": "No endpoint migration yet.",
+      "open": "Open the endpoint migration",
+      "column": {
+        "route": "Route",
+        "direction": "Direction",
+        "repositories": "Repositories",
+        "endpointMigration": "Endpoint migration",
+        "actions": "Actions"
+      }
+    },
+    "migration": {
+      "route": "Route {source} to {target} ({namespace})",
+      "missing": "This Route has no endpoint migration yet. It appears after the next inventory.",
+      "stale": "Analysis is stale",
+      "hint": "Teams are created here, and repositories that need them are unblocked by their next Analysis. People are never invited from this page: invitations go through approved batches.",
+      "notAnalyzed": "This endpoint migration has not been analyzed yet.",
+      "noFindings": "No findings.",
+      "noFacets": "No Facets were read yet.",
+      "noRuns": "No Runs yet.",
+      "analyzeQueued": "Analysis queued.",
+      "runQueued": "Run queued.",
+      "action": {
+        "analyze": "Analyze",
+        "migrate": "Migrate",
+        "runAnyway": "Run anyway"
+      },
+      "tab": {
+        "overview": "Overview",
+        "facets": "Facets",
+        "runs": "Runs"
+      },
+      "kind": {
+        "blocker": "Blockers",
+        "pre_task": "Tasks before the Run",
+        "post_task": "Tasks after the Run",
+        "warning": "Warnings"
+      },
+      "finding": {
+        "code": "Code",
+        "facet": "Facet",
+        "paths": "Fields"
+      },
+      "facet": {
+        "source": "Source",
+        "desired": "Desired",
+        "target": "Target",
+        "parity": "Parity: {status}",
+        "expected": "{count, plural, one {# expected difference} other {# expected differences}}"
+      },
+      "run": {
+        "kind": "Kind",
+        "status": "Status",
+        "created": "Created",
+        "finished": "Finished",
+        "open": "Open"
+      }
+    }
   }
 }
