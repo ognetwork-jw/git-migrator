@@ -1,0 +1,32 @@
+# Configuration of the live e2e (TST-030, docs/e2e-setup.md).
+#
+# Copy this file to testing/e2e/live/config.e2e.yaml (git-ignored) and replace every <placeholder>.
+# Secrets are not here: store them under secretspec profile `e2e`.
+#
+# pnpm test:e2e:live reads the file through GM_CONFIG_FILE, which the script sets to the copy.
+environment: e2e
+
+# The web app the test starts. It must be http://127.0.0.1:<port>, a free port.
+publicUrl: http://127.0.0.1:3000
+
+auth:
+  # The live e2e signs in through the test form (Q66). Keep it true here.
+  testSignIn: { enabled: true }
+
+endpoints:
+  - id: bb-e2e
+    provider: bitbucket-cloud
+    options:
+      workspace: <bitbucket-workspace>      # for example gm-e2e
+  - id: gh-e2e
+    provider: github
+    options:
+      org: <github-organization>            # for example gm-e2e-org
+      appId: 0                              # the GitHub App ID
+      installationId: 0                     # the installation ID
+
+routes:
+  - id: r-e2e
+    source: bb-e2e
+    target: gh-e2e
+    targetNamespace: <github-organization>  # the same organization

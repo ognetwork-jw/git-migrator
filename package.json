@@ -23,12 +23,13 @@
     "test:integration": "vitest run --project integration",
     "test:e2e": "pnpm --filter @git-migrator/web build && pnpm --filter @git-migrator/e2e test:e2e",
     "test:visual": "pnpm --filter @git-migrator/web build && pnpm --filter @git-migrator/e2e test:visual",
-    "test:e2e:live": "node tools/not-implemented.ts test:e2e:live T-095",
-    "e2e:live:reset": "node tools/not-implemented.ts e2e:live:reset T-095",
+    "test:e2e:live": "pnpm --filter @git-migrator/web build && secretspec run --profile e2e -- pnpm --filter @git-migrator/e2e test:e2e:live",
+    "e2e:live:reset": "secretspec run --profile e2e -- pnpm --filter @git-migrator/e2e e2e:live:reset",
     "helm:check": "node tools/helm-check.ts",
     "spec:coverage": "node tools/spec-coverage.ts",
     "spec:must-test": "node tools/spec-coverage.ts --generate",
-    "check:packages": "turbo run lint typecheck test"
+    "check:packages": "turbo run lint typecheck test",
+    "test:e2e:live:dry": "pnpm --filter @git-migrator/web build && pnpm --filter @git-migrator/e2e test:e2e:live:dry"
   },
   "devDependencies": {
     "@biomejs/biome": "2.5.15",

@@ -25,6 +25,8 @@
     "testing/*/src/**/*.test.mts",
     "testing/integration/**/*.test.ts",
     "testing/e2e/**/*.spec.ts",
+    "testing/e2e/harness/*.ts",
+    "testing/e2e/live/*.ts",
     "testing/integration/**/*.test.tsx",
     "testing/e2e/**/*.spec.tsx",
     "testing/integration/**/*.test.mts",
