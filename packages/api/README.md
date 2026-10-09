@@ -19,7 +19,7 @@ Every request to `/api/model/*` and `/api/v1/*` resolves to an Actor (`resolvePr
 
 Errors are RFC 9457 `application/problem+json` with `type` `https://git-migrator.invalid/problems/<code>` (`problem.ts`); handlers `throw new ProblemError(code)`. The UI maps `code` to `problem.<code>` in `apps/web/messages/en.json`. List endpoints use `PageQuerySchema` and `toPage` (cursor, `limit` at most 200).
 
-The typed client of the custom endpoints is `createApiClient` from `@git-migrator/api/client` (`hc<AppType>`). Endpoints in this task: `GET /me`, `POST /actors`, `PATCH /actors/{id}`, `POST /actors/{id}/api-keys`, `DELETE /api-keys/{id}`; later tasks add the rest of API-020 to `createV1`. Custom endpoints check `can(actor, capability)` from `@git-migrator/auth` and write their `AuditEvent` in the mutation's transaction.
+The typed client of the custom endpoints is `createApiClient` from `@git-migrator/api/client` (`hc<AppType>`). Endpoints so far: `GET /me`, `POST /actors`, `PATCH /actors/{id}`, `POST /actors/{id}/api-keys`, `DELETE /api-keys/{id}` (T-021), `GET /events` (T-022) and the batch 1 endpoints below (T-062); later tasks add the rest of API-020. Automation users: see `docs/api-usage.md`. Custom endpoints check `can(actor, capability)` from `@git-migrator/auth` and write their `AuditEvent` in the mutation's transaction.
 
 ## Error behaviour (ADR-0202)
 
@@ -30,3 +30,12 @@ Every 4xx and 5xx under `/api/v1` is `application/problem+json`: handlers throw 
 `GET /api/v1/events?topics=migration:<id>,run:<id>,list:migrations,quota` streams `text/event-stream`. `createEventHub` (`src/events.ts`) fans the events of the process's one `LISTEN gm_events` connection (`createEventListener` in `@git-migrator/db`) out to the streams: each stream keeps at most 64 queued frames (a burst past that becomes one `resync`; a client that reads nothing for 60 s is dropped), ends after about 10 minutes (+-20%) so the client is authenticated again, and is cleaned up on disconnect. Heartbeats stop while the listener is down. At most 16 streams per Actor (`owner`) and 2,000 per process. `run.log` is coalesced to 4 per second per Run. Frames: `event: gm` (`{ type, ids, at, topics }`, only the topics the client named), `event: heartbeat` (with a `: heartbeat` comment, every 15 s), `event: resync` (events may have been missed; refetch all). Either limit answers 429 `too_many_streams`. `createApiApp({ events })` requires the hub; the process owner builds it and closes it on shutdown. Disabling an Actor or revoking a key calls `events.closeOwner(actorId)`.
 
 Publish with `publishEvent(pool, event)` or, inside a ZenStack transaction, `publishEventIn(tx, event)` (both from `@git-migrator/db`); the pure event types and `topicsForEvent` are in `@git-migrator/core`.
+
+## Batch 1: reads and commands (T-062, ADR-0330 to ADR-0332)
+
+`src/batch1.ts` (`createBatch1`, mounted by `createV1` with `.route`): `POST /inventory/refresh` and `POST /migrations/{id}/analyze` (operator; enqueue and answer 202, de-duplicated by `inventory-<endpointId>` and `analysis-<migrationId>`, audited), `GET /dashboard`, `GET /quota`, `GET /capability-matrix`, `GET /migrations/{id}/diff` (viewer) and `POST /routes/{id}/naming/preview` (operator; writes nothing).
+
+- `ApiDeps.services` carries the collaborators these need: `jobs` (a producer-only `JobRuntime`), `quota` and `registry`. The web process builds them in `apps/web/src/server/api.ts`. An endpoint whose service is missing answers 503 `not_ready`.
+- `src/redact.ts` redacts Facet data for the diff: strings under sensitive keys, webhook URLs and URL credentials; booleans, numbers and secret names stay (ADR-0331).
+- The quota ETA is `backlog x avgCallsPerAnalysis / backgroundRatePerSecond`; the backlog is the Endpoint's queued background analyses (ADR-0332).
+- The naming preview takes the target's name limits from `registry.repositoryNameLimits`, so it needs no connection.

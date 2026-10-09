@@ -7,7 +7,10 @@ import {
   createEventListener,
   pgListenClient,
 } from '@git-migrator/db';
+import { JobRuntime } from '@git-migrator/jobs';
 import { createLogger } from '@git-migrator/observability';
+import { QuotaService } from '@git-migrator/quota';
+import { createBuiltinRegistry } from '@git-migrator/registry';
 
 type Env = Readonly<Record<string, string | undefined>>;
 
@@ -59,16 +62,54 @@ export function buildApiRuntime(env: Env = process.env): ApiRuntime {
     }),
     onSlowClient: () => logger.warn('dropped a slow event stream client'),
   });
-  const app = createApiApp({ db, auth, publicUrl: config.publicUrl, logger, events });
+  // Producer side of the job queues (the web process starts no Workers) and the shared services
+  // of the batch 1 endpoints (ADR-0330).
+  const jobs = new JobRuntime({
+    connectionString,
+    log: logger,
+    workerCount: 0,
+    applicationName: 'git-migrator-web',
+    // An unreachable queue database fails a request in seconds (503), not at the HTTP timeout.
+    connectionTimeoutMillis: 5_000,
+  });
+  const quota = new QuotaService({
+    pool: db.pool,
+    tuning: {
+      safetyFactor: config.quota.safetyFactor,
+      backgroundShare: config.quota.backgroundShare,
+    },
+  });
+  const registry = createBuiltinRegistry();
+  const app = createApiApp({
+    db,
+    auth,
+    publicUrl: config.publicUrl,
+    logger,
+    events,
+    services: { jobs, quota, registry },
+  });
   return {
     app,
     config,
-    close: async () => {
-      await events.close();
-      await auth.close();
-      await db.close();
-    },
+    close: () =>
+      closeAll([() => events.close(), () => jobs.close(), () => auth.close(), () => db.close()]),
   };
+}
+
+/**
+ * Runs every close step in order, even when one throws (a failed step must not leak the pools after
+ * it), then rethrows the first error.
+ */
+export async function closeAll(steps: readonly (() => unknown)[]): Promise<void> {
+  const errors: unknown[] = [];
+  for (const step of steps) {
+    try {
+      await step();
+    } catch (error) {
+      errors.push(error);
+    }
+  }
+  if (errors.length > 0) throw errors[0];
 }
 
 let runtime: ApiRuntime | undefined;

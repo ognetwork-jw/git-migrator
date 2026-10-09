@@ -622,8 +622,15 @@ describe('[API-001] OpenAPI document and typed client', () => {
       '/actors/{id}',
       '/actors/{id}/api-keys',
       '/api-keys/{id}',
+      '/capability-matrix',
+      '/dashboard',
       '/events',
+      '/inventory/refresh',
       '/me',
+      '/migrations/{id}/analyze',
+      '/migrations/{id}/diff',
+      '/quota',
+      '/routes/{id}/naming/preview',
     ]);
     expect(Object.keys(doc.components.securitySchemes)).toEqual(['bearerAuth', 'sessionCookie']);
     expect(doc.components.schemas.Problem).toBeDefined();

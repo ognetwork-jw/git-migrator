@@ -220,9 +220,18 @@ importers:
       '@git-migrator/db':
         specifier: workspace:*
         version: link:../../packages/db
+      '@git-migrator/jobs':
+        specifier: workspace:*
+        version: link:../../packages/jobs
       '@git-migrator/observability':
         specifier: workspace:*
         version: link:../../packages/observability
+      '@git-migrator/quota':
+        specifier: workspace:*
+        version: link:../../packages/quota
+      '@git-migrator/registry':
+        specifier: workspace:*
+        version: link:../../packages/registry
       '@hono/node-server':
         specifier: 2.1.4
         version: 2.1.4(hono@4.13.13)

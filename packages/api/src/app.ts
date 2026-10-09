@@ -16,6 +16,7 @@ import {
   problemCodeForStatus,
   problemResponse,
 } from './problem.ts';
+import type { ApiServices } from './services.ts';
 import { type ApiEnv, createV1 } from './v1.ts';
 
 /** Largest request body `/api/model/*` and `/api/v1/*` read (the auth routes have their own cap). */
@@ -34,6 +35,11 @@ export interface ApiDeps {
    * on shutdown; the app never owns a listener connection.
    */
   readonly events: EventHub;
+  /**
+   * Job producer, quota service and registry (ADR-0330). An endpoint whose service is missing
+   * answers 503 `not_ready`.
+   */
+  readonly services?: Partial<ApiServices>;
   /** Extra readiness check, run after `select 1` (for example "configuration loaded"). */
   readonly ready?: () => boolean | Promise<boolean>;
 }
@@ -67,6 +73,39 @@ export function isRetryableConflict(error: unknown): boolean {
   for (let depth = 0; depth < 6 && typeof current === 'object' && current !== null; depth++) {
     const e = current as Record<string, unknown>;
     if (codes.has(String(e.dbErrorCode)) || codes.has(String(e.code))) return true;
+    current = e.cause;
+  }
+  return false;
+}
+
+const UNAVAILABLE_CODES = new Set([
+  'ECONNREFUSED',
+  'ECONNRESET',
+  'ETIMEDOUT',
+  'EPIPE',
+  '57P01',
+  '57P02',
+  '57P03',
+  '08000',
+  '08001',
+  '08003',
+  '08006',
+]);
+
+/** True for connection-level database failures (refused, reset, timed out, shut down), on the error or its causes. */
+export function isUnavailable(error: unknown): boolean {
+  let current: unknown = error;
+  for (let depth = 0; depth < 6 && typeof current === 'object' && current !== null; depth++) {
+    const e = current as Record<string, unknown>;
+    if (UNAVAILABLE_CODES.has(String(e.code)) || UNAVAILABLE_CODES.has(String(e.dbErrorCode))) {
+      return true;
+    }
+    if (
+      typeof e.message === 'string' &&
+      /timeout exceeded when trying to connect|Connection terminated/i.test(e.message)
+    ) {
+      return true;
+    }
     current = e.cause;
   }
   return false;
@@ -208,7 +247,13 @@ export function createApiApp(deps: ApiDeps) {
     return response;
   });
 
-  const v1 = createV1({ db: deps.db, auth: deps.auth, events: deps.events });
+  const v1 = createV1({
+    db: deps.db,
+    auth: deps.auth,
+    events: deps.events,
+    ...(deps.services ? { services: deps.services } : {}),
+    onFault: (error) => deps.logger?.error(safeErrorFields(error), 'queue or database call failed'),
+  });
   v1.doc31('/openapi.json', {
     openapi: '3.1.0',
     info: { title: API_TITLE, version: '1.0.0' },
@@ -235,6 +280,11 @@ export function createApiApp(deps: ApiDeps) {
     }
     // A serialization failure or deadlock that reaches here is a conflict the caller can retry.
     if (isRetryableConflict(error)) return problemResponse('conflict');
+    // A database that cannot be reached is a 503 the caller can retry, not a server fault.
+    if (isUnavailable(error)) {
+      deps.logger?.error(safeErrorFields(error), 'database unavailable');
+      return problemResponse('not_ready', { headers: { 'retry-after': '5' } });
+    }
     // Safe fields only: the message may carry request data.
     deps.logger?.error(safeErrorFields(error), 'unhandled error in the API');
     return problemResponse('internal_error');

@@ -9,10 +9,12 @@ import {
 import type { Actor, DbHandle } from '@git-migrator/db';
 import { createRoute, OpenAPIHono, z } from '@hono/zod-openapi';
 import type { Context } from 'hono';
+import { createBatch1 } from './batch1.ts';
 import type { EventHub } from './events.ts';
 import { eventsHandler, eventsRoute } from './events-route.ts';
 import type { Principal } from './principal.ts';
 import { ProblemError, ProblemSchema } from './problem.ts';
+import type { ApiServices } from './services.ts';
 
 export interface ApiEnv {
   Variables: { principal: Principal };
@@ -23,6 +25,10 @@ export interface V1Deps {
   readonly auth: AuthService;
   /** Fan-out for `GET /events` (JOB-060). */
   readonly events: EventHub;
+  /** Job producer, quota and registry for the batch 1 endpoints (ADR-0330). */
+  readonly services?: Partial<ApiServices>;
+  /** Told about a queue or database fault before it becomes a 503. */
+  readonly onFault?: (error: unknown) => void;
 }
 
 /** `pg_advisory_xact_lock` key that serializes Actor changes (any fixed bigint not used elsewhere). */
@@ -311,5 +317,14 @@ export function createV1(deps: V1Deps) {
       // The Actor's open event streams may belong to the revoked key: end them, clients reconnect.
       if (key) deps.events.closeOwner(key.actorId);
       return c.body(null, 204);
-    });
+    })
+    .route(
+      '/',
+      createBatch1({
+        db: deps.db,
+        services: deps.services ?? {},
+        ...(deps.onFault ? { onFault: deps.onFault } : {}),
+        validationHook,
+      }),
+    );
 }

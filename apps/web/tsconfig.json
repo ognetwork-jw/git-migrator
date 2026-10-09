@@ -32,6 +32,15 @@
       "path": "../../packages/observability"
     },
     {
+      "path": "../../packages/jobs"
+    },
+    {
+      "path": "../../packages/quota"
+    },
+    {
+      "path": "../../packages/registry"
+    },
+    {
       "path": "../../packages/db"
     }
   ]

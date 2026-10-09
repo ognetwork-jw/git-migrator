@@ -5,7 +5,7 @@ import { PROBLEMS } from '@git-migrator/api';
 import { migrateAuthSchema } from '@git-migrator/auth';
 import { createTestDatabase, type TestDatabase } from '@git-migrator/db/testing';
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
-import { buildApiRuntime } from './api.ts';
+import { buildApiRuntime, closeAll } from './api.ts';
 
 const messages = JSON.parse(
   readFileSync(new URL('../../messages/en.json', import.meta.url), 'utf8'),
@@ -87,5 +87,22 @@ describe('[API-011] problem messages for the UI', () => {
   it('[API-011] every problem code has a problem.<code> text in en.json, and none is unused', () => {
     expect(Object.keys(messages.problem).sort()).toEqual(Object.keys(PROBLEMS).sort());
     for (const text of Object.values(messages.problem)) expect(text.length).toBeGreaterThan(10);
+  });
+
+  it('[API-001] closeAll runs every step even when one throws, then rethrows the first error', async () => {
+    const closed: string[] = [];
+    const step = (name: string, fail?: Error) => () => {
+      closed.push(name);
+      if (fail) throw fail;
+    };
+    await expect(
+      closeAll([
+        step('events'),
+        step('jobs', new Error('first')),
+        step('auth', new Error('second')),
+        step('db'),
+      ]),
+    ).rejects.toThrow('first');
+    expect(closed).toEqual(['events', 'jobs', 'auth', 'db']);
   });
 });
