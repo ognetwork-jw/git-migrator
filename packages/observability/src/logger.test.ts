@@ -391,3 +391,56 @@ describe('logger trace correlation (DEP-050)', () => {
     expect(out.records()[0]).not.toHaveProperty('traceId');
   });
 });
+
+describe('logger bypasses (DEP-050, T-004 follow-ups)', () => {
+  it('[DEP-050] scrubs a child msgPrefix, also when the secret is split between prefix and message', () => {
+    const out = sink();
+    const log = createLogger({ destination: out.destination });
+    log.child({}, { msgPrefix: 'token=LEAKPFX1 ' }).info('pushed');
+    log.child({}, { msgPrefix: 'password=' }).info('LEAKPFX2');
+    log.child({}, { msgPrefix: 'pass' }).child({}, { msgPrefix: 'word=' }).warn('LEAKPFX3');
+    log.child({}, { msgPrefix: 'token=' }).error(new Error('abc123'));
+    expect(out.text()).not.toMatch(/LEAKPFX/);
+    expect(out.records().map((record) => record.msg)).toEqual([
+      `token=${REDACTED}`,
+      `password=${REDACTED}`,
+      `password=${REDACTED}`,
+      `token=${REDACTED}`,
+    ]);
+  });
+
+  it('[DEP-050] keeps an ordinary msgPrefix and reports it', () => {
+    const out = sink();
+    const child = createLogger({ destination: out.destination })
+      .child({}, { msgPrefix: '[run] ' })
+      .child({}, { msgPrefix: '[push] ' });
+    child.info('done');
+    expect(out.records()[0]?.msg).toBe('[run] [push] done');
+    expect(child.msgPrefix).toBe('[run] [push] ');
+  });
+
+  it('[DEP-050] scrubs setBindings on the root logger, a child and a grandchild', () => {
+    const out = sink();
+    const root = createLogger({ destination: out.destination });
+    const child = root.child({ component: 'c' });
+    const grandchild = child.child({ step: 's' });
+    root.setBindings({ token: 'LEAKSB1' });
+    child.setBindings({ note: 'password=LEAKSB2', nested: { secret: 'LEAKSB3' } });
+    grandchild.setBindings({ remote: 'https://bob:LEAKSB4@host/x.git' });
+    root.info('a');
+    child.info('b');
+    grandchild.info('c');
+    expect(out.text()).not.toMatch(/LEAKSB/);
+    expect(out.records()[1]).toMatchObject({ component: 'c', note: `password=${REDACTED}` });
+  });
+
+  it('[DEP-050] logs a 1 MB error made of a command-line user and colons within the time budget', () => {
+    for (const head of ['-u "', "-u '", '--user=']) {
+      const out = sink();
+      const log = createLogger({ destination: out.destination });
+      const started = performance.now();
+      log.error(new Error(head + ':'.repeat(1024 * 1024)));
+      expect(performance.now() - started, head).toBeLessThan(1000);
+    }
+  });
+});

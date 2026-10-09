@@ -17,6 +17,11 @@ export interface LoggerOptions {
 }
 
 type PinoChild = (this: unknown, bindings: Bindings, childOptions?: unknown) => Logger;
+type ChildOptions = { readonly msgPrefix?: unknown } & Record<string, unknown>;
+
+/** Where a child logger keeps its message prefix, which is scrubbed with each message. */
+const PREFIX = Symbol('git-migrator.msgPrefix');
+type PrefixedLogger = Logger & { [PREFIX]?: string };
 
 /** Trace fields added to every line while a span is active (DEP-050: `traceId`). */
 function traceFields(): Record<string, string> {
@@ -28,18 +33,20 @@ function traceFields(): Record<string, string> {
  * Turns the arguments of one log call into values that contain no secrets. The first string is the
  * message and is scrubbed. Later strings are interpolation or extra text and are replaced
  * entirely, because a positional value has no key to judge it by (ADR-0052). Errors are sent under
- * `err`; when the call has no message, the error message becomes the message.
+ * `err`; when the call has no message, the error message becomes the message. A child logger's
+ * `msgPrefix` is joined to the message before it is scrubbed, so a secret split between the prefix
+ * and the message is still found.
  */
-function redactArguments(args: unknown[]): unknown[] {
+function redactArguments(args: unknown[], prefix = ''): unknown[] {
   const out: unknown[] = [];
   let errorMessage: string | undefined;
   let hasMessage = false;
   for (const arg of args) {
     if (arg instanceof Error) {
       out.push({ err: redactValue(arg) });
-      errorMessage ??= redactString(arg.message);
+      errorMessage ??= redactString(prefix + arg.message);
     } else if (typeof arg === 'string') {
-      out.push(hasMessage ? REDACTED : redactString(arg));
+      out.push(hasMessage ? REDACTED : redactString(prefix + arg));
       hasMessage = true;
     } else {
       out.push(redactValue(arg));
@@ -71,7 +78,8 @@ export function createLogger(options: LoggerOptions = {}): Logger {
       serializers: { err: (value: unknown) => value },
       hooks: {
         logMethod(args, method) {
-          method.apply(this, redactArguments(args) as Parameters<typeof method>);
+          const prefix = (this as PrefixedLogger)[PREFIX];
+          method.apply(this, redactArguments(args, prefix) as Parameters<typeof method>);
         },
       },
       mixin: traceFields,
@@ -79,16 +87,33 @@ export function createLogger(options: LoggerOptions = {}): Logger {
     },
     destination,
   );
-  // Pino resets its bindings formatter for children, so child bindings are scrubbed here. `this` is
-  // the logger that `child` was called on, so grandchildren are covered too.
+  // Pino resets its bindings formatter for children, so child bindings are scrubbed here. Children
+  // are created with `Object.create(parent)`, so these wrappers are inherited, and `this` is the
+  // logger they are called on: grandchildren are covered too.
   const pinoChild: unknown = logger.child;
   const scrubbedChild = function scrubbedChild(
-    this: unknown,
+    this: Logger,
     bindings: Bindings,
-    childOptions?: unknown,
+    childOptions?: ChildOptions,
   ): Logger {
-    return (pinoChild as PinoChild).call(this, redactValue(bindings) as Bindings, childOptions);
+    // pino would prepend `msgPrefix` after the hooks ran, unscrubbed. The prefix is kept here
+    // instead and joined to the message before the message is scrubbed (ADR-0052).
+    const { msgPrefix, ...options } = childOptions ?? {};
+    const child = (pinoChild as PinoChild).call(this, redactValue(bindings) as Bindings, options);
+    if (typeof msgPrefix === 'string') {
+      (child as PrefixedLogger)[PREFIX] = ((this as PrefixedLogger)[PREFIX] ?? '') + msgPrefix;
+    }
+    return child;
   };
   logger.child = scrubbedChild as unknown as typeof logger.child;
+  const pinoSetBindings = logger.setBindings;
+  logger.setBindings = function scrubbedSetBindings(this: Logger, bindings: Bindings): void {
+    pinoSetBindings.call(this, redactValue(bindings) as Bindings);
+  };
+  Object.defineProperty(logger, 'msgPrefix', {
+    get(this: PrefixedLogger) {
+      return this[PREFIX];
+    },
+  });
   return logger;
 }
