@@ -205,6 +205,31 @@ describe('[LIF-005] readiness when the Run starts', () => {
     expect((await h.migration(world.migrationId)).status).toBe('analyzed');
   });
 
+  it('[LIF-043] a force-adopt Run starts on a Migration blocked only by target.exists-nonempty, and no other blocker', async () => {
+    const h = harness();
+    h.registry.register('migrate', { steps: () => [tracked('preflight')] });
+    const adopt = async (codes: string[]) => {
+      const { world, runId } = await h.queuedRun();
+      await h.db.run.update({ where: { id: runId }, data: { options: { adoptNonEmpty: true } } });
+      await h.db.migration.update({
+        where: { id: world.migrationId },
+        data: {
+          readiness: 'blocked',
+          blockerCodes: codes,
+          readinessCounts: { blockers: codes.length, preTasks: 0, postTasks: 0, warnings: 0 },
+        },
+      });
+      return runId;
+    };
+    expect(await h.execute(await adopt(['target.exists-nonempty']))).toEqual({
+      outcome: 'finished',
+      status: 'succeeded',
+    });
+    const refused = await adopt(['target.exists-nonempty', 'change-requests.open']);
+    expect(await h.execute(refused)).toEqual({ outcome: 'finished', status: 'cancelled' });
+    expect((await h.run(refused)).error).toMatchObject({ code: 'readiness_changed' });
+  });
+
   it('[LIF-005] lets a run_anyway Run start on needs_attention', async () => {
     const h = harness();
     h.registry.register('run_anyway', { steps: () => [tracked('preflight')] });

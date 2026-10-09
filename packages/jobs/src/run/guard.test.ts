@@ -3,7 +3,13 @@ import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import { reapRuns } from '../reaper.ts';
 import { seedBasics } from '../world.fixture.ts';
 import { finishRun, settleOrphanedMigrations } from './finish.ts';
-import { allowedReadiness, createRun, RunGuardError, requestRunCancel } from './guard.ts';
+import {
+  allowedReadiness,
+  createRun,
+  effectiveReadiness,
+  RunGuardError,
+  requestRunCancel,
+} from './guard.ts';
 import { FIXED_NOW, Harness, silentLog, step } from './harness.fixture.ts';
 import { checkRunOptions } from './options.ts';
 import { requeueOrphanedQueuedRuns } from './orphans.ts';
@@ -383,6 +389,52 @@ describe('[LIF-043] Run options', () => {
     const created = await createRun(db(), { ...base, confirm: 'acme/plat-r' });
     const run = await db().run.findUniqueOrThrow({ where: { id: created.runId } });
     expect(run.options).toEqual({ adoptNonEmpty: true });
+  });
+
+  it('[LIF-031] a confirmed force-adopt is judged by the blockers it does not override, so only target.exists-nonempty is waived', async () => {
+    const adopt = { adoptNonEmpty: true };
+    const judge = (blockerCodes: string[], preTasks: number, options: object = adopt) =>
+      effectiveReadiness({
+        readiness: 'blocked',
+        blockerCodes,
+        readinessCounts: { blockers: blockerCodes.length, preTasks },
+        options,
+      });
+    expect(judge(['target.exists-nonempty'], 0)).toBe('ready');
+    expect(judge(['target.exists-nonempty'], 2)).toBe('needs_attention');
+    expect(judge(['target.exists-nonempty', 'change-requests.open'], 0)).toBe('blocked');
+    expect(judge(['target.exists-nonempty'], 0, {})).toBe('blocked');
+    expect(judge([], 0)).toBe('blocked');
+    expect(
+      effectiveReadiness({
+        readiness: 'ready',
+        blockerCodes: [],
+        readinessCounts: null,
+        options: adopt,
+      }),
+    ).toBe('ready');
+
+    const world = await readyMigration('blocked');
+    await db().migration.update({
+      where: { id: world.migrationId },
+      data: {
+        plannedTargetName: 'plat-r',
+        blockerCodes: ['target.exists-nonempty'],
+        readinessCounts: { blockers: 1, preTasks: 0, postTasks: 0, warnings: 0 },
+      },
+    });
+    const base = {
+      migrationId: world.migrationId,
+      kind: 'migrate' as const,
+      triggeredById: world.actorId,
+    };
+    await expect(createRun(db(), base)).rejects.toMatchObject({ code: 'run.readiness_required' });
+    const created = await createRun(db(), {
+      ...base,
+      options: adopt,
+      confirm: 'acme/plat-r',
+    });
+    expect(created.runId).toBeTruthy();
   });
 
   it('[LIF-043] refuses unknown options and adoptNonEmpty on kinds that push no refs', () => {

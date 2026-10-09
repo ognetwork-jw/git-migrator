@@ -10,7 +10,7 @@ import type { Db } from '@git-migrator/db';
 import type { Logger } from '@git-migrator/observability';
 import type pg from 'pg';
 import { recordAnalysisFailure } from '../analysis/analysis.ts';
-import type { RunAnalysisOutcome } from '../analysis/fresh.ts';
+import { type RunAnalysisOutcome, readinessWorsened } from '../analysis/fresh.ts';
 import type { RunRouting } from '../queues.ts';
 import type { ReaperMetrics } from '../reaper.ts';
 import {
@@ -30,7 +30,7 @@ import {
 } from './errors.ts';
 import { addRunBlocker, addRunTask, clearRunBlockers } from './findings.ts';
 import { type FinalRunStatus, finishRun } from './finish.ts';
-import { allowedReadiness } from './guard.ts';
+import { allowedReadiness, effectiveReadiness } from './guard.ts';
 import { confirmLedger, openIntentsOf, writeLedger } from './ledger.ts';
 import { fenced, ledgerTransaction, publish, publishMigration, publishRun } from './store.ts';
 import {
@@ -358,7 +358,23 @@ class Driver<S> {
         reason: outcome.result.skipped,
       });
     }
-    if (outcome.worsened) {
+    // LIF-005 and LIF-022 judge the readiness a Run is started on. A confirmed force-adopt
+    // (`adoptNonEmpty`) is not refused by the blocker it overrides (ADR-0380).
+    const current = await this.#deps.db.migration.findUniqueOrThrow({
+      where: { id: this.#migrationId },
+      select: { readiness: true, blockerCodes: true, readinessCounts: true },
+    });
+    const effective = effectiveReadiness({
+      readiness: current.readiness ?? null,
+      blockerCodes: current.blockerCodes,
+      readinessCounts: current.readinessCounts,
+      options: this.#run.options,
+    });
+    const worsened =
+      this.#run.options.adoptNonEmpty === true
+        ? readinessWorsened(outcome.before, effective)
+        : outcome.worsened;
+    if (worsened) {
       // Nothing ran: the Run is cancelled, so the Migration returns to its saved status and the
       // UI shows the new findings (LIF-022, ADR-0343).
       return this.#finish('cancelled', {
@@ -369,18 +385,12 @@ class Driver<S> {
     }
     // LIF-005 again, now that the Run starts: the Migration may have changed while it was queued.
     const allowed = allowedReadiness(this.#run.kind);
-    if (allowed) {
-      const current = await this.#deps.db.migration.findUniqueOrThrow({
-        where: { id: this.#migrationId },
-        select: { readiness: true },
+    if (allowed && !allowed.includes(effective)) {
+      return this.#finish('cancelled', {
+        code: 'readiness_changed',
+        before: outcome.before,
+        after: current.readiness ?? null,
       });
-      if (!allowed.includes(current.readiness ?? null)) {
-        return this.#finish('cancelled', {
-          code: 'readiness_changed',
-          before: outcome.before,
-          after: current.readiness ?? null,
-        });
-      }
     }
     await this.#fence(async (tx) => {
       await tx.$executeRaw`

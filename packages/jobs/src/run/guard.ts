@@ -65,6 +65,34 @@ export function allowedReadiness(kind: RunKind): readonly (Readiness | null)[] |
   }
 }
 
+/**
+ * Blockers the force-adopt option overrides (LIF-031, LIF-043): a non-empty target that was not
+ * created by this Migration. The typed confirmation of its name is what makes the Run safe to start.
+ */
+export const ADOPTABLE_BLOCKERS: readonly string[] = ['target.exists-nonempty'];
+
+/**
+ * The readiness LIF-005 judges a Run by. With `adoptNonEmpty`, a Migration whose only blockers are
+ * adoptable (`ADOPTABLE_BLOCKERS`) is judged by its open pre tasks alone, so a confirmed force-adopt
+ * is not refused by the very blocker it overrides (ADR-0380). Every other blocker still blocks.
+ */
+export function effectiveReadiness(input: {
+  readonly readiness: Readiness | null;
+  readonly blockerCodes: readonly string[];
+  readonly readinessCounts: unknown;
+  readonly options: { readonly adoptNonEmpty?: boolean | undefined };
+}): Readiness | null {
+  if (input.readiness !== 'blocked' || input.options.adoptNonEmpty !== true) return input.readiness;
+  if (
+    input.blockerCodes.length === 0 ||
+    !input.blockerCodes.every((c) => ADOPTABLE_BLOCKERS.includes(c))
+  ) {
+    return input.readiness;
+  }
+  const counts = input.readinessCounts as { preTasks?: unknown } | null;
+  return typeof counts?.preTasks === 'number' && counts.preTasks > 0 ? 'needs_attention' : 'ready';
+}
+
 export interface CreateRunInput {
   readonly migrationId: string;
   readonly kind: RunKind;
@@ -130,7 +158,12 @@ export async function createRun(db: Db, input: CreateRunInput): Promise<CreatedR
       });
       if (!checked.ok) throw new RunGuardError(checked.code, checked.message);
       const allowed = allowedReadiness(input.kind);
-      const readiness = (migration.readiness ?? null) as Readiness | null;
+      const readiness = effectiveReadiness({
+        readiness: (migration.readiness ?? null) as Readiness | null,
+        blockerCodes: migration.blockerCodes,
+        readinessCounts: migration.readinessCounts,
+        options: checked.options,
+      });
       if (allowed && !allowed.includes(readiness)) {
         throw new RunGuardError(
           'run.readiness_required',
