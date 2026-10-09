@@ -11,6 +11,8 @@ export interface UseLiveInvalidationOptions {
   /** The query keys to invalidate for a topic. Default: `[liveQueryKey(topic)]`. */
   readonly queryKeysFor?: (topic: string) => readonly QueryKey[];
   readonly path?: string;
+  /** Collect invalidations for this long and refetch once (default: at once). */
+  readonly debounceMs?: number;
   /** For tests. */
   readonly createEventSource?: (url: string) => EventSourceLike | undefined;
   readonly staleAfterMs?: number;
@@ -35,6 +37,13 @@ export function useLiveInvalidation(options: UseLiveInvalidationOptions): LiveMo
   useEffect(() => {
     const topics = topicsKey === '' ? [] : topicsKey.split(',');
     if (topics.length === 0) return undefined;
+    const pending = new Map<string, QueryKey>();
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const flush = () => {
+      timer = undefined;
+      for (const queryKey of pending.values()) void queryClient.invalidateQueries({ queryKey });
+      pending.clear();
+    };
     const connection = createLiveConnection({
       topics,
       path: latest.current.path,
@@ -45,14 +54,20 @@ export function useLiveInvalidation(options: UseLiveInvalidationOptions): LiveMo
       onInvalidate: (changed) => {
         const keysFor = latest.current.queryKeysFor ?? defaultKeysFor;
         for (const topic of changed) {
-          for (const queryKey of keysFor(topic)) {
-            void queryClient.invalidateQueries({ queryKey });
-          }
+          for (const queryKey of keysFor(topic)) pending.set(JSON.stringify(queryKey), queryKey);
         }
+        const wait = latest.current.debounceMs ?? 0;
+        if (wait <= 0) flush();
+        else timer ??= setTimeout(flush, wait);
       },
     });
     connection.start();
-    return () => connection.stop();
+    return () => {
+      connection.stop();
+      // A change that arrived just before the topic set changed must not be lost.
+      if (timer !== undefined) clearTimeout(timer);
+      flush();
+    };
   }, [topicsKey, queryClient]);
 
   return mode;

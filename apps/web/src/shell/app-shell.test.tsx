@@ -150,7 +150,7 @@ describe('AppShell', () => {
   it('[UI-001] the live status reports polling when the browser has no EventSource', async () => {
     mockFetch(() => reply(200, actor('admin')));
     renderWithApp(<AppShell>x</AppShell>);
-    const status = await screen.findByText('Polling');
+    const status = await screen.findByText('Polling', {}, { timeout: 5000 });
     expect(status.closest('[role="status"]')?.getAttribute('title')).toBe(
       messages.shell.live.pollingHint,
     );

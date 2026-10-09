@@ -3,10 +3,8 @@
 import { LoadingOutlined, SyncOutlined, ThunderboltOutlined } from '@ant-design/icons';
 import { Tag } from 'antd';
 import { useTranslations } from 'next-intl';
-import { type LiveMode, useLiveInvalidation } from '../live/index.ts';
-
-/** What the shell keeps live: the lists every page builds on (JOB-060). */
-export const SHELL_TOPICS: readonly string[] = ['list:runs'];
+import type { LiveMode } from '../live/index.ts';
+import { useLiveMode } from './live-topics.tsx';
 
 const ICONS: Record<LiveMode, React.ReactNode> = {
   connecting: <LoadingOutlined aria-hidden />,
@@ -20,7 +18,7 @@ const ICONS: Record<LiveMode, React.ReactNode> = {
  */
 export function LiveStatus() {
   const t = useTranslations('shell.live');
-  const mode = useLiveInvalidation({ topics: SHELL_TOPICS });
+  const mode = useLiveMode();
   return (
     <span
       role="status"

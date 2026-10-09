@@ -13,6 +13,7 @@ import { hardNavigate } from '../auth/navigate.ts';
 import { signInHref } from '../auth/paths.ts';
 import { ActorProvider } from './actor-context.tsx';
 import { LiveStatus } from './live-status.tsx';
+import { LiveTopicsProvider } from './live-topics.tsx';
 import { NavMenu } from './nav-menu.tsx';
 import { canOpen, deniedHref } from './navigation.ts';
 
@@ -87,62 +88,64 @@ export function AppShell({ children }: { readonly children: ReactNode }) {
 
   return (
     <ActorProvider value={actor}>
-      <a
-        href="#main"
-        className="sr-only focus:not-sr-only focus:fixed focus:start-2 focus:top-2 focus:z-50 focus:rounded focus:bg-white focus:px-3 focus:py-2 focus:text-black dark:focus:bg-neutral-900 dark:focus:text-white"
-      >
-        {t('skipToContent')}
-      </a>
-      <div className="min-h-screen bg-neutral-100 text-neutral-900 lg:grid lg:grid-cols-[16rem_minmax(0,1fr)] dark:bg-black dark:text-neutral-100">
-        <aside className="sticky top-0 hidden h-screen overflow-y-auto border-e border-neutral-200 bg-white lg:block dark:border-neutral-800 dark:bg-neutral-900">
-          <Brand />
-          <NavMenu actor={actor} />
-        </aside>
-        <div className="flex min-w-0 flex-col">
-          <header className="flex items-center gap-3 border-b border-neutral-200 bg-white px-4 py-3 dark:border-neutral-800 dark:bg-neutral-900">
-            <Button
-              className="lg:hidden"
-              type="text"
-              icon={<MenuOutlined aria-hidden />}
-              aria-label={t('openMenu')}
-              onClick={() => setMenuOpen(true)}
-            />
-            <Link href="/" className="font-semibold lg:hidden">
-              <BrandName />
-            </Link>
-            <div className="ms-auto flex items-center gap-3">
-              <LiveStatus />
-              <span className="hidden text-sm sm:inline" title={actor.email ?? undefined}>
-                {actor.displayName}
-              </span>
-              <Tag className="me-0" data-testid="actor-role">
-                {t(`role.${actor.role}`)}
-              </Tag>
+      <LiveTopicsProvider>
+        <a
+          href="#main"
+          className="sr-only focus:not-sr-only focus:fixed focus:start-2 focus:top-2 focus:z-50 focus:rounded focus:bg-white focus:px-3 focus:py-2 focus:text-black dark:focus:bg-neutral-900 dark:focus:text-white"
+        >
+          {t('skipToContent')}
+        </a>
+        <div className="min-h-screen bg-neutral-100 text-neutral-900 lg:grid lg:grid-cols-[16rem_minmax(0,1fr)] dark:bg-black dark:text-neutral-100">
+          <aside className="sticky top-0 hidden h-screen overflow-y-auto border-e border-neutral-200 bg-white lg:block dark:border-neutral-800 dark:bg-neutral-900">
+            <Brand />
+            <NavMenu actor={actor} />
+          </aside>
+          <div className="flex min-w-0 flex-col">
+            <header className="flex items-center gap-3 border-b border-neutral-200 bg-white px-4 py-3 dark:border-neutral-800 dark:bg-neutral-900">
               <Button
-                icon={<LogoutOutlined aria-hidden />}
-                loading={signingOut}
-                onClick={() => void onSignOut()}
-              >
-                {t('signOut')}
-              </Button>
-            </div>
-          </header>
-          <main id="main" tabIndex={-1} className="flex-1 p-4 outline-none sm:p-6">
-            {children}
-          </main>
+                className="lg:hidden"
+                type="text"
+                icon={<MenuOutlined aria-hidden />}
+                aria-label={t('openMenu')}
+                onClick={() => setMenuOpen(true)}
+              />
+              <Link href="/" className="font-semibold lg:hidden">
+                <BrandName />
+              </Link>
+              <div className="ms-auto flex items-center gap-3">
+                <LiveStatus />
+                <span className="hidden text-sm sm:inline" title={actor.email ?? undefined}>
+                  {actor.displayName}
+                </span>
+                <Tag className="me-0" data-testid="actor-role">
+                  {t(`role.${actor.role}`)}
+                </Tag>
+                <Button
+                  icon={<LogoutOutlined aria-hidden />}
+                  loading={signingOut}
+                  onClick={() => void onSignOut()}
+                >
+                  {t('signOut')}
+                </Button>
+              </div>
+            </header>
+            <main id="main" tabIndex={-1} className="flex-1 p-4 outline-none sm:p-6">
+              {children}
+            </main>
+          </div>
         </div>
-      </div>
-      <Drawer
-        open={menuOpen}
-        onClose={() => setMenuOpen(false)}
-        placement="left"
-        title={t('menuTitle')}
-        size={288}
-        closable={{ 'aria-label': t('closeMenu') }}
-        styles={{ body: { padding: 0 } }}
-      >
-        <NavMenu actor={actor} onNavigate={() => setMenuOpen(false)} />
-      </Drawer>
+        <Drawer
+          open={menuOpen}
+          onClose={() => setMenuOpen(false)}
+          placement="left"
+          title={t('menuTitle')}
+          size={288}
+          closable={{ 'aria-label': t('closeMenu') }}
+          styles={{ body: { padding: 0 } }}
+        >
+          <NavMenu actor={actor} onNavigate={() => setMenuOpen(false)} />
+        </Drawer>
+      </LiveTopicsProvider>
     </ActorProvider>
   );
 }

@@ -133,6 +133,22 @@ describe('useLiveInvalidation (JOB-060)', () => {
     expect(vi.getTimerCount()).toBe(0);
   });
 
+  it('[JOB-060] a debounced invalidation is flushed, not lost, when the topic set changes', () => {
+    const { rerender } = renderHook(
+      ({ topics }: { topics: string[] }) =>
+        useLiveInvalidation({ topics, createEventSource: create, debounceMs: 300 }),
+      { wrapper, initialProps: { topics: ['list:runs'] } },
+    );
+    act(() => last().onopen?.({}));
+    act(() => last().listeners.get('gm')?.({ data: JSON.stringify({ topics: ['list:runs'] }) }));
+    expect(invalidate).not.toHaveBeenCalled(); // waiting for the window
+    rerender({ topics: ['list:runs', 'quota'] });
+    expect(invalidate).toHaveBeenCalledTimes(1);
+    expect(invalidate).toHaveBeenCalledWith({ queryKey: liveQueryKey('list:runs') });
+    act(() => vi.advanceTimersByTime(1000));
+    expect(invalidate).toHaveBeenCalledTimes(1); // and not a second time
+  });
+
   it('[JOB-060] opens no connection without topics', () => {
     renderHook(() => useLiveInvalidation({ topics: [], createEventSource: create }), { wrapper });
     expect(FakeEventSource.instances).toHaveLength(0);
