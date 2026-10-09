@@ -19,6 +19,12 @@ export interface RenderOptions {
 
 const EN: Readonly<Record<string, string>> = enMessages;
 
+/**
+ * The flat English catalog, for a host that mounts it under its own guidance namespace with
+ * `nestCatalog` (ADR-0093).
+ */
+export const GUIDANCE_MESSAGES_EN: Readonly<Record<string, string>> = EN;
+
 /** Lookup against the bundled English catalog. */
 export const englishLookup: MessageLookup = (key) => (Object.hasOwn(EN, key) ? EN[key] : undefined);
 
