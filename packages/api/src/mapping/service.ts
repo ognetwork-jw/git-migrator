@@ -1,5 +1,11 @@
-import { type Db, type DbHandle, publishEventIn } from '@git-migrator/db';
-import { invitationTargetLockKey } from '@git-migrator/jobs';
+import {
+  advisoryXactLock,
+  type Db,
+  type DbHandle,
+  invitationTargetLockKey,
+  publishEventIn,
+  routeMappingLockKey,
+} from '@git-migrator/db';
 import { ProblemError } from '../problem.ts';
 import { type CsvErrorCode, parseMappingCsv } from './csv.ts';
 import { exclusionPatterns } from './expected-differences.ts';
@@ -56,12 +62,11 @@ const invalid = (path: string, message: string): ProblemError =>
 
 /** Serializes mapping writes of one Route, so uniqueness checks see committed state. */
 async function lockRoute(tx: Tx, routeId: string): Promise<void> {
-  const key = `identity-mapping:${routeId}`;
   // Bounded waits: a stuck writer must not hold requests forever.
   const lockMs = String(MAPPING_TIMEOUTS.lockMs);
   const statementMs = String(MAPPING_TIMEOUTS.statementMs);
   await tx.$executeRaw`SELECT set_config('lock_timeout', ${lockMs}, true), set_config('statement_timeout', ${statementMs}, true)`;
-  await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${key})::bigint)`;
+  await advisoryXactLock(tx, routeMappingLockKey(routeId));
 }
 
 async function loadRoute(tx: Tx, routeId: string): Promise<RouteInfo> {
@@ -331,8 +336,7 @@ async function lockInvitationTargets(tx: Tx, routeId: string, mappingId: string)
   const statementMs = String(MAPPING_TIMEOUTS.statementMs);
   await tx.$executeRaw`SELECT set_config('lock_timeout', ${lockMs}, true), set_config('statement_timeout', ${statementMs}, true)`;
   for (const target of targets.sort()) {
-    const key = invitationTargetLockKey(target);
-    await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${key})::bigint)`;
+    await advisoryXactLock(tx, invitationTargetLockKey(target));
   }
 }
 

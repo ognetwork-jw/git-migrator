@@ -1,5 +1,11 @@
 import type { Db } from '@git-migrator/db';
-import { markAnalysesStale, publishEvent } from '@git-migrator/db';
+import {
+  advisoryXactLock,
+  invitationTargetLockKey,
+  markAnalysesStale,
+  publishEvent,
+  routeMappingLockKey,
+} from '@git-migrator/db';
 import type { Logger } from '@git-migrator/observability';
 import type pg from 'pg';
 import type { EndpointConnector } from '../inventory/connector.ts';
@@ -79,16 +85,12 @@ export async function lockScope(
   targetEndpointId: string,
   routeId: string,
 ): Promise<void> {
-  const target = invitationTargetLockKey(targetEndpointId);
-  const route = `identity-mapping:${routeId}`;
   await tx.$executeRaw`SELECT set_config('lock_timeout', '15000', true), set_config('statement_timeout', '60000', true)`;
-  await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${target})::bigint)`;
-  await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${route})::bigint)`;
+  await advisoryXactLock(tx, invitationTargetLockKey(targetEndpointId));
+  await advisoryXactLock(tx, routeMappingLockKey(routeId));
 }
 
-/** The advisory lock key of a target Endpoint's invitations (the API uses the same key). */
-export const invitationTargetLockKey = (targetEndpointId: string): string =>
-  `invitation-target:${targetEndpointId}`;
+export { invitationTargetLockKey };
 
 /** Locks the batch row for the rest of the transaction. `FOR NO KEY UPDATE`, like the Run rows. */
 export async function lockBatch(

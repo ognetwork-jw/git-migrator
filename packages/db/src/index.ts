@@ -27,6 +27,7 @@ export {
 } from './events.ts';
 export * from './generated/models.ts';
 export { type SchemaType, schema } from './generated/schema.ts';
+export { advisoryXactLock, invitationTargetLockKey, routeMappingLockKey } from './locks.ts';
 export {
   type ApplyMigrationsOptions,
   applyAppMigrations,

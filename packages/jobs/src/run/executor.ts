@@ -779,6 +779,13 @@ class Driver<S> {
         }
       },
       checkpoint: () => this.#checkpoint(),
+      assertLease: async (tx) => {
+        const rows = await tx.$queryRaw<{ id: string }[]>`
+          SELECT id FROM app.run
+          WHERE id = ${this.#runId} AND lease_owner = ${this.#lease.token} AND status = 'running'
+          FOR SHARE`;
+        if (rows.length !== 1) throw new RunLeaseLostError();
+      },
       transaction: (fn, options) => this.#fence(fn, options?.migration === true),
     };
   }

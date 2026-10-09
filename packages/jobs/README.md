@@ -59,3 +59,7 @@ Tests use a throw-away Postgres database (`@git-migrator/db/testing`) and real B
 - `push.ts`: `git.push-lfs`, `git.push-refs` (LIF-044, default branch, `adoptNonEmpty` reconcile).
 - `facets.ts`: `facet.<key>.apply` with the run-time findings. `change-requests.ts`: step 9. `overlays.ts`: step 12 with `core.mergeOverlay`.
 - Every provider write has an intent before and a confirmation after; resumed Steps settle open intents first. Tests: `migrate/*.test.ts` and `testing/integration/src/migrate.test.ts` (fixture world, real adapters and git, fakes).
+
+## Endpoint migration (T-086)
+
+`migrate/endpoint.ts` holds the endpoint-scope Steps (LIF-080, LIF-081; ADR-0435). The planner dispatches on the Migration scope: an endpoint Run gets `facet.members.apply`, `facet.teams.apply`, `facet.org-variables.apply`, `facet.org-webhooks.apply` as the Plan lists them (a Facet the target cannot write has no Step, so `members` never writes: invitations go only through approved batches), then `verify` and `analysis.refresh`. `settleTeams` runs after `teams`: teams created by this Migration (from the ledger) get their `Group` row, the Route's GroupMappings become `confirmed`, and the Route's repository Migrations are marked stale, so their next Analysis no longer reports `access-control.team-missing`. Test: `testing/integration/src/endpoint-migration.test.ts`.

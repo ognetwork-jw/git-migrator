@@ -5,8 +5,15 @@
  * steps (`invitations.batch`).
  */
 import { createHash } from 'node:crypto';
-import { type Db, type DbHandle, publishEventIn } from '@git-migrator/db';
-import { invitationTargetLockKey, normaliseEmail } from '@git-migrator/jobs';
+import {
+  advisoryXactLock,
+  type Db,
+  type DbHandle,
+  invitationTargetLockKey,
+  publishEventIn,
+  routeMappingLockKey,
+} from '@git-migrator/db';
+import { normaliseEmail } from '@git-migrator/jobs';
 import { exclusionPatterns } from '../mapping/expected-differences.ts';
 import { markRouteAnalysesStale } from '../mapping/stale.ts';
 import { ProblemError } from '../problem.ts';
@@ -62,11 +69,9 @@ const iso = (d: Date | null | undefined): string | null => (d ? d.toISOString() 
 async function lockScope(tx: Tx, targetEndpointIds: readonly string[], routeId: string) {
   await tx.$executeRaw`SELECT set_config('lock_timeout', '15000', true), set_config('statement_timeout', '60000', true)`;
   for (const target of [...new Set(targetEndpointIds)].sort()) {
-    const key = invitationTargetLockKey(target);
-    await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${key})::bigint)`;
+    await advisoryXactLock(tx, invitationTargetLockKey(target));
   }
-  const key = `identity-mapping:${routeId}`;
-  await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${key})::bigint)`;
+  await advisoryXactLock(tx, routeMappingLockKey(routeId));
 }
 
 /**

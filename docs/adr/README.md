@@ -177,5 +177,6 @@
 | [0407](0407-waves-membership-and-feeder-priority.md) | Wave membership: capability, no staleness, CRUD through the Model API, priority already in the feeder | agent-decided |
 | [0415](0415-run-and-task-endpoints.md) | Run, cancel, complete, task and Expected Difference endpoints: one Run creation path, problem codes, task states, parity triggers | agent-decided |
 | [0455](0455-ci-outage-local-gate.md) | Local gate while GitHub Actions cannot run jobs | agent-decided |
+| [0435](0435-endpoint-migration-steps.md) | Endpoint migration Steps through the planner's scope dispatch, team settlement (GroupMapping confirmed, repository Analyses stale), Teams slug of a mapped group, endpoint pages | agent-decided |
 
 New ADRs continue from 0028. Implementor decisions use `status: agent-decided` (PROC-005). T-002 uses 0065–0069.

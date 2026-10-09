@@ -68,6 +68,9 @@ describe('[LIF-040] the Steps of a migration Run', () => {
       'git.push-refs:fatal',
       'facet.repository-settings.apply:independent',
       'facet.branch-rules.apply:independent',
+      // Planned but not provided here: skipped with a reason, never dropped silently.
+      'verify:advisory',
+      'source.read-only:advisory',
       'analysis.refresh:advisory',
     ]);
     // Step 13 and 14 join through the services (T-072, T-073) at the place the Plan puts them.
@@ -77,12 +80,67 @@ describe('[LIF-040] the Steps of a migration Run', () => {
       extraSteps: new Map([['verify', verify]]),
     } as never);
     expect((await withVerify.steps(input)).map((s) => s.key)).toContain('verify');
-    // An endpoint Migration has no Steps here: it fails visibly instead of doing nothing.
-    const endpoint = await planner.steps({
-      run: input.run,
+  });
+
+  it('[LIF-081] an endpoint Run plans the Facet Steps the Plan lists (members has no target writer, so no Step), then verify and the re-analysis', async () => {
+    const world = await seedBasics(t.db.privileged);
+    const analysis = await t.db.privileged.analysis.create({
+      data: { migrationId: world.migrationId, readiness: 'ready', translation: {} },
+    });
+    const codes = [
+      ['facet.teams.apply', 'teams'],
+      ['facet.org-variables.apply', 'org-variables'],
+      ['facet.org-webhooks.apply', 'org-webhooks'],
+      ['verify', 'framework'],
+      // Not an endpoint Facet: never mapped to an implementation.
+      ['facet.webhooks.apply', 'webhooks'],
+    ] as const;
+    let order = 0;
+    for (const [code, facetKey] of codes) {
+      await t.db.privileged.planItem.create({
+        data: {
+          analysisId: analysis.id,
+          kind: 'step',
+          code,
+          facetKey,
+          fieldPaths: [],
+          params: {},
+          order: order++,
+        },
+      });
+    }
+    const verify = { key: 'verify', severity: 'advisory', run: async () => undefined };
+    const planner = createMigrationPlanner({
+      db: t.db.privileged,
+      extraSteps: new Map([['verify', verify]]),
+    } as unknown as MigrationServices);
+    const steps = await planner.steps({
+      run: { analysisId: analysis.id },
       migration: { scope: 'endpoint' },
     } as never);
-    expect(endpoint.map((s) => s.key)).toEqual(['run.scope']);
+    expect(steps.map((s) => `${s.key}:${s.severity}`)).toEqual([
+      'facet.teams.apply:independent',
+      'facet.org-variables.apply:independent',
+      'facet.org-webhooks.apply:independent',
+      'verify:advisory',
+      'facet.webhooks.apply:advisory',
+      'analysis.refresh:advisory',
+    ]);
+    // A planned Step with no implementation is a skipped Step with a reason and a warning.
+    const warnings: string[] = [];
+    const unplanned = steps.find((s) => s.key === 'facet.webhooks.apply');
+    await expect(
+      unplanned?.run({ runLog: async (_l: string, m: string) => void warnings.push(m) } as never),
+    ).resolves.toMatchObject({ status: 'skipped' });
+    expect(warnings).toHaveLength(1);
+    const none = await planner.steps({
+      run: { analysisId: null },
+      migration: { scope: 'endpoint' },
+    } as never);
+    expect(none.map((s) => s.key)).toEqual(['run.analysis']);
+    await expect(none[0]?.run({} as never)).rejects.toMatchObject({
+      code: 'run.analysis_missing',
+    });
   });
 
   it('[LIF-040] a Run with no Analysis plans one fatal Step that fails with run.analysis_missing', async () => {

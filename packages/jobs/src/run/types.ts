@@ -210,6 +210,12 @@ export interface StepContext<S = unknown> {
     fn: (tx: Tx) => Promise<T>,
     options?: { readonly migration?: boolean },
   ): Promise<T>;
+  /**
+   * For a Step that writes in its own transaction (it must take other locks first, so it cannot use
+   * `transaction`): share-locks the Run row if this worker still holds the lease, else throws
+   * `RunLeaseLostError`. Call it inside that transaction, after taking those locks.
+   */
+  assertLease(tx: Tx): Promise<void>;
 }
 
 export interface RunPlanInput {

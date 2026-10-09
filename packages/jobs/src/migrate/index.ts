@@ -19,6 +19,13 @@ export function registerMigrationSteps(
 }
 
 export { changeRequestsStep, partialMutationsOf } from './change-requests.ts';
+export {
+  createdTeamSlugs,
+  ENDPOINT_FACET_KEYS,
+  endpointFacetStep,
+  loadEndpointWorld,
+  settleTeams,
+} from './endpoint.ts';
 export { facetApplyStep } from './facets.ts';
 export { branchPatternMatches } from './glob.ts';
 export { MirrorRegistry } from './mirror.ts';

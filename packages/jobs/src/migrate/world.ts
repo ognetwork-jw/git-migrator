@@ -55,6 +55,23 @@ export interface RunWorld {
 const isObject = (v: unknown): v is Json =>
   typeof v === 'object' && v !== null && !Array.isArray(v);
 
+/** The translated Facets of an Analysis (`Analysis.translation`) by Facet key. */
+export function facetPlansOf(translationJson: unknown): Map<string, FacetPlan> {
+  const translation = isObject(translationJson) ? translationJson : {};
+  const facetsJson = isObject(translation.facets) ? translation.facets : {};
+  const facets = new Map<string, FacetPlan>();
+  for (const [key, value] of Object.entries(facetsJson)) {
+    if (!isObject(value) || !isObject(value.desired)) continue;
+    facets.set(key, {
+      desired: value.desired,
+      decisions: Array.isArray(value.decisions)
+        ? (value.decisions as unknown as FieldDecision[])
+        : [],
+    });
+  }
+  return facets;
+}
+
 export async function loadRunWorld(ctx: MigrationContext): Promise<RunWorld> {
   const { db } = ctx.services;
   if (ctx.migration.scope !== 'repository' || ctx.migration.sourceRepositoryId === null) {
@@ -84,18 +101,7 @@ export async function loadRunWorld(ctx: MigrationContext): Promise<RunWorld> {
     where: { id: ctx.run.analysisId },
     select: { translation: true },
   });
-  const translation = isObject(analysis.translation) ? analysis.translation : {};
-  const facetsJson = isObject(translation.facets) ? translation.facets : {};
-  const facets = new Map<string, FacetPlan>();
-  for (const [key, value] of Object.entries(facetsJson)) {
-    if (!isObject(value) || !isObject(value.desired)) continue;
-    facets.set(key, {
-      desired: value.desired,
-      decisions: Array.isArray(value.decisions)
-        ? (value.decisions as unknown as FieldDecision[])
-        : [],
-    });
-  }
+  const facets = facetPlansOf(analysis.translation);
   const plannedName = migration.plannedTargetName;
   if (!plannedName) {
     throw new StepFailure('run.target_name_missing', 'The Analysis planned no target name');

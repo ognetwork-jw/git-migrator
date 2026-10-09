@@ -7,6 +7,7 @@
  * docs/adr/0380-migration-steps.md.
  */
 import type { FacetDriver, MutationRecord } from '@git-migrator/adapter-sdk';
+import { redactWebhookUrl } from '@git-migrator/canonical';
 import { diffDocuments, formatFieldPath, parseFieldPath } from '@git-migrator/core';
 import type { StepDefinition, StepResult } from '../run/types.ts';
 import {
@@ -18,6 +19,28 @@ import {
 import { loadRunWorld, type RunWorld, repositoryTarget, targetOf } from './world.ts';
 
 type Json = Record<string, unknown>;
+
+/**
+ * What the umbrella intent and recovered records store of a Facet document. Webhook URLs may
+ * carry credentials in the path or query (FAC-WEB-002), so they are reduced to their origin
+ * before they reach the ledger; hooks are keyed by `key`, so recovery does not need the URL.
+ * Recovery redacts the fresh read the same way before it diffs (ADR-0435).
+ */
+export function ledgerSafe(facetKey: string, document: unknown): unknown {
+  if (facetKey !== 'webhooks' && facetKey !== 'org-webhooks') return document;
+  // Only `hooks[].url` can carry a credential. `key` (`<origin>#<hash>`) identifies the hook for
+  // recovery and must stay as it is: the generic rule would hide it (ADR-0435).
+  const hooks = (document as { hooks?: unknown } | null)?.hooks;
+  if (!Array.isArray(hooks)) return document;
+  return {
+    ...(document as object),
+    hooks: hooks.map((h) =>
+      typeof h === 'object' && h !== null && typeof (h as { url?: unknown }).url === 'string'
+        ? { ...h, url: redactWebhookUrl((h as { url: string }).url) }
+        : h,
+    ),
+  };
+}
 
 /** Passes records through while keeping them for the hooks below. */
 async function* tap<T>(source: AsyncIterable<T>, into: T[]): AsyncGenerator<T> {
@@ -66,13 +89,13 @@ export async function applyWithLedger(
       noop: true,
       // What the write is meant to leave: only the part of a later change that is meant is ours.
       // (An inert record's `after` is normalized to its `before`, so it cannot carry this.)
-      meant: (options.desired ?? null) as never,
+      meant: (ledgerSafe(options.facetKey, options.desired) ?? null) as never,
       ...options.refExtra,
     },
     paths: [],
     // What the target held before the write, so a resumed Step can tell what a lost record changed.
-    before: options.current ?? null,
-    after: options.current ?? null,
+    before: (ledgerSafe(options.facetKey, options.current) ?? null) as never,
+    after: (ledgerSafe(options.facetKey, options.current) ?? null) as never,
   });
   ctx.checkpoint();
   const apply = driver.apply;
@@ -154,7 +177,7 @@ export async function recoverOpenIntents(
     const lift = kind === 'lift-protection';
     const def = ctx.services.registry.facets.get(key as never);
     const schema = { collections: def.collections, sets: def.sets ?? [] };
-    const fresh = (await driver.read(target.driver, facetTarget)).data;
+    const fresh = ledgerSafe(key, (await driver.read(target.driver, facetTarget)).data);
     const norm = (path: string): string => (lift ? elementPath(path) : path);
     const changed = new Set(diffDocuments(fresh, intent.before, schema).map((d) => norm(d.path)));
     if (changed.size === 0) {
