@@ -130,13 +130,20 @@ const unmigrated = () =>
     take: 500,
   });
 
-/** True while a job is waiting, delayed or running on a work queue. */
+/**
+ * True while a job is waiting, running, or delayed for a retry on a work queue. A job whose attempt
+ * failed waits out its backoff as `delayed` (JOB-013), and an `analyze` request for its Migration
+ * is deduplicated into it: not counting it let the wait end while an Analysis was still to come.
+ * Other delayed jobs (a scheduler's next occurrence, a drift check spread over the day) are not
+ * work this scenario waits for.
+ */
 async function busy(): Promise<boolean> {
   for (const name of WORK_QUEUES) {
-    const counts = await worker.runtime
-      .queue(name)
-      .getJobCounts('waiting', 'active', 'prioritized');
+    const queue = worker.runtime.queue(name);
+    const counts = await queue.getJobCounts('waiting', 'active', 'prioritized');
     if (Object.values(counts).some((n) => n > 0)) return true;
+    const delayed = await queue.getJobs(['delayed']);
+    if (delayed.some((job) => job.attemptsMade > 0)) return true;
   }
   return false;
 }
@@ -339,19 +346,26 @@ describe('Phase-1 scenario (TST-020)', () => {
 
   it('[TST-020] step 3: lists unmigrated Migrations with the expected readiness; plat/auto-ok is ready', async () => {
     // The background feeder analyzes in its own time; an explicit analyze is the other way to ready.
-    for (let round = 0; round < 6; round++) {
-      const stale = (await unmigrated()).filter(
-        (r) =>
-          r.readiness === null ||
-          (r.analysisStaleAt !== null && new Date(r.analysisStaleAt).getTime() <= Date.now()),
-      );
-      if (stale.length === 0) break;
-      for (const row of stale) {
-        const accepted = await call('POST', `/api/v1/migrations/${row.id}/analyze`);
-        expect(accepted.status).toBe(202);
-      }
-      await idle('the analyses');
-    }
+    // Until every Migration has a current Analysis: a round that ends with one still missing (its
+    // job failed every attempt) asks again, instead of giving up after a fixed number of rounds.
+    await until(
+      'an Analysis of every Migration',
+      async () => {
+        const stale = (await unmigrated()).filter(
+          (r) =>
+            r.readiness === null ||
+            (r.analysisStaleAt !== null && new Date(r.analysisStaleAt).getTime() <= Date.now()),
+        );
+        if (stale.length === 0) return true;
+        for (const row of stale) {
+          const accepted = await call('POST', `/api/v1/migrations/${row.id}/analyze`);
+          expect(accepted.status).toBe(202);
+        }
+        await idle('the analyses');
+        return false;
+      },
+      180_000,
+    );
     const rows = await unmigrated();
     const readiness = Object.fromEntries(
       rows.map((r) => [r.sourceRepository?.slug ?? r.id, r.readiness]),
@@ -364,7 +378,7 @@ describe('Phase-1 scenario (TST-020)', () => {
     expect(autoOk?.readiness).toBe('ready');
     expect(autoOk?.status).toBe('analyzed');
     world.migrationId = (autoOk as Row).id;
-  });
+  }, 240_000);
 
   it('[TST-020] step 4: POST /migrations/{auto-ok}/runs {kind: migrate} and waits for the Run to finish', async () => {
     const source = fakes.bitbucket.state

@@ -91,12 +91,18 @@ async function findingCodes(migrationId: string): Promise<string[]> {
   return items.map((i) => i.code).sort();
 }
 
-async function perform(migrationId: string): Promise<{ runId: string; result: ExecuteResult }> {
+async function perform(
+  migrationId: string,
+  kind: 'run_anyway' | 'rollback' = 'run_anyway',
+  /** Runs after the Run was admitted and before it executes. */
+  admitted?: (runId: string) => Promise<void>,
+): Promise<{ runId: string; result: ExecuteResult }> {
   const created = await createRun(t.db.privileged, {
     migrationId,
-    kind: 'run_anyway',
+    kind,
     triggeredById: actorId,
   });
+  await admitted?.(created.runId);
   const registry = new RunStepRegistry<MigrationServices>();
   registerMigrationSteps(registry, services);
   const result = await withRunScratch(scratch, created.runId, (scratchDir) =>
@@ -391,6 +397,152 @@ describe('the endpoint migration against the fixture world', () => {
     const row = await t.db.privileged.migration.findUniqueOrThrow({ where: { id: repo.id } });
     expect(row.readiness).not.toBe('blocked');
   }, 240_000);
+
+  it('[LIF-077] rolling the endpoint Run back deletes the team it created, returns its Group Mapping to unmapped and stales the Route’s Analyses, so the blocker comes back', async () => {
+    const endpoint = await endpointMigration();
+    const repo = await withGrants();
+    const mapping = await t.db.privileged.groupMapping.findFirstOrThrow({
+      where: { routeId: ROUTE, plannedSlug: 'platform-team' },
+    });
+    expect(mapping.status).toBe('confirmed');
+    expect(teamSlugs()).toEqual(['platform-team']);
+
+    const { runId, result } = await perform(endpoint.id, 'rollback');
+    expect(result).toEqual({ outcome: 'finished', status: 'succeeded' });
+    const steps = Object.fromEntries(
+      (await t.db.privileged.runStep.findMany({ where: { runId } })).map((s) => [
+        s.stepKey,
+        s.status,
+      ]),
+    );
+    expect(steps).toEqual({
+      'rollback.target': 'succeeded',
+      'rollback.group-mappings': 'succeeded',
+      'rollback.settle': 'succeeded',
+    });
+    // The team is gone from the target, and the Group Mapping that pointed at it is open again.
+    expect(teamSlugs()).toEqual([]);
+    const after = await t.db.privileged.groupMapping.findUniqueOrThrow({
+      where: { id: mapping.id },
+    });
+    expect(after).toMatchObject({ status: 'unmapped', targetGroupId: null });
+    const audit = await t.db.privileged.auditEvent.findMany({
+      where: { action: 'group-mapping.unmap', subjectId: mapping.id },
+    });
+    expect(audit).toHaveLength(1);
+    expect(audit[0]?.actorId).toBeNull();
+    expect(audit[0]?.data).toMatchObject({ origin: 'run', reason: 'rollback', runId });
+    expect((await endpointMigration()).status).toBe('rolled_back');
+    // Every record of the Run is undone, and the Route's Analyses are stale.
+    expect(
+      await t.db.privileged.mutation.count({
+        where: { migrationId: endpoint.id, facetKey: 'teams', undoneAt: null, action: 'create' },
+      }),
+    ).toBe(0);
+    const stale = await t.db.privileged.migration.findUniqueOrThrow({ where: { id: repo.id } });
+    expect(stale.analysisStaleAt).not.toBeNull();
+    // The repository's next Analysis finds the team missing again (FAC-ACL-004).
+    await analyze(repo.id);
+    expect(await findingCodes(repo.id)).toContain('access-control.team-missing');
+
+    // The endpoint migration can run again: the team and the mapping come back.
+    await analyze(endpoint.id);
+    const again = await perform(endpoint.id);
+    expect(again.result).toEqual({ outcome: 'finished', status: 'succeeded' });
+    expect(teamSlugs()).toEqual(['platform-team']);
+    expect(
+      (await t.db.privileged.groupMapping.findUniqueOrThrow({ where: { id: mapping.id } })).status,
+    ).toBe('confirmed');
+  }, 400_000);
+
+  it('[LIF-077] a grant written after the rollback was admitted keeps the team and its memberships: the Step leaves them and reports them, and a later rollback deletes them', async () => {
+    const endpoint = await endpointMigration();
+    const repo = await withGrants();
+    expect(teamSlugs()).toEqual(['platform-team']);
+    const openTeamRecords = async (kind: string) =>
+      (
+        await t.db.privileged.mutation.findMany({
+          where: { migrationId: endpoint.id, facetKey: 'teams', undoneAt: null },
+          orderBy: { seq: 'desc' },
+        })
+      ).filter((m) => (m.resourceRef as { kind?: string }).kind === kind);
+    const [team] = await openTeamRecords('team');
+    if (!team) throw new Error('no team record');
+    const teamId = String((team.resourceRef as { id: string }).id);
+    const memberships = (await openTeamRecords('team-membership')).length;
+    expect(memberships).toBeGreaterThan(0);
+    const membersBefore = orgState().teams[0]?.members;
+
+    let grantId = '';
+    const { runId, result } = await perform(endpoint.id, 'rollback', async () => {
+      // The admission guard saw no grant; a repository Migration of the Route writes one now.
+      const run = await t.db.privileged.run.create({
+        data: {
+          migrationId: repo.id,
+          kind: 'migrate',
+          triggeredById: actorId,
+          options: {},
+          status: 'succeeded',
+        },
+      });
+      grantId = (
+        await t.db.privileged.mutation.create({
+          data: {
+            migrationId: repo.id,
+            runId: run.id,
+            side: 'target',
+            facetKey: 'access-control',
+            resourceRef: { kind: 'access-grant', principal: `group:${teamId}` },
+            paths: [],
+            action: 'create',
+            state: 'recorded',
+          },
+        })
+      ).id;
+    });
+    expect(result).toEqual({ outcome: 'finished', status: 'failed' });
+    const step = await t.db.privileged.runStep.findFirstOrThrow({
+      where: { runId, stepKey: 'rollback.target' },
+    });
+    expect(step.error).toMatchObject({ code: 'rollback.left-in-place' });
+    // Neither the team nor any of its members was removed.
+    expect(teamSlugs()).toEqual(['platform-team']);
+    expect(orgState().teams[0]?.members).toEqual(membersBefore);
+    expect(await openTeamRecords('team-membership')).toHaveLength(memberships);
+    expect(await openTeamRecords('team')).toHaveLength(1);
+    const task = await t.db.privileged.manualTask.findFirstOrThrow({
+      where: {
+        migrationId: endpoint.id,
+        code: 'repository-settings.left-in-place',
+        status: 'open',
+      },
+    });
+    expect(task.params).toEqual({
+      details: [
+        ...Array.from({ length: memberships }, () => ({
+          kind: 'group-membership-in-use',
+          name: 'platform-team',
+        })),
+        { kind: 'group-in-use', name: 'platform-team' },
+      ],
+    });
+
+    // Once the grant is reverted, the team is free: a later rollback deletes it.
+    await t.db.privileged.mutation.update({
+      where: { id: grantId },
+      data: { undoneAt: new Date() },
+    });
+    const again = await perform(endpoint.id, 'rollback');
+    expect(again.result).toEqual({ outcome: 'finished', status: 'succeeded' });
+    expect(teamSlugs()).toEqual([]);
+    // The endpoint migration runs again, as the tests below expect.
+    await analyze(endpoint.id);
+    expect((await perform(endpoint.id)).result).toEqual({
+      outcome: 'finished',
+      status: 'succeeded',
+    });
+    expect(teamSlugs()).toEqual(['platform-team']);
+  }, 400_000);
 
   it('[LIF-080] invites nobody: no invitation is posted and only organization members join teams', () => {
     const writes = githubWrites();
