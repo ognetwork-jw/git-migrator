@@ -8,6 +8,7 @@ import { QuotaService } from '@git-migrator/quota';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { createPruner, maintenanceHandlers, RETENTION_INTERVAL_MS } from './maintenance.ts';
 import type { JobRuntime } from './runtime.ts';
+import { seedRun } from './world.fixture.ts';
 
 const log = createLogger({ level: 'silent' });
 let t: TestDatabase;
@@ -119,5 +120,42 @@ describe('maintenance handlers', () => {
       resumed: string[];
     }>;
     expect((await handler()).resumed).toEqual([]);
+  }, 60_000);
+
+  it('[LIF-046] maintenance.run-reaper also settles a Migration left running behind an abandoned Run and re-enqueues a lost queued Run', async () => {
+    const abandoned = await seedRun(
+      { db: t.db.privileged, pool: t.db.pool },
+      { leaseOwner: 'dead', leaseExpiresInSeconds: -30, reaperResumes: 3 },
+    );
+    const queued = await seedRun({ db: t.db.privileged, pool: t.db.pool }, { status: 'queued' });
+    await t.db.pool.query(
+      "UPDATE app.run SET created_at = now() - interval '1 hour' WHERE id = $1",
+      [queued],
+    );
+    await t.db.pool.query(
+      "UPDATE app.migration SET status = 'running', status_before_run = 'analyzed' WHERE id IN (SELECT migration_id FROM app.run WHERE id = ANY($1))",
+      [[abandoned, queued]],
+    );
+    const enqueued: string[] = [];
+    const runtime = {
+      enqueueRun: async (runId: string) => void enqueued.push(runId),
+      isRunJobPending: async () => false,
+    } as unknown as JobRuntime;
+    const handlers = maintenanceHandlers(deps({ db: t.db.privileged, runtime }));
+    const handler = handlers['maintenance.run-reaper'] as unknown as () => Promise<{
+      abandoned: string[];
+      settled: string[];
+      requeued: string[];
+    }>;
+    const result = await handler();
+    expect(result.abandoned).toContain(abandoned);
+    expect(result.requeued).toContain(queued);
+    expect(enqueued).toContain(queued);
+    const migration = await t.db.pool.query(
+      'SELECT m.status FROM app.migration m JOIN app.run r ON r.migration_id = m.id WHERE r.id = $1',
+      [abandoned],
+    );
+    expect(migration.rows[0].status).toBe('failed');
+    expect(result.settled).toHaveLength(1);
   }, 60_000);
 });

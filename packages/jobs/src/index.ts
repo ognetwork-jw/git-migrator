@@ -132,6 +132,72 @@ export {
 } from './reaper.ts';
 export { applyRetention, type RetentionResult } from './retention.ts';
 export {
+  RETRY_BASE_MS,
+  RETRY_CAP_MS,
+  retryDelayMs,
+  serializeStepError,
+} from './run/errors.ts';
+export {
+  ANALYSIS_GATED_KINDS,
+  createRunAnalysisPort,
+  DEFAULT_CANCEL_POLL_MS,
+  type ExecuteOptions,
+  type ExecuteResult,
+  executeRun,
+  type RunAnalysisPort,
+  type RunExecutorDeps,
+  runHandlers,
+} from './run/executor.ts';
+export {
+  addRunBlocker,
+  addRunTask,
+  clearRunBlockers,
+  type RunBlocker,
+  recomputeReadiness,
+} from './run/findings.ts';
+export {
+  applyRunFinished,
+  type FinalRunStatus,
+  finishRun,
+  settleOrphanedMigrations,
+} from './run/finish.ts';
+export {
+  allowedReadiness,
+  type CancelOutcome,
+  type CreatedRun,
+  type CreateRunInput,
+  createRun,
+  type RunGuardCode,
+  RunGuardError,
+  requestRunCancel,
+} from './run/guard.ts';
+export { REPOSITORY_LEVEL_FACET, writeLedger } from './run/ledger.ts';
+export {
+  checkRunOptions,
+  type OptionsCheck,
+  type RunOptions,
+  runOptionsSchema,
+} from './run/options.ts';
+export { QUEUED_GRACE_SECONDS, requeueOrphanedQueuedRuns } from './run/orphans.ts';
+export {
+  DEFAULT_MAX_ATTEMPTS,
+  type LedgerWrite,
+  type MigrationSnapshot,
+  type MutationLike,
+  RunCancelledError,
+  RunLeaseLostError,
+  type RunPlanInput,
+  type RunPlanner,
+  type RunSnapshot,
+  RunStepRegistry,
+  type StepContext,
+  type StepDefinition,
+  type StepFindings,
+  type StepLedger,
+  type StepResult,
+  type StepSeverity,
+} from './run/types.ts';
+export {
   claimRunLease,
   HANDOFF_PENDING_OWNER,
   handOffRun,
@@ -149,6 +215,7 @@ export {
   type RunLeaseHandle,
   releaseRunLease,
   renewRunLease,
+  startQueuedRun,
 } from './run-leases.ts';
 export {
   type EnqueueOptions,

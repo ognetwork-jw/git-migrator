@@ -1,7 +1,10 @@
+import type { Db } from '@git-migrator/db';
 import type { Logger } from '@git-migrator/observability';
 import type pg from 'pg';
 import { type ReaperMetrics, reapRuns } from './reaper.ts';
 import { applyRetention, type RetentionResult } from './retention.ts';
+import { settleOrphanedMigrations } from './run/finish.ts';
+import { requeueOrphanedQueuedRuns } from './run/orphans.ts';
 import type { JobHandlers, JobRuntime } from './runtime.ts';
 import { cleanScratch } from './scratch.ts';
 
@@ -21,6 +24,11 @@ export interface MaintenanceDeps {
   readonly log: Logger;
   readonly scratchRoot: string;
   readonly metrics?: ReaperMetrics;
+  /**
+   * The privileged client. With it, `maintenance.run-reaper` also settles Migrations left `running`
+   * behind an abandoned Run, and re-enqueues `queued` Runs whose job is gone (ADR-0343).
+   */
+  readonly db?: Db;
   /** Test seam. */
   readonly now?: () => number;
   readonly retentionIntervalMs?: number;
@@ -80,12 +88,23 @@ export function maintenanceHandlers(deps: MaintenanceDeps): JobHandlers {
     'maintenance.scratch-cleanup': async () => ({
       removed: await cleanScratch({ root: deps.scratchRoot, log: deps.log }),
     }),
-    'maintenance.run-reaper': () =>
-      reapRuns({
+    'maintenance.run-reaper': async () => {
+      const reaped = await reapRuns({
         pool: deps.appPool,
         runs: deps.runtime,
         log: deps.log,
         ...(deps.metrics ? { metrics: deps.metrics } : {}),
-      }),
+      });
+      if (!deps.db) return reaped;
+      // The reaper leaves the Migration alone (LIF-046); the lifecycle transition of an abandoned
+      // Run is applied here, and a queued Run that never reached the queue is queued again.
+      const settled = await settleOrphanedMigrations(
+        deps.db,
+        () => new Date(deps.now?.() ?? Date.now()),
+        deps.log,
+      );
+      const requeued = await requeueOrphanedQueuedRuns(deps.appPool, deps.runtime, deps.log);
+      return { ...reaped, settled, requeued };
+    },
   };
 }
