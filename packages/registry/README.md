@@ -16,3 +16,4 @@ Cells are a static worst-case ceiling (`ceiling: 'static'` in the output): they 
 Some declared paths are matrix markers rather than schema paths (for example `/secrets/value`, which the canonical `secrets` schema does not have, and `/owners`, `/variables/name`, `/hooks/events`, which stand for a whole concern). They let the matrix show a source that never returns a value or a lossy mapping. `src/builtin.test.ts` pins the source-side markers and ADR-0261 states the rule.
 
 Decisions: ADR-0260, ADR-0261. Dependencies are checked by `pnpm lint` (ARC-012).
+- `repositoryNameLimits(type)` returns the static repository-name limits an adapter registered through `RegistryParts.limits` (the built-in composition registers both adapters), for answers that need no connection such as the naming preview (ADR-0331).

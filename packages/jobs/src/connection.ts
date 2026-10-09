@@ -22,6 +22,8 @@ export interface BullmqPoolOptions {
   readonly max: number;
   /** Shown in `pg_stat_activity`. */
   readonly applicationName?: string;
+  /** Fail a checkout that waits longer than this (ms); producers such as web use it to fail fast. */
+  readonly connectionTimeoutMillis?: number;
 }
 
 /**
@@ -34,6 +36,9 @@ export function createBullmqPool(options: BullmqPoolOptions): pg.Pool {
     connectionString: options.connectionString,
     max: options.max,
     application_name: options.applicationName ?? 'git-migrator-bullmq',
+    ...(options.connectionTimeoutMillis === undefined
+      ? {}
+      : { connectionTimeoutMillis: options.connectionTimeoutMillis }),
     options: `-c search_path=${BULLMQ_SCHEMA}`,
   });
   // An idle client the server closed emits 'error'; without a listener that would crash the process.

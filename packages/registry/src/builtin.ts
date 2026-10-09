@@ -1,6 +1,13 @@
 /** The v1 composition: every built-in Facet, both adapters and the pair overrides the spec lists. */
-import { bitbucketCloudAdapter } from '@git-migrator/adapter-bitbucket-cloud';
-import { bitbucketCloudToGithubPipelines, githubAdapter } from '@git-migrator/adapter-github';
+import {
+  bitbucketCloudAdapter,
+  limits as bitbucketCloudLimits,
+} from '@git-migrator/adapter-bitbucket-cloud';
+import {
+  bitbucketCloudToGithubPipelines,
+  githubAdapter,
+  githubLimits,
+} from '@git-migrator/adapter-github';
 import {
   accessControl,
   branchRulesDefinition,
@@ -48,6 +55,10 @@ export function createBuiltinRegistry(): ProviderRegistry {
       orgWebhooksDefinition,
     ] as never[],
     adapters: [bitbucketCloudAdapter, githubAdapter],
+    limits: {
+      [bitbucketCloudAdapter.type]: bitbucketCloudLimits,
+      [githubAdapter.type]: githubLimits,
+    },
     overrides: [bitbucketCloudToGithubPipelines as never],
   });
 }

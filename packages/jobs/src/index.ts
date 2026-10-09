@@ -8,6 +8,8 @@ export {
   type AnalysisResult,
   type AnalysisRunOptions,
   analysisHandlers,
+  DEFAULT_NAMING,
+  routeNaming,
   runAnalysis,
 } from './analysis/analysis.ts';
 export {

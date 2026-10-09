@@ -113,7 +113,8 @@ export class AnalysisError extends Error {
   }
 }
 
-const DEFAULT_NAMING: NamingPipeline = {
+/** The Route default naming pipeline when `routes[].defaults.naming` is absent (LIF-030). */
+export const DEFAULT_NAMING: NamingPipeline = {
   steps: [
     { var: 'namespace', op: 'projectKey' },
     { var: 'namespace', op: 'lowercase' },
@@ -123,7 +124,8 @@ const DEFAULT_NAMING: NamingPipeline = {
   template: '{namespace}-{repository}',
 };
 
-function routeNaming(defaults: unknown): NamingPipeline {
+/** `routes[].defaults.naming` of a stored Route, or the default pipeline. Throws `AnalysisError` when malformed. */
+export function routeNaming(defaults: unknown): NamingPipeline {
   const naming = (defaults as { naming?: unknown } | null)?.naming;
   if (naming === undefined) return DEFAULT_NAMING;
   const p = naming as { steps?: unknown; template?: unknown };

@@ -269,3 +269,16 @@ describe('capability matrix against the mapping tables in 05-facets', () => {
     }
   });
 });
+
+describe('static repository-name limits (naming preview, ADR-0331)', () => {
+  it('[LIF-030] the target adapter limits are known without a connection', () => {
+    expect(registry.repositoryNameLimits(DST)).toMatchObject({
+      maxLength: 100,
+      caseInsensitiveUnique: true,
+    });
+    expect(registry.repositoryNameLimits(DST)?.pattern.test('a.b_c-1')).toBe(true);
+    expect(registry.repositoryNameLimits(DST)?.pattern.test('has space')).toBe(false);
+    expect(registry.repositoryNameLimits(SRC)).toBeDefined();
+    expect(registry.repositoryNameLimits('unknown')).toBeUndefined();
+  });
+});

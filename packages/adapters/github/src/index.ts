@@ -6,6 +6,7 @@ export * from './auth.ts';
 export * from './capabilities.ts';
 export * from './change-requests.ts';
 export * from './config.ts';
+export { LIMITS as githubLimits } from './connection.ts';
 export { parseCodeowners, renderCodeowners } from './facets/access.ts';
 export { fromGithubEvents, GITHUB_EVENTS, toGithubEvents } from './facets/hooks.ts';
 export { createClassifier, createInterpreter, endpointLabel, TOKEN_SHAPES } from './http.ts';

@@ -13,7 +13,13 @@ export {
   type MetricsServerOptions,
   startMetricsServer,
 } from './metrics-server.ts';
-export { REDACT_PATHS, REDACTED, redactString, redactValue } from './redact.ts';
+export {
+  isSensitiveKey,
+  REDACT_PATHS,
+  REDACTED,
+  redactString,
+  redactValue,
+} from './redact.ts';
 export {
   createTraceSdkOptions,
   type NodeSdkOptions,

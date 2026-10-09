@@ -72,6 +72,8 @@ export interface JobRuntimeOptions {
   /** Defaults to `createBullmqTelemetry()`. Pass `false` to turn tracing of jobs off. */
   readonly telemetry?: Telemetry | false;
   readonly applicationName?: string;
+  /** Pool checkout timeout in ms; producers pass a short one so an outage fails fast. */
+  readonly connectionTimeoutMillis?: number;
 }
 
 export interface EnqueueOptions {
@@ -106,6 +108,9 @@ export class JobRuntime {
       connectionString: options.connectionString,
       max: bullmqPoolSize(options.workerCount),
       ...(options.applicationName ? { applicationName: options.applicationName } : {}),
+      ...(options.connectionTimeoutMillis === undefined
+        ? {}
+        : { connectionTimeoutMillis: options.connectionTimeoutMillis }),
     });
     for (const name of QUEUE_NAMES) {
       const queue = new Queue(name, {

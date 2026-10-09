@@ -2,7 +2,11 @@
  * Build-time composition (ARC-010): Facet definitions, provider adapters and pair overrides in one
  * object. Pure data plus the core `FacetRegistry`; nothing here does I/O.
  */
-import type { ProviderAdapter, ProviderCapabilities } from '@git-migrator/adapter-sdk';
+import type {
+  ProviderAdapter,
+  ProviderCapabilities,
+  ProviderLimits,
+} from '@git-migrator/adapter-sdk';
 import type { FacetKey as CanonicalFacetKey } from '@git-migrator/canonical';
 import {
   type FacetCapability,
@@ -18,6 +22,8 @@ export interface RegistryParts {
   readonly facets: readonly FacetDefinition<never>[];
   readonly adapters: readonly ProviderAdapter[];
   readonly overrides?: readonly PairOverride<never>[];
+  /** Static provider limits by adapter type, for answers that need no connection (naming preview). */
+  readonly limits?: Readonly<Record<string, ProviderLimits>>;
 }
 
 /** A detect-only Facet is never written (FAC-EXT-001), so the target's declarations do not matter. */
@@ -42,6 +48,7 @@ export class ProviderRegistry {
   readonly #adapters = new Map<string, ProviderAdapter>();
   /** Capabilities copied at construction, so a later change to an adapter object cannot alter the matrix. */
   readonly #capabilities = new Map<string, ProviderCapabilities>();
+  readonly #limits = new Map<string, ProviderLimits>();
 
   constructor(parts: RegistryParts) {
     const reg = this.#facets;
@@ -69,6 +76,12 @@ export class ProviderRegistry {
       }
       this.#adapters.set(adapter.type, adapter);
       this.#capabilities.set(adapter.type, structuredClone(adapter.capabilities));
+    }
+    for (const [type, limits] of Object.entries(parts.limits ?? {})) {
+      if (!this.#adapters.has(type)) {
+        throw new RegistryError(`limits given for unregistered adapter ${type}`);
+      }
+      this.#limits.set(type, structuredClone(limits));
     }
     for (const override of parts.overrides ?? []) {
       for (const side of [override.source, override.target]) {
@@ -115,6 +128,14 @@ export class ProviderRegistry {
   #caps(type: string): ProviderCapabilities {
     this.adapter(type);
     return this.#capabilities.get(type) as ProviderCapabilities;
+  }
+
+  /**
+   * The static repository-name limits of an adapter, or `undefined` when none are registered. The
+   * connection's own `limits` decide at analysis time; this is for answers that need no connection.
+   */
+  repositoryNameLimits(type: string): ProviderLimits['repositoryName'] | undefined {
+    return this.#limits.get(type)?.repositoryName;
   }
 
   /** The translate override for the pair and Facet, if any (ADP-032). */
