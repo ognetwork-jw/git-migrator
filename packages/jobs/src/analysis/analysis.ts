@@ -136,7 +136,7 @@ export function routeNaming(defaults: unknown): NamingPipeline {
 }
 
 /** Counts calls through the HTTP client handed to the drivers (JOB-020 `avgCallsPerAnalysis`). */
-function counting(http: ProviderHttpClient, counter: { n: number }): ProviderHttpClient {
+export function counting(http: ProviderHttpClient, counter: { n: number }): ProviderHttpClient {
   return new Proxy(http, {
     get(target, prop) {
       const value = Reflect.get(target, prop, target) as unknown;
@@ -152,18 +152,18 @@ function counting(http: ProviderHttpClient, counter: { n: number }): ProviderHtt
   });
 }
 
-function jsonSafe<V>(value: V): V {
+export function jsonSafe<V>(value: V): V {
   return JSON.parse(JSON.stringify(value)) as V;
 }
 
-interface FacetReading {
+export interface FacetReading {
   readonly key: FacetKey;
   readonly read: FacetRead<unknown>;
   readonly caps: FacetCapability;
 }
 
 /** Static capabilities with the read-time facts laid over them (ADR-0231, ADR-0310). */
-function effectiveCaps(
+export function effectiveCaps(
   base: FacetCapability | undefined,
   read: FacetRead<unknown> | undefined,
 ): FacetCapability {
@@ -176,7 +176,7 @@ function effectiveCaps(
   return { read: b.read, write: b.write, fields };
 }
 
-const adapterCaps = (
+export const adapterCaps = (
   registry: AnalysisDeps['registry'],
   type: string,
   key: FacetKey,
@@ -617,7 +617,7 @@ function translationJson(
   };
 }
 
-async function rootNamespace(db: Db, endpointId: string) {
+export async function rootNamespace(db: Db, endpointId: string) {
   const root = await db.namespace.findFirst({
     where: { endpointId, parentId: null },
     orderBy: { id: 'asc' },
@@ -626,7 +626,7 @@ async function rootNamespace(db: Db, endpointId: string) {
   return root;
 }
 
-async function loadIdentityMappings(
+export async function loadIdentityMappings(
   db: Db,
   routeId: string,
   sourceEndpointId: string,
@@ -648,7 +648,7 @@ async function loadIdentityMappings(
   }));
 }
 
-async function loadGroupMappings(
+export async function loadGroupMappings(
   db: Db,
   routeId: string,
   sourceEndpointId: string,
@@ -670,8 +670,8 @@ async function loadGroupMappings(
 }
 
 /** FAC-DKY-003: usage from the stored Snapshots of the other present repositories (ADR-0311). */
-async function buildDeployKeyUsage(
-  deps: AnalysisDeps,
+export async function buildDeployKeyUsage(
+  deps: Pick<AnalysisDeps, 'db' | 'appPool'>,
   routeId: string,
   ownRepositoryId: string,
   ownMigrationId: string,
@@ -720,7 +720,11 @@ async function buildDeployKeyUsage(
 }
 
 /** Names from the latest source-side endpoint Snapshot of a list facet (pipelines variables). */
-async function endpointNames(db: Db, endpointId: string, facetKey: string): Promise<string[]> {
+export async function endpointNames(
+  db: Db,
+  endpointId: string,
+  facetKey: string,
+): Promise<string[]> {
   const snap = await db.facetSnapshot.findFirst({
     where: { side: 'source', endpointId, repositoryId: null, facetKey },
     orderBy: [{ fetchedAt: 'desc' }, { id: 'desc' }],
@@ -730,7 +734,7 @@ async function endpointNames(db: Db, endpointId: string, facetKey: string): Prom
 }
 
 /** LIF-080: the facts the endpoint-level facets read from the route index (ADR-0311). */
-async function endpointRouteIndex(
+export async function endpointRouteIndex(
   db: Db,
   route: { id: string; sourceEndpointId: string; targetEndpointId: string },
 ): Promise<Json> {
