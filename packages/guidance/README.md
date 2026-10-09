@@ -77,6 +77,8 @@ const guidanceMessages = nestCatalog(enFlatCatalog); // enFlatCatalog = messages
 const rendered = renderGuidance(task.code, params, { lookup: nextIntlLookup(t) });
 ```
 
+`GUIDANCE_MESSAGES_EN` is the flat English catalog for `nestCatalog`; the web app mounts it in `apps/web/src/messages.ts` and renders with `GuidanceView` (`apps/web/src/guidance/`, ADR-0446).
+
 Render `summary`, step `text` and `verification` as markdown, and show each `copy` with a copy button.
 `apps/web/messages/en.json` holds UI chrome only. Guidance messages live here (AGENTS.md is to be
 amended by the orchestrator). next-intl is not pinned in this repository, so the tests use a fake

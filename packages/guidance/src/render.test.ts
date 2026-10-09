@@ -4,6 +4,7 @@ import { GUIDANCE } from './entries.ts';
 import enMessages from './messages/en.json' with { type: 'json' };
 import {
   displayTargetUrl,
+  GUIDANCE_MESSAGES_EN,
   GuidanceError,
   nestCatalog,
   nextIntlLookup,
@@ -309,5 +310,12 @@ describe('display and copy of webhook URLs (UI-040, ADR-0092)', () => {
     });
     expect(rendered.steps[0]?.copy).toBeUndefined();
     expect(rendered.problems.map((p) => p.param)).toContain('targetUrl');
+  });
+});
+
+describe('[UI-040] the exported English catalog', () => {
+  it('[UI-040] is the catalog the default lookup reads, so a host can mount it unchanged', () => {
+    expect(GUIDANCE_MESSAGES_EN).toEqual(enMessages);
+    expect(() => nestCatalog(GUIDANCE_MESSAGES_EN)).not.toThrow();
   });
 });
