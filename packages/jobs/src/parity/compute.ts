@@ -25,6 +25,7 @@ import {
   type FacetLookup,
   type FacetTranslation,
   type FieldDiff,
+  hashCanonical,
   mergeOverlay,
   NO_CAPABILITY,
   type ParityStatus,
@@ -90,6 +91,8 @@ export interface ParityDeps {
   readonly log: Logger;
   /** Without it LFS parity is not checked (the Facet's own `compare` still is). */
   readonly lfs?: LfsObjectSource;
+  /** `schedules.driftReadsSource` (LIF-060 step 1): a drift check reads the full source only when set. */
+  readonly driftReadsSource?: boolean;
   readonly now?: () => Date;
 }
 
@@ -105,6 +108,14 @@ export interface ParityOptions {
    */
   readonly mirrorDir?: string | undefined;
   readonly log?: Logger;
+  /**
+   * A scheduled drift check (LIF-065, LIF-060 step 1): it re-reads the target and the source
+   * `git-refs`, and takes every other source Facet from the Snapshots of the Migration's latest
+   * Analysis unless `readsSource` (`schedules.driftReadsSource`). When the refs it reads are the
+   * ones that Analysis saw, the LFS check is skipped (FAC-GIT-005). A Migration without an Analysis
+   * is read in full.
+   */
+  readonly drift?: { readonly readsSource: boolean };
 }
 
 /**
@@ -207,6 +218,42 @@ function neededFacets(defs: readonly FacetDefinition<unknown>[]): Set<string> {
   };
   for (const def of defs) if (def.compareMode === 'full') visit(def.key);
   return needed;
+}
+
+/** `roots` and everything they depend on. */
+function closureOf(
+  defs: readonly FacetDefinition<unknown>[],
+  roots: readonly string[],
+): Set<string> {
+  const byKey = new Map(defs.map((d) => [d.key, d]));
+  const out = new Set<string>();
+  const visit = (key: string): void => {
+    if (out.has(key)) return;
+    const def = byKey.get(key);
+    if (!def) return;
+    out.add(key);
+    for (const dep of def.dependsOn) visit(dep);
+  };
+  for (const root of roots) visit(root);
+  return out;
+}
+
+/** The source Snapshots of a Migration's latest Analysis, by Facet key (LIF-065). */
+async function latestSourceSnapshots(
+  db: Db,
+  analysisId: string | null,
+): Promise<Map<string, { data: unknown; unreadable: string[]; hash: string }> | undefined> {
+  if (analysisId === null) return undefined;
+  const analysis = await db.analysis.findUnique({
+    where: { id: analysisId },
+    select: { sourceSnapshotIds: true },
+  });
+  if (!analysis || analysis.sourceSnapshotIds.length === 0) return undefined;
+  const rows = await db.facetSnapshot.findMany({
+    where: { id: { in: analysis.sourceSnapshotIds }, side: 'source' },
+    select: { facetKey: true, data: true, unreadable: true, hash: true },
+  });
+  return new Map(rows.map((r) => [r.facetKey, r]));
 }
 
 /** The first Facet among `def`'s transitive dependencies whose source read failed, if any. */
@@ -385,6 +432,23 @@ export async function computeParity(
   const view: SourceLockView = sourceRef
     ? await sourceLockView(db, migrationId, sourceConn.sourceLock, sourceRef, signal)
     : { resources: [], withheld: [] };
+  // A drift check reads only the source `git-refs` live (LIF-060 step 1); the other Facets of the
+  // source come from the Analysis' Snapshots, which were read through the same lock view.
+  const stored =
+    options.drift && isRepository
+      ? await latestSourceSnapshots(db, migration.latestAnalysisId)
+      : undefined;
+  const refsOnly = stored !== undefined && options.drift?.readsSource === false;
+  // A Facet the Analysis has no Snapshot of (it withheld or could not read it) is read live: it is
+  // never dropped from the check, which would leave its last result or none (ADR-0466 round 2).
+  const liveKeys = refsOnly ? closureOf(facetDefs, ['git-refs']) : needed;
+  if (refsOnly && stored) {
+    for (const key of needed) {
+      if (!liveKeys.has(key) && !stored.has(key)) {
+        for (const dep of closureOf(facetDefs, [key])) liveKeys.add(dep);
+      }
+    }
+  }
   const sourceReads = await readSide(
     sourceConn,
     sourceType,
@@ -396,11 +460,32 @@ export async function computeParity(
           frameworkResources: view.resources,
         }
       : { scope: 'endpoint', namespace: sourceNsRef },
-    new Set([...needed].filter((k) => !view.withheld.includes(k))),
+    new Set([...liveKeys].filter((k) => !view.withheld.includes(k))),
   );
+  if (refsOnly && stored) {
+    for (const key of needed) {
+      if (liveKeys.has(key) || view.withheld.includes(key)) continue;
+      const snapshot = stored.get(key);
+      const base = adapterCaps(registry, sourceType, key as never);
+      if (!snapshot || !base?.read) continue;
+      const read: FacetRead<unknown> = {
+        data: snapshot.data,
+        unreadable: snapshot.unreadable,
+        warnings: [],
+        rawResponseIds: [],
+      };
+      sourceReads.set(key, { ok: true, read, caps: effectiveCaps(base, read) });
+    }
+  }
   for (const key of view.withheld) {
     if (needed.has(key)) sourceReads.set(key, { ok: false, reason: 'source-lock-unsettled' });
   }
+  // LFS objects cannot have changed when the source refs are the ones the Analysis saw (FAC-GIT-005).
+  const liveRefs = sourceReads.get('git-refs');
+  const refsUnchanged =
+    stored !== undefined &&
+    liveRefs?.ok === true &&
+    stored.get('git-refs')?.hash === hashCanonical(jsonSafe(liveRefs.read.data));
 
   // -- the target ----------------------------------------------------------------------------
   const targetNsRef: NamespaceRef = {
@@ -597,6 +682,7 @@ export async function computeParity(
           env,
           caps: targetCaps[def.key] ?? NO_CAPABILITY,
           eds: edRecords,
+          refsUnchanged,
         }),
       );
     } catch (error) {
@@ -630,6 +716,8 @@ interface CompareOneInput {
   readonly env: { readonly route: Json; readonly routeIndex: Json };
   readonly caps: FacetCapability;
   readonly eds: readonly ExpectedDifferenceRecord[];
+  /** A drift check whose source refs equal the Analysis' (LFS is skipped, FAC-GIT-005). */
+  readonly refsUnchanged: boolean;
 }
 
 async function compareOne(input: CompareOneInput): Promise<FacetParity> {
@@ -704,7 +792,14 @@ async function gitDiffs(
   }
   // `lfsBytes` is what the last Run measured on the source: zero means it has no LFS objects.
   const lfsKnownEmpty = input.sourceRepository?.lfsBytes === 0n;
-  if (deps.lfs && targetRef && sourceRef && options.lfs !== 'skip' && !lfsKnownEmpty) {
+  if (
+    deps.lfs &&
+    targetRef &&
+    sourceRef &&
+    options.lfs !== 'skip' &&
+    !input.refsUnchanged &&
+    !lfsKnownEmpty
+  ) {
     const objects = await deps.lfs.objects({
       connection: input.sourceConn,
       repository: sourceRef,

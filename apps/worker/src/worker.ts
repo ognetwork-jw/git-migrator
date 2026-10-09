@@ -12,6 +12,7 @@ import {
   createRunAnalysisPort,
   createVerifyPlanner,
   createVerifyStep,
+  driftHandlers,
   feederHandlers,
   HEALTH_PORT,
   type HealthServer,
@@ -275,6 +276,8 @@ export async function startWorker(options: StartWorkerOptions): Promise<WorkerHa
       git,
       log,
       lfs: createMirrorLfsSource({ scratchRoot: scratchRoot(env), log }),
+      // LIF-060 step 1: a drift check reads the full source only when the schedule asks for it.
+      driftReadsSource: config.schedules.driftReadsSource,
     };
     // The Steps of the repository migration kinds (LIF-040 steps 1 to 12). `verify` joins
     // through `extraSteps` (T-072); `source.read-only` and the two source lock kinds are built in
@@ -338,6 +341,13 @@ export async function startWorker(options: StartWorkerOptions): Promise<WorkerHa
       }),
       ...feederHandlers({ db: db.privileged, runtime: jobs, quota, log }),
       ...parityHandlers(parityDeps),
+      // LIF-065: the daily sweep enqueues a drift check per verified Migration.
+      ...driftHandlers({
+        db: db.privileged,
+        runtime: jobs,
+        schedule: config.schedules.drift,
+        log,
+      }),
       ...invitationHandlers({
         db: db.privileged,
         appPool: db.pool,

@@ -76,25 +76,23 @@ describe('maintenance.prune', () => {
 });
 
 describe('maintenance handlers', () => {
-  it('[JOB-050] registers the maintenance jobs and completes unfinished scheduled jobs as skipped', async () => {
+  it('[JOB-050] registers the maintenance jobs and leaves the jobs of other processors unregistered', async () => {
     const handlers = maintenanceHandlers(deps());
     for (const name of [
       'maintenance.prune',
       'maintenance.scratch-cleanup',
       'maintenance.run-reaper',
-      'drift.sweep',
     ] as const) {
       expect(handlers[name]).toBeTypeOf('function');
     }
     // User-triggered jobs stay unregistered, so they fail visibly until their task lands.
     expect(handlers['run.execute']).toBeUndefined();
     expect(handlers['analysis.migration']).toBeUndefined();
-    // The feeder has its own processor now (T-061); the others still complete as skipped.
+    // The feeder (T-061), `parity.migration` (T-072) and `drift.sweep` (T-089) have processors of
+    // their own, not part of the maintenance handlers.
     expect(handlers['analysis.feeder']).toBeUndefined();
-    // `parity.migration` has its own processor now (T-072, parityHandlers).
     expect(handlers['parity.migration']).toBeUndefined();
-    const sweep = handlers['drift.sweep'] as unknown as () => Promise<unknown>;
-    expect(await sweep()).toEqual({ skipped: true });
+    expect(handlers['drift.sweep']).toBeUndefined();
   });
 
   it('[JOB-015] maintenance.scratch-cleanup removes scratch directories older than a day', async () => {

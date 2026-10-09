@@ -45,6 +45,14 @@ export {
   QUERY_CONNECTIONS,
 } from './connection.ts';
 export {
+  DRIFT_SWEEP_STATUSES,
+  type DriftSweepDeps,
+  type DriftSweepResult,
+  driftHandlers,
+  runDriftSweep,
+  scheduleIntervalMs,
+} from './drift/sweep.ts';
+export {
   HEALTH_PORT,
   type HealthServer,
   type HealthServerOptions,

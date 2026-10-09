@@ -42,6 +42,8 @@ export async function storeParity(
     readonly registry: FacetLookup;
     readonly now: Date;
     readonly log: Logger;
+    /** A scheduled drift check: also stamps `Migration.lastDriftCheckAt` (LIF-065). */
+    readonly drift?: boolean;
   },
 ): Promise<StoreResult> {
   const { computation, now } = input;
@@ -64,7 +66,11 @@ export async function storeParity(
   const completed = await completeVerifiableTasks(tx, input);
   await tx.migration.update({
     where: { id: migrationId },
-    data: { lastParityAt: now, parityGeneration: { increment: 1 } },
+    data: {
+      lastParityAt: now,
+      ...(input.drift ? { lastDriftCheckAt: now } : {}),
+      parityGeneration: { increment: 1 },
+    },
   });
   if (completed.length > 0) await recomputeReadiness(tx, migrationId);
   await publishEventIn(tx, {

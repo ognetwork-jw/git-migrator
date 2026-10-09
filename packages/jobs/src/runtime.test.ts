@@ -215,6 +215,20 @@ describe('job runtime on the PostgreSQL backend', () => {
     expect(other.id).not.toBe(first.id);
   }, 60_000);
 
+  it('[LIF-065] a drift check has its own waiting slot and payload, and never stands in for a check somebody asked for', async () => {
+    const runtime = makeRuntime(0);
+    await runtime.waitUntilReady();
+    await drainAll(runtime);
+    const asked = await runtime.enqueueParity('m-drift');
+    const drift = await runtime.enqueueParity('m-drift', { drift: true, delayMs: 60_000 });
+    const again = await runtime.enqueueParity('m-drift', { drift: true, delayMs: 60_000 });
+    expect(drift.id).not.toBe(asked.id);
+    expect(drift.data).toEqual({ migrationId: 'm-drift', drift: true });
+    expect(asked.data).toEqual({ migrationId: 'm-drift' });
+    expect(again.id).toBe(drift.id);
+    expect(drift.opts.delay).toBe(60_000);
+  }, 60_000);
+
   it('[LIF-062] a parity trigger that arrives while a check is active runs after it, never in parallel', async () => {
     const runtime = makeRuntime(6);
     await runtime.waitUntilReady();

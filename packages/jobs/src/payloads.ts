@@ -14,7 +14,8 @@ export const JOB_PAYLOADS = {
   'inventory.namespace': z.strictObject({ endpointId: id, namespaceId: id }),
   'analysis.migration': z.strictObject({ migrationId: id }),
   'run.execute': z.strictObject({ runId: id }),
-  'parity.migration': z.strictObject({ migrationId: id }),
+  // `drift`: a scheduled drift check (LIF-065) rather than an on-demand Parity Check (LIF-062).
+  'parity.migration': z.strictObject({ migrationId: id, drift: z.literal(true).optional() }),
   'drift.sweep': empty,
   'maintenance.prune': empty,
   'maintenance.scratch-cleanup': empty,

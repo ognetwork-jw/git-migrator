@@ -195,12 +195,22 @@ export class JobRuntime {
    * while a check is active is kept and runs after it (`keepLastIfActive`), because that check may
    * already have read the state the trigger changed.
    */
-  enqueueParity(migrationId: string, options: EnqueueOptions = {}): Promise<Job> {
+  enqueueParity(
+    migrationId: string,
+    options: EnqueueOptions & { readonly drift?: boolean } = {},
+  ): Promise<Job> {
+    const { drift, ...enqueue } = options;
+    // A drift check (LIF-065) reads less than an on-demand check, so it has its own waiting slot:
+    // it must never stand in for a check somebody asked for.
     return this.enqueue(
       'parity',
       'parity.migration',
-      { migrationId },
-      { dedupeId: `parity-${migrationId}`, keepLastIfActive: true, ...options },
+      drift ? { migrationId, drift: true } : { migrationId },
+      {
+        dedupeId: drift ? `parity-drift-${migrationId}` : `parity-${migrationId}`,
+        keepLastIfActive: true,
+        ...enqueue,
+      },
     );
   }
 

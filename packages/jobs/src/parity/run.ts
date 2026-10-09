@@ -19,6 +19,9 @@ export const PARITY_STATUSES: readonly string[] = [
   'drifted',
 ];
 
+/** Statuses a scheduled drift check works on (LIF-065); `drifted` is checked again to clear it. */
+export const DRIFT_STATUSES: readonly string[] = ['verified', 'manually_completed', 'drifted'];
+
 export type ParityRunResult =
   | { readonly skipped: ParitySkip | 'status' | 'running' | 'superseded' | 'no-facets' }
   | {
@@ -47,6 +50,7 @@ export async function runParity(
   if (!before) return { skipped: 'migration-missing' };
   if (before.status === 'running') return { skipped: 'running' };
   if (!PARITY_STATUSES.includes(before.status)) return { skipped: 'status' };
+  if (options.drift && !DRIFT_STATUSES.includes(before.status)) return { skipped: 'status' };
 
   const computation = await computeParity(deps, migrationId, options);
   if (computation.skipped) return { skipped: computation.skipped };
@@ -66,6 +70,7 @@ export async function runParity(
       registry: deps.registry.facets,
       now: now(),
       log: deps.log,
+      drift: options.drift !== undefined,
     });
     // Another check was stored while this one read: its result is older, so it changes nothing.
     if (stored.superseded) return { skipped: 'superseded' as const };
@@ -90,11 +95,12 @@ export async function runParity(
 /** The `parity.migration` handler (JOB-050: endpoint Migrations on `schedules.endpointParity`). */
 export function parityHandlers(deps: ParityDeps): JobHandlers {
   return {
-    'parity.migration': async ({ migrationId }, ctx) =>
+    'parity.migration': async ({ migrationId, drift }, ctx) =>
       runParity(deps, migrationId, {
         shutdown: ctx.shutdown,
         pool: 'background',
         log: ctx.log,
+        ...(drift ? { drift: { readsSource: deps.driftReadsSource ?? false } } : {}),
       }),
   };
 }

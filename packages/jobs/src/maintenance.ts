@@ -59,30 +59,14 @@ export function createPruner(deps: MaintenanceDeps): () => Promise<PruneResult> 
   };
 }
 
-/** Scheduler-driven jobs whose processors arrive with later tasks (ADR-0212). */
-const PENDING: ReadonlyArray<readonly [name: PendingJob, task: string]> = [
-  ['drift.sweep', 'T-089'],
-];
-type PendingJob = 'drift.sweep';
-
 /**
  * The handlers this module provides: `maintenance.prune`, `maintenance.scratch-cleanup` and
- * `maintenance.run-reaper`. Scheduler-driven jobs whose processors belong to later tasks complete
- * as skipped with a warning, so the schedulers (JOB-050) do not fill the failed set every minute.
+ * `maintenance.run-reaper`. (`drift.sweep` has its own processor, `drift/sweep.ts`, T-089; no
+ * scheduler-driven job is a placeholder any more, ADR-0212.)
  */
 export function maintenanceHandlers(deps: MaintenanceDeps): JobHandlers {
   const prune = createPruner(deps);
-  const pending = Object.fromEntries(
-    PENDING.map(([name, task]) => [
-      name,
-      async () => {
-        deps.log.warn({ job: name, task }, 'no processor yet; job skipped');
-        return { skipped: true };
-      },
-    ]),
-  ) as JobHandlers;
   return {
-    ...pending,
     'maintenance.prune': () => prune(),
     'maintenance.scratch-cleanup': async () => ({
       removed: await cleanScratch({ root: deps.scratchRoot, log: deps.log }),
