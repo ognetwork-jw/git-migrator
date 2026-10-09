@@ -928,6 +928,20 @@ async function markAttempt(pool: pg.Pool, migrationId: string, log: Logger): Pro
   }
 }
 
+/**
+ * The failure marker for an Analysis that a Run started inline (ADR-0312): the feeder backs off
+ * from a Migration whose Analysis fails. The `analysis.migration` handler writes it for its own
+ * jobs; the Run executor calls this for `analyzeForRun` (ADR-0343).
+ */
+export async function recordAnalysisFailure(
+  pool: pg.Pool,
+  migrationId: string,
+  log: Logger,
+): Promise<void> {
+  await markAttempt(pool, migrationId, log);
+  await restampFailure(pool, migrationId, log);
+}
+
 /** A Migration that needs no Analysis (missing, retired) must not stay marked as failing. */
 async function clearAttempt(pool: pg.Pool, migrationId: string): Promise<void> {
   await pool.query(

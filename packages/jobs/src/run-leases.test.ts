@@ -13,6 +13,7 @@ import {
   type RunEnqueuerLike,
   releaseRunLease,
   renewRunLease,
+  startQueuedRun,
 } from './run-leases.ts';
 import { type SeedRunFields, seedRun } from './world.fixture.ts';
 
@@ -32,10 +33,15 @@ const rowOf = async (id: string) =>
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
 function recorder() {
-  const calls: Array<{ runId: string; routing: unknown; dedupeId: string | undefined }> = [];
+  const calls: Array<{
+    runId: string;
+    routing: unknown;
+    dedupeId: string | undefined;
+    delayMs?: number | undefined;
+  }> = [];
   const runs: RunEnqueuerLike & { isRunJobPending(dedupeId: string): Promise<boolean> } = {
     async enqueueRun(runId, routing, options) {
-      calls.push({ runId, routing, dedupeId: options?.dedupeId });
+      calls.push({ runId, routing, dedupeId: options?.dedupeId, delayMs: options?.delayMs });
     },
     // Every enqueued job is still waiting.
     async isRunJobPending(dedupeId) {
@@ -324,4 +330,58 @@ describe('SIGTERM hand-off', () => {
     );
     expect(calls).toEqual([]);
   }, 60_000);
+});
+
+describe('Run leases of the executor (LIF-040, LIF-046)', () => {
+  it('[LIF-040] starts a queued Run and takes its lease in one statement, for one job only', async () => {
+    const id = await makeRun({ status: 'queued' });
+    const [a, b] = await Promise.all([
+      startQueuedRun(t.db.pool, id, 'tok-a'),
+      startQueuedRun(t.db.pool, id, 'tok-b'),
+    ]);
+    expect([a, b].filter(Boolean)).toHaveLength(1);
+    const row = await rowOf(id);
+    expect(row.status).toBe('running');
+    expect(row.started_at).not.toBeNull();
+    expect(row.reaper_resumes).toBe(0);
+    expect(await startQueuedRun(t.db.pool, id, 'tok-c')).toBe(false);
+  }, 60_000);
+
+  it('[LIF-040] never starts a queued Run whose cancel was requested', async () => {
+    const id = await makeRun({ status: 'queued' });
+    await t.db.pool.query('UPDATE app.run SET cancel_requested_at = now() WHERE id = $1', [id]);
+    expect(await startQueuedRun(t.db.pool, id, 'tok-a')).toBe(false);
+    expect((await rowOf(id)).status).toBe('queued');
+  });
+
+  it('[LIF-046] keepRunLease starts a queued Run only when asked to', async () => {
+    const id = await makeRun({ status: 'queued' });
+    expect(await keepRunLease({ pool: t.db.pool, runId: id, workerId: 'w' })).toBeUndefined();
+    const lease = await keepRunLease({
+      pool: t.db.pool,
+      runId: id,
+      workerId: 'w',
+      startQueued: true,
+    });
+    expect(lease).toBeDefined();
+    await lease?.release();
+  });
+
+  it('[LIF-046] a hand-off can delay the next job, and the marker still waits for it', async () => {
+    const id = await makeRun({ leaseOwner: 'tok-a', leaseExpiresInSeconds: 60 });
+    const { calls, runs } = recorder();
+    expect(
+      await handOffRun({
+        pool: t.db.pool,
+        runs,
+        runId: id,
+        token: 'tok-a',
+        routing,
+        delayMs: 90_000,
+      }),
+    ).toBe(true);
+    expect(calls).toHaveLength(1);
+    expect(calls[0]).toMatchObject({ runId: id });
+    expect((calls[0] as unknown as { delayMs?: number }).delayMs).toBe(90_000);
+  });
 });

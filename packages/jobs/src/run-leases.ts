@@ -82,6 +82,26 @@ export async function claimRunLease(pool: pg.Pool, runId: string, token: string)
   return (result.rowCount ?? 0) === 1;
 }
 
+/**
+ * Starts a `queued` Run: the first job of a Run moves it to `running` and takes the lease in one
+ * statement, so two jobs cannot both start it, and a cancelled Run is never started (LIF-040,
+ * ADR-0340). True when the caller now holds the lease.
+ */
+export async function startQueuedRun(
+  pool: pg.Pool,
+  runId: string,
+  token: string,
+): Promise<boolean> {
+  const result = await pool.query(
+    `UPDATE app.run
+     SET status = 'running', started_at = clock_timestamp(), updated_at = clock_timestamp(),
+         lease_owner = $2, lease_expires_at = clock_timestamp() + make_interval(secs => $3)
+     WHERE id = $1 AND status = 'queued' AND cancel_requested_at IS NULL`,
+    [runId, token, RUN_LEASE_TTL_SECONDS],
+  );
+  return (result.rowCount ?? 0) === 1;
+}
+
 /** Extends the lease while `token` still holds it. False means the lease was lost. */
 export async function renewRunLease(pool: pg.Pool, runId: string, token: string): Promise<boolean> {
   const result = await pool.query(
@@ -127,6 +147,8 @@ export interface KeepRunLeaseOptions {
   /** Worker id, for diagnostics; the lease token adds the job id and a random part. */
   readonly workerId: string;
   readonly jobId?: string | number | undefined;
+  /** Also start a `queued` Run (the first job of a Run), not only resume a `running` one. */
+  readonly startQueued?: boolean;
   readonly log?: Logger;
   readonly renewMs?: number;
   readonly localLimitMs?: number;
@@ -149,7 +171,10 @@ export async function keepRunLease(
   const now = options.now ?? Date.now;
   const limit = options.localLimitMs ?? RUN_LEASE_LOCAL_LIMIT_MS;
   const claimSentAt = now();
-  if (!(await claimRunLease(pool, runId, token))) return undefined;
+  const claimed =
+    (options.startQueued === true && (await startQueuedRun(pool, runId, token))) ||
+    (await claimRunLease(pool, runId, token));
+  if (!claimed) return undefined;
   const lost = new AbortController();
   let watchdog: NodeJS.Timeout | undefined;
   const giveUp = (): void => {
@@ -198,7 +223,11 @@ export async function keepRunLease(
 }
 
 export interface RunEnqueuerLike {
-  enqueueRun(runId: string, routing: RunRouting, options?: { dedupeId?: string }): Promise<unknown>;
+  enqueueRun(
+    runId: string,
+    routing: RunRouting,
+    options?: { dedupeId?: string; delayMs?: number },
+  ): Promise<unknown>;
 }
 
 /**
@@ -215,6 +244,8 @@ export async function handOffRun(options: {
   readonly runId: string;
   readonly token: string;
   readonly routing: RunRouting;
+  /** Delay of the next job (rate limit, scratch space); the lease marker waits for it (ADR-0212). */
+  readonly delayMs?: number;
 }): Promise<boolean> {
   // The old token is unique per claim, so the id is stable if this is retried and distinct from
   // the id of any earlier hand-off of the same Run. The marker carries it for the reaper.
@@ -227,6 +258,9 @@ export async function handOffRun(options: {
     [options.runId, options.token, RUN_LEASE_TTL_SECONDS, pendingMarker('handoff', dedupeId)],
   );
   if ((released.rowCount ?? 0) !== 1) return false;
-  await options.runs.enqueueRun(options.runId, options.routing, { dedupeId });
+  await options.runs.enqueueRun(options.runId, options.routing, {
+    dedupeId,
+    ...(options.delayMs !== undefined && options.delayMs > 0 ? { delayMs: options.delayMs } : {}),
+  });
   return true;
 }
