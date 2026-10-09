@@ -215,7 +215,7 @@ type BranchRules = { rules: BranchRule[] };
   - The target applies one rule per branch: an exact name wins, otherwise the oldest wildcard rule. So a rule whose branches are provably covered by another rule has that rule's restrictions folded in (`patterns-merged`), and rules that may select the same branch without a provable cover raise lossy `branch-rules.overlap-unresolved`; so does every wildcard rule folded under another wildcard rule, because a pre-existing older target rule would win. Overlaps are never silent (ADR-0113).
   - Apply order: the target writer creates wildcard rules in the order `branchRuleApplyOrder` (`@git-migrator/canonical`) gives for the desired rules, a deterministic topological order in which every rule precedes the rules that cover it, so the narrower rule is older and wins (ADR-0113).
 - **FAC-BRR-004** `enforce_admins` is `false`, which matches Bitbucket, where workspace admins bypass restrictions.
-- **Findings:** `branch-rules.accept-lossy` pre (one per unaccepted policy key) · `branch-rules.configure-status-checks` post (v) · `branch-rules.unknown-kind` W · `branch-rules.branching-model` W (informs about prefixes and dev/prod branches that GitHub lacks).
+- **Findings:** `branch-rules.accept-lossy` pre (one per unaccepted policy key) · `branch-rules.configure-status-checks` post (v) · `branch-rules.unknown-kind` W · `branch-rules.branching-model` W (informs about prefixes and dev/prod branches that GitHub lacks; raised only when a `branching_model` restriction used the model or a production branch is configured, or the development branch differs from the main branch).
 
 ## webhooks (FAC-WEB)
 
@@ -252,7 +252,7 @@ type CanonicalEvent = 'push' | 'cr.opened' | 'cr.updated' | 'cr.merged' | 'cr.de
   | `issue:*` | issue.any | `issues` |
 
   GitHub events are coarser, so a receiver gets a superset. This is translated. Unmapped source events are lossy `webhooks.event-dropped`.
-- **FAC-WEB-002 Payload incompatibility.** Payload formats always differ. A hook is auto-created only if its URL matches a `WebhookAllowlistEntry` pattern for the Route. Matching is structural (ADR-0141): both URL and pattern are parsed; the scheme and port (defaults removed) must be equal; the host matches case-insensitively after IDN conversion, with `*` standing for exactly one label; `*` (within a segment) and `**` (across segments) apply to the parsed path only; query and fragment are ignored; a URL containing `\`, whitespace or control characters never matches. Otherwise, or when none of the hook's events can be received on the target, post task `webhooks.recreate-manually` (v), whose guidance includes the exact target settings. Hooks that exist only on the target are not parity differences. Webhooks whose URLs normalize to the same key are merged by the reader with warning `webhooks.duplicate-url`.
+- **FAC-WEB-002 Payload incompatibility.** Payload formats always differ. A hook is auto-created only if its URL matches a `WebhookAllowlistEntry` pattern for the Route. Matching is structural (ADR-0141): both URL and pattern are parsed; the scheme and port (defaults removed) must be equal; the host matches case-insensitively after IDN conversion, with `*` standing for exactly one label; `*` (within a segment) and `**` (across segments) apply to the parsed path only; query and fragment are ignored; a URL containing `\`, whitespace or control characters never matches. Otherwise, or when none of the hook's events can be received on the target, post task `webhooks.recreate-manually` (v), whose guidance includes the exact target settings. A hook that is not created raises no `webhooks.set-secret`. Hooks that exist only on the target are not parity differences. Webhooks whose URLs normalize to the same key are merged by the reader with warning `webhooks.duplicate-url`.
 - **FAC-WEB-003 Secrets.** If `hasSecret`, the hook is created *inactive* and without a secret. git-migrator never generates, stores or displays webhook secrets. Post task `webhooks.set-secret` (v) instructs the human to set a secret on the GitHub hook and the receiver, then activate the hook. The desired `active` is `false` for such a hook; the task params carry the source value as `activateAfterSecret`, and the activate step is shown only when it is true. The task is satisfied when the target hook has `hasSecret: true` and, if `activateAfterSecret`, `active: true`. Parity compares `hasSecret`; `active` compares equal for such a hook because the human sets it (ADR-0141). Task params carry only the hook key and the redacted URL.
 - **FAC-WEB-004** Content type is always `json`.
 - Non-allowlisted hooks are omitted from `desired` and appear only as the post task, so parity stays equal for them. The task is satisfied when a target hook with the same URL and event set exists.
@@ -266,7 +266,7 @@ type DeployKeys = { keys: { publicKey: string; title: string; readOnly: boolean 
 
 - **FAC-DKY-001 Bitbucket.** Repository access keys plus the containing project's access keys, flattened (ADR-0011). All are read-only.
 - **FAC-DKY-002 GitHub.** `POST /repos/{o}/{r}/keys` with `read_only: true`. GitHub rejects a key already used as a deploy key on another repository, or as a user key. On a `key is already in use` response, the step records post task `deploy-keys.key-in-use` (v) and continues. Guidance covers generating per-repository keys or using a machine user.
-- **FAC-DKY-003 Pre-detection.** During analysis, a key that appears on more than one source repository on the Route (computed from stored Snapshots) is flagged in advance with the same post task.
+- **FAC-DKY-003 Pre-detection.** During analysis, a key that appears on more than one source repository on the Route (computed from stored Snapshots) is flagged in advance with the same post task. When an Analysis changes a repository's keys, Migrations whose latest Snapshot holds a changed key are marked stale so the result converges in any order.
 - **Findings:** `deploy-keys.key-in-use` post (v).
 
 ## environments (FAC-ENV)
@@ -306,7 +306,7 @@ type Pipelines = {
 ```
 
 - **FAC-PIP-001 Read.** Source: `bitbucket-pipelines.yml` at the default branch head (`/src` API) and `pipelines_config.enabled`. Target: `.github/workflows/*.yml` on the default branch, plus open framework Change Requests.
-- **FAC-PIP-002 Translation subset.** The pair override `bitbucket-cloud → github` translates these constructs, and only these. YAML anchors and aliases are resolved first.
+- **FAC-PIP-002 Translation subset.** The pair override `bitbucket-cloud → github` translates these constructs, and only these. YAML anchors and aliases are resolved first. The file text reaches `translate` only through `FacetRead.attachments` (ADP-011), as `routeIndex.pipelines.sources`.
   - `image` (global or step): a public image name, optionally with `username`/`password` referencing variables. Becomes `container:` with credentials from secrets.
   - Triggers:
     - `pipelines.default` → `on.push` (all branches) plus `on.pull_request`.

@@ -36,7 +36,7 @@ Use the ZenStack RPC API whenever policy-guarded CRUD over models is enough. A c
 
 - `Wave`: create, update, delete (operator).
 - `Migration.waveId`: update (operator).
-- `NamingRule`, `WebhookAllowlistEntry`, `Overlay`: create, update, delete (admin). The server marks affected Analyses stale via a ZenStack after-mutation hook.
+- `NamingRule`, `WebhookAllowlistEntry`, `Overlay`: create, update, delete (admin). The server marks every Migration of the Route stale through a database trigger, not a policy-client hook (the Actor cannot write `Migration`).
 - `ManualTask.note`: update (operator).
 
 Primary keys are immutable through RPC.
@@ -55,7 +55,7 @@ All are under `/api/v1`. The required role is shown in brackets.
 | `POST /runs/{id}/cancel` [operator] | — | Cooperative cancel. The Run checks for cancellation between steps. |
 | `POST /migrations/{id}/complete` [operator] | `{reason}` | LIF-075 |
 | `DELETE /migrations/{id}/complete` [operator] | — | Revoke |
-| `POST /migrations/{id}/tasks/{taskId}/{done\|reopen\|dismiss}` [operator] | `{note?}` | Updates the task. Triggers parity. |
+| `POST /migrations/{id}/tasks/{taskId}/{done\|reopen\|dismiss}` [operator] | `{note?}` | Updates the task. Triggers parity. `dismiss` MUST set `completedById` (LIF-020 step 6). |
 | `POST /migrations/{id}/expected-differences` [operator] | `{facetKey, path, note}` | `manual_accepted` |
 | `DELETE /expected-differences/{id}` [operator] | — | Revoke (sets `revokedAt`) |
 | `POST /migrations/{id}/drift/accept` [operator] | `{note}` | Accept all current drift diffs (LIF-065) |

@@ -111,6 +111,7 @@ export interface FacetRead<T> {
   warnings: AdapterWarning[];
   rawResponseIds: string[];
   capabilities?: Record<FieldPath, FieldSupport>;  // facts known only at read time; merged over ProviderCapabilities (ADR-0231)
+  attachments?: Record<string, string>;            // in-memory content that `data` refers to by sha256 only; the Analysis moves it into `routeIndex` and drops it: never persisted, captured or logged
 }
 
 export type FacetTarget =

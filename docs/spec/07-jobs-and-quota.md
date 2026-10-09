@@ -46,18 +46,21 @@ BullMQ runs with its PostgreSQL backend in schema `bullmq`, registered process-w
 
 ## Analysis feeder (JOB-020, JOB-022)
 
-The scheduler leader runs `analysis.feeder` every minute. It enqueues background analyses so that the *background pool* of each source bucket stays busy without exceeding it. The rule is: enqueue `min(freeBackgroundCapacity / avgCallsPerAnalysis, maxBatch)` jobs.
+The scheduler leader runs `analysis.feeder` every minute. It enqueues background analyses so that the *background pool* of each source bucket stays busy without exceeding it. The rule is: enqueue `min(freeBackgroundCapacity / avgCallsPerAnalysis, maxBatch)` jobs per source Endpoint per tick, with `maxBatch` = 50. `freeBackgroundCapacity` per account is the tightest bucket's `max(0, backgroundLimit - used)` (0 while blocked or clamped), summed over accounts, minus the mean cost of every waiting or delayed background analysis (active ones are already in the ledger). An Endpoint with no bucket yet gets one first batch.
 
-Candidates are picked in this priority order:
+Candidates are picked in this priority order, while their Route's `avgCallsPerAnalysis` fits the remaining budget:
 
-1. Wave members never analyzed.
-2. Wave members stale.
-3. Never analyzed.
-4. Stale (oldest `analysisStaleAt` first).
+1. Endpoint Migrations that are due: never analyzed, stale, or analyzed before the newest `lastInventoriedAt` of either Endpoint.
+2. Wave members never analyzed.
+3. Wave members stale.
+4. Never analyzed.
+5. Stale (oldest `analysisStaleAt` first).
+
+A Migration whose `analysisRetryAt` is in the future is not a candidate. Each failed analysis job records `analysisFailureCount` + 1 and `analysisRetryAt` = now + 5 min doubled per earlier failure, capped at 6 h (database clock). BullMQ retries of one job count once. A successful or skipped Analysis clears the markers. Marking stale clears the retry time but keeps the count. A fault no retry fixes (retired Endpoint, unresolved target namespace) fails without retry.
 
 The feeder never selects Migrations in `running`, `verified`, `manually_completed`, `rolled_back` or `source_missing`. Drift checks cover verified ones. The feeder also enqueues the endpoint Migration analysis of each Route after every completed inventory.
 
-`avgCallsPerAnalysis` is a rolling mean stored per Route, starting at 30.
+`avgCallsPerAnalysis` is a `Route` column starting at 30, updated after each Analysis as an exponential moving mean (weight 0.1) of the provider requests it made.
 
 ## Quota (JOB-040 … JOB-047)
 

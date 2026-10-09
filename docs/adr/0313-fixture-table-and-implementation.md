@@ -1,6 +1,6 @@
 # ADR-0313: Where the T-043 table and the implementation disagreed
 
-- Status: agent-decided
+- Status: accepted (spec updated)
 - Date: 2026-10-08
 - Task: T-061
 - Affects: TST-012, FAC-BRR-001, FAC-WEB-002, FAC-006, AUTH-050, LIF-004

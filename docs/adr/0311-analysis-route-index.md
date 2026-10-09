@@ -1,6 +1,6 @@
 # ADR-0311: What the Analysis puts into the translate context
 
-- Status: agent-decided
+- Status: accepted (spec updated)
 - Date: 2026-10-08
 - Task: T-061
 - Affects: FAC-DKY-003, FAC-PIP-002, FAC-PIP-003, FAC-WEB-002, FAC-END, ADP-011, ADP-030, ADP-031, ARC-012, ADP-060

@@ -1,6 +1,6 @@
 # ADR-0310: Analysis processor
 
-- Status: agent-decided
+- Status: accepted (spec updated)
 - Date: 2026-10-08
 - Task: T-061
 - Affects: LIF-020, LIF-021, LIF-022, LIF-002, LIF-004, LIF-045, FAC-006, FAC-005, API-012, JOB-020, JOB-060, ADP-011, ADP-014, DOM-003

@@ -1,6 +1,6 @@
 # ADR-0312: Analysis feeder
 
-- Status: agent-decided
+- Status: accepted (spec updated)
 - Date: 2026-10-08
 - Task: T-061
 - Affects: JOB-020, JOB-022, JOB-040, JOB-041, JOB-011, JOB-047
