@@ -11,7 +11,7 @@ The Bitbucket Cloud source adapter (T-032). Provider facts: `docs/providers/bitb
 | `mappers.ts` | Pure provider JSON to canonical mappers (every Facet) |
 | `facets.ts`, `reader.ts` | Read-only Facet drivers (`capture: true`), short-lived shared fetches |
 | `inventory.ts` | Namespaces (workspace, projects), repositories, identities, groups |
-| `source-lock.ts` | LIF-070 apply and undo with the guarded description `PUT` (ADR-0222) |
+| `source-lock.ts` | LIF-070 apply, undo, `originals` and `inspect` with the guarded description `PUT` (ADR-0222). With `originals` (taken before the write) apply writes the description only while it still shows the original, and `inspect` sets a recovered description's `before` from the original, never from the current text (ADR-0425). `frameworkRestrictionIds` lets the `branch-rules` read leave the framework's restrictions out by id (`FacetTarget.frameworkResources`) |
 | `git-access.ts` | `remoteUrl` (no credentials) and the token credential for `git` |
 
 Behavior worth knowing:

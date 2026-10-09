@@ -113,8 +113,7 @@ type Segments = ReturnType<typeof parseFieldPath>;
 /**
  * LIF-045: removes what the framework itself created on the source before translation. Each path
  * of an active source-side `create` Mutation addresses either a keyed collection element (removed
- * whole), a top-level field (removed) or a field of an element (set to `null`, which the Facet
- * schema allows where the framework can have written it). The input is not mutated.
+ * whole) or a plain field (removed). The input is not mutated.
  */
 export function withoutFrameworkCreated(doc: unknown, paths: readonly string[]): unknown {
   let out = structuredClone(doc);
@@ -130,25 +129,22 @@ export function withoutFrameworkCreated(doc: unknown, paths: readonly string[]):
   return out;
 }
 
-function removeAt(node: unknown, segments: Segments, inElement = false): unknown {
+function removeAt(node: unknown, segments: Segments): unknown {
   const [head, ...rest] = segments;
   if (head === undefined || !isObject(node)) return node;
   const child = node[head.name];
   if (head.key === undefined) {
     if (rest.length === 0) {
-      // A field of a collection element cannot be absent (the Facet schema requires it), so it
-      // takes the unset value `null`: the state before the framework's write (LIF-070).
-      if (inElement) return child === undefined ? node : { ...node, [head.name]: null };
       const { [head.name]: _removed, ...kept } = node;
       return kept;
     }
-    return child === undefined ? node : { ...node, [head.name]: removeAt(child, rest, inElement) };
+    return child === undefined ? node : { ...node, [head.name]: removeAt(child, rest) };
   }
   if (!Array.isArray(child)) return node;
   const { field, value } = head.key;
   const matches = (item: unknown): boolean => matchesKey(item, field, value);
   if (rest.length === 0) return { ...node, [head.name]: child.filter((i) => !matches(i)) };
-  return { ...node, [head.name]: child.map((i) => (matches(i) ? removeAt(i, rest, true) : i)) };
+  return { ...node, [head.name]: child.map((i) => (matches(i) ? removeAt(i, rest) : i)) };
 }
 
 function matchesKey(item: unknown, field: string, value: string): boolean {

@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
-import { makeConnection, makeWorld, target } from './harness.test.ts';
-import { migrationPrefix, SourceLockPartialError } from './source-lock.ts';
+import { driverCtx, facet, makeConnection, makeWorld, target } from './harness.test.ts';
+import { mapBranchRules, restriction } from './mappers.ts';
+import { frameworkRestrictionIds, migrationPrefix, SourceLockPartialError } from './source-lock.ts';
 
 const URL_TARGET = 'https://github.com/acme/plat-auto-ok';
 const PREFIX = `[MIGRATED → ${URL_TARGET}] `;
@@ -379,5 +380,226 @@ describe('source read-only (LIF-070)', () => {
       conn.sourceLock?.apply(target().repository, { targetWebUrl: URL_TARGET }),
     ).rejects.toMatchObject({ code: 'forbidden' });
     expect(repoState(world).description).toBe('hello');
+  });
+});
+
+describe('source read-only: reads leave the framework restrictions out by identity (LIF-045)', () => {
+  type Rules = {
+    rules: { pattern: string; restrictPushes: unknown[] | null; blockDeletion: boolean }[];
+  };
+
+  async function rulesOf(
+    world: ReturnType<typeof makeWorld>,
+    own: readonly Record<string, unknown>[],
+  ): Promise<Rules['rules']> {
+    const { conn } = await makeConnection(world);
+    const read = await facet(conn, 'branch-rules').read(driverCtx(conn), {
+      ...target(),
+      frameworkResources: own,
+    });
+    return (read.data as Rules).rules;
+  }
+
+  const user = (world: ReturnType<typeof makeWorld>) =>
+    world.fake.state.addBranchRestriction('acme', 'auto-ok', {
+      kind: 'push',
+      // Canonically the same pattern as the lock's `*`, but a restriction of its own.
+      pattern: '**',
+      users: ['acct-alice'],
+    });
+
+  it('[LIF-045] a user-scoped push restriction on * survives the lock: the rule is what it was without it', async () => {
+    const world = makeWorld();
+    const { conn } = await makeConnection(world);
+    const before = await rulesOf(world, []);
+    user(world);
+    const withUser = await rulesOf(world, []);
+    const mutations =
+      (await conn.sourceLock?.apply(target().repository, { targetWebUrl: URL_TARGET })) ?? [];
+    const own = mutations.map((m) => m.resourceRef);
+    expect(await rulesOf(world, own)).toEqual(withUser);
+    const locked = await rulesOf(world, []);
+    // Without the identity filter the lock would have emptied the allow list.
+    expect(locked.find((r) => r.pattern === '**')?.restrictPushes).toEqual([]);
+    expect(withUser.find((r) => r.pattern === '**')?.restrictPushes).not.toEqual([]);
+    expect(before.find((r) => r.pattern === '**')?.restrictPushes).toBeNull();
+  });
+
+  it('[LIF-045] a restriction an operator adds after the lock is visible', async () => {
+    const world = makeWorld();
+    const { conn } = await makeConnection(world);
+    const mutations =
+      (await conn.sourceLock?.apply(target().repository, { targetWebUrl: URL_TARGET })) ?? [];
+    world.fake.state.addBranchRestriction('acme', 'auto-ok', { kind: 'delete', pattern: '*' });
+    const rule = (
+      await rulesOf(
+        world,
+        mutations.map((m) => m.resourceRef),
+      )
+    ).find((r) => r.pattern === '**');
+    expect(rule?.blockDeletion).toBe(true);
+    expect(rule?.restrictPushes).toBeNull();
+  });
+
+  it('[LIF-045] removing a co-located restriction after the lock does not leave an empty ** rule', async () => {
+    const world = makeWorld();
+    const { conn } = await makeConnection(world);
+    const mutations =
+      (await conn.sourceLock?.apply(target().repository, { targetWebUrl: URL_TARGET })) ?? [];
+    const repo = repoState(world);
+    repo.branchRestrictions = repo.branchRestrictions.filter(
+      (r) => !(r.pattern === '*' && r.kind === 'force'),
+    );
+    const rules = await rulesOf(
+      world,
+      mutations.map((m) => m.resourceRef),
+    );
+    expect(rules.map((r) => r.pattern)).toEqual(['main']);
+  });
+
+  it('[LIF-045] a pre-existing user-less push restriction on ** that the framework did not record is not dropped', async () => {
+    const world = makeWorld();
+    world.fake.state.addBranchRestriction('acme', 'auto-ok', { kind: 'push', pattern: '**' });
+    const { conn } = await makeConnection(world);
+    const mutations =
+      (await conn.sourceLock?.apply(target().repository, { targetWebUrl: URL_TARGET })) ?? [];
+    const rule = (
+      await rulesOf(
+        world,
+        mutations.map((m) => m.resourceRef),
+      )
+    ).find((r) => r.pattern === '**');
+    expect(rule?.restrictPushes).toEqual([]);
+  });
+
+  it('[LIF-070] inspect finds an unrecorded lock as undoable records, and nothing before one exists', async () => {
+    const world = makeWorld();
+    const { conn } = await makeConnection(world);
+    expect(await conn.sourceLock?.inspect?.(target().repository)).toEqual([]);
+    const originals = (await conn.sourceLock?.originals?.(target().repository)) ?? [];
+    expect(originals).toEqual([
+      expect.objectContaining({ action: 'update', before: null, after: { description: 'hello' } }),
+    ]);
+    await conn.sourceLock?.apply(target().repository, { targetWebUrl: URL_TARGET, originals });
+    const found = (await conn.sourceLock?.inspect?.(target().repository, { originals })) ?? [];
+    expect(found.map((m) => [m.facetKey, m.action, m.resourceRef.possiblyFramework])).toEqual([
+      ['branch-rules', 'create', true],
+      ['repository-settings', 'update', true],
+    ]);
+    expect(found[1]).toMatchObject({ before: { description: 'hello' } });
+    await conn.sourceLock?.undo(target().repository, found);
+    expect(repoState(world).description).toBe('hello');
+    expect(await conn.sourceLock?.inspect?.(target().repository)).toEqual([]);
+  });
+
+  it('[LIF-070] without originals, inspect never derives the original description: before is null', async () => {
+    const world = makeWorld();
+    const { conn } = await makeConnection(world);
+    await conn.sourceLock?.apply(target().repository, { targetWebUrl: URL_TARGET });
+    const found = (await conn.sourceLock?.inspect?.(target().repository)) ?? [];
+    expect(found.find((m) => m.facetKey === 'repository-settings')?.before).toBeNull();
+    // A description changed beyond the lock's own write is not explained by the original either.
+    const originals = [
+      {
+        facetKey: 'repository-settings',
+        action: 'update' as const,
+        resourceRef: { type: 'repository-description', repository: 'auto-ok' },
+        paths: ['/description'],
+        before: null,
+        after: { description: 'something else' },
+      },
+    ];
+    const again = (await conn.sourceLock?.inspect?.(target().repository, { originals })) ?? [];
+    expect(again.find((m) => m.facetKey === 'repository-settings')?.before).toBeNull();
+  });
+
+  it('[LIF-070] a crash after the description write over a prefixed original: undo restores that original exactly (reviewer probe 2)', async () => {
+    const world = makeWorld();
+    const original = '[MIGRATED → https://old.example/x] foo';
+    repoState(world).description = original;
+    const { conn } = await makeConnection(world);
+    const ref = target().repository;
+    const originals = (await conn.sourceLock?.originals?.(ref)) ?? [];
+    // The records of this apply are lost (the worker died after the PUT).
+    await conn.sourceLock?.apply(ref, { targetWebUrl: URL_TARGET, originals });
+    expect(repoState(world).description).toBe(`${PREFIX}foo`);
+    const found = (await conn.sourceLock?.inspect?.(ref, { originals })) ?? [];
+    const description = found.find((m) => m.facetKey === 'repository-settings');
+    expect(description?.before).toEqual({ description: original });
+    await conn.sourceLock?.undo(ref, found);
+    expect(repoState(world).description).toBe(original);
+  });
+
+  it('[LIF-070] apply does not write a description that changed since the originals were taken', async () => {
+    const world = makeWorld();
+    const { conn, rec } = await makeConnection(world);
+    const ref = target().repository;
+    const originals = (await conn.sourceLock?.originals?.(ref)) ?? [];
+    repoState(world).description = '[MIGRATED → https://other.example/z] hello';
+    const error = await conn.sourceLock
+      ?.apply(ref, { targetWebUrl: URL_TARGET, originals })
+      .catch((e: unknown) => e);
+    expect(error).toBeInstanceOf(SourceLockPartialError);
+    expect((error as SourceLockPartialError).code).toBe('conflict');
+    // The restriction was written and is reported; the description was not touched.
+    expect((error as SourceLockPartialError).mutations.map((m) => m.facetKey)).toEqual([
+      'branch-rules',
+    ]);
+    expect(rec.requests.filter((r) => r.method === 'PUT')).toEqual([]);
+    expect(repoState(world).description).toBe('[MIGRATED → https://other.example/z] hello');
+  });
+
+  it('[LIF-070] a repeated undo of the description writes nothing and keeps a prefix that was part of the original', async () => {
+    const world = makeWorld();
+    const original = '[MIGRATED → https://old.example/x] original';
+    repoState(world).description = original;
+    const { conn, rec } = await makeConnection(world);
+    const record = {
+      facetKey: 'repository-settings',
+      action: 'update' as const,
+      resourceRef: { type: 'repository-description', repository: 'auto-ok' },
+      paths: ['/description'],
+      before: { description: original },
+      after: { description: `${PREFIX}${original}` },
+    };
+    const writes = rec.requests.filter((r) => r.method !== 'GET').length;
+    await conn.sourceLock?.undo(target().repository, [record]);
+    expect(repoState(world).description).toBe(original);
+    expect(rec.requests.filter((r) => r.method !== 'GET')).toHaveLength(writes);
+  });
+});
+
+describe('source read-only: the reviewer probe, as a permanent test (LIF-045)', () => {
+  const user = {
+    type: 'user',
+    uuid: '{11111111-1111-1111-1111-111111111111}',
+    account_id: 'a1',
+    nickname: 'alice',
+    display_name: 'Alice',
+  };
+  const push = (id: number, users: unknown[]) =>
+    restriction.parse({
+      id,
+      kind: 'push',
+      pattern: '*',
+      branch_match_kind: 'glob',
+      users,
+      groups: [],
+    });
+
+  it('[LIF-045] combining a user-scoped push restriction with the lock gives [] unless the lock is left out by id', () => {
+    const own = frameworkRestrictionIds(
+      {
+        ...target(),
+        frameworkResources: [{ type: 'branch-restriction', repository: 'auto-ok', id: 2 }],
+      },
+      'auto-ok',
+    );
+    const all = [push(1, [user]), push(2, [])];
+    const pushes = (items: typeof all) =>
+      mapBranchRules(items, {}).rules.map((r) => [r.pattern, r.restrictPushes?.length ?? null]);
+    expect(pushes(all)).toEqual([['**', 0]]);
+    expect(pushes(all.filter((r) => !own.has(r.id)))).toEqual(pushes([push(1, [user])]));
+    expect(pushes(all.filter((r) => !own.has(r.id)))).toEqual([['**', 1]]);
   });
 });

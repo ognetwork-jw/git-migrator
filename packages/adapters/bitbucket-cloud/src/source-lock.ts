@@ -7,6 +7,7 @@
  */
 import {
   AdapterError,
+  type FacetTarget,
   type Logger,
   type MutationRecord,
   type ProviderHttpClient,
@@ -51,6 +52,34 @@ export class SourceLockPartialError extends AdapterError {
     this.mutations = mutations;
     this.possiblyApplied = possiblyApplied;
   }
+}
+
+/**
+ * The ids of the branch restrictions of `slug` that the framework created or holds as the source
+ * lock, from the `resourceRef`s the framework hands to a source read (LIF-045). Adopted ones count:
+ * a lock-shaped restriction the framework found there is the lock as far as translation goes.
+ */
+export function frameworkRestrictionIds(target: FacetTarget, slug: string): Set<number> {
+  const ids = new Set<number>();
+  const own = target.scope === 'repository' ? (target.frameworkResources ?? []) : [];
+  for (const ref of own) {
+    if (ref.type === RESTRICTION_TYPE && ref.repository === slug && typeof ref.id === 'number') {
+      ids.add(ref.id);
+    }
+  }
+  return ids;
+}
+
+/** The description `originals` hold for `slug`, if any (see `SourceLock.originals`). */
+function originalDescription(
+  originals: readonly MutationRecord[] | undefined,
+  slug: string,
+): string | undefined {
+  const found = (originals ?? []).find(
+    (o) => o.resourceRef.type === DESCRIPTION_TYPE && o.resourceRef.repository === slug,
+  );
+  const text = (found?.after as { description?: unknown } | null | undefined)?.description;
+  return typeof text === 'string' ? text : undefined;
 }
 
 export function migrationPrefix(targetWebUrl: string): string {
@@ -204,9 +233,13 @@ export function createSourceLock(options: {
   });
 
   return {
-    async apply(ref: RepositoryRef, lock: { targetWebUrl: string }): Promise<MutationRecord[]> {
+    async apply(
+      ref: RepositoryRef,
+      lock: { targetWebUrl: string; originals?: readonly MutationRecord[] },
+    ): Promise<MutationRecord[]> {
       const slug = ref.slug;
       const prefix = migrationPrefix(lock.targetWebUrl);
+      const original = originalDescription(lock.originals, slug);
       // GET first, in this step: a missing repository is never written (it would be created).
       await fresh(slug);
       const done: MutationRecord[] = [];
@@ -274,6 +307,16 @@ export function createSourceLock(options: {
             after: { description: current },
           });
         } else {
+          if (original !== undefined && current !== original) {
+            // Changed since the baseline: a write now could not be told from that change after a
+            // crash, so nothing is written (the restriction above is still recorded).
+            throw new AdapterError({
+              code: 'conflict',
+              provider: PROVIDER,
+              message:
+                'The repository description changed while the source was being locked; run the lock again',
+            });
+          }
           const next = `${prefix}${current.replace(PREFIX_RE, '')}`;
           // Recorded as soon as the write happened, even if the verification then fails.
           await putDescription(
@@ -309,6 +352,69 @@ export function createSourceLock(options: {
         );
       }
       return done;
+    },
+
+    async originals(ref: RepositoryRef): Promise<MutationRecord[]> {
+      const slug = ref.slug;
+      const current = (await fresh(slug)).description ?? '';
+      return [
+        {
+          facetKey: 'repository-settings',
+          action: 'update',
+          resourceRef: { type: DESCRIPTION_TYPE, repository: slug },
+          paths: ['/description'],
+          before: null,
+          after: { description: current },
+        },
+      ];
+    },
+
+    async inspect(
+      ref: RepositoryRef,
+      inspectOptions?: { originals?: readonly MutationRecord[] },
+    ): Promise<MutationRecord[]> {
+      const slug = ref.slug;
+      const out: MutationRecord[] = [];
+      const present = (
+        await listAll(
+          req(),
+          restrictionPath(slug),
+          restriction,
+          'branch restrictions',
+          { kind: 'push', pattern: ROOT_PATTERN },
+          { capture: false },
+        )
+      ).items.filter(
+        (r) =>
+          r.kind === 'push' &&
+          r.pattern === ROOT_PATTERN &&
+          (r.branch_match_kind ?? 'glob') === 'glob' &&
+          (r.users ?? []).length === 0 &&
+          (r.groups ?? []).length === 0,
+      );
+      for (const r of present) {
+        const rec = restrictionRecord(slug, r.id);
+        out.push({ ...rec, resourceRef: { ...rec.resourceRef, possiblyFramework: true } });
+      }
+      const current = (await fresh(slug)).description ?? '';
+      if (PREFIX_RE.test(current)) {
+        // The original comes from the baseline, never from stripping what is there now (the
+        // original may itself carry a prefix). It explains the current text only if the lock
+        // written over it (`prefix + original without its prefix`) leaves the same body.
+        const original = originalDescription(inspectOptions?.originals, slug);
+        const explained =
+          original !== undefined &&
+          current.replace(PREFIX_RE, '') === original.replace(PREFIX_RE, '');
+        out.push({
+          facetKey: 'repository-settings',
+          action: 'update',
+          resourceRef: { type: DESCRIPTION_TYPE, repository: slug, possiblyFramework: true },
+          paths: ['/description'],
+          before: explained ? { description: original } : null,
+          after: { description: current },
+        });
+      }
+      return out;
     },
 
     async undo(ref: RepositoryRef, mutations: MutationRecord[]): Promise<MutationRecord[]> {
@@ -366,6 +472,17 @@ export function createSourceLock(options: {
           }
           const before = await fresh(slug);
           const current = before.description ?? '';
+          if (current === original) {
+            // Already the original (a repeated undo): nothing to revert, and a prefix that was part
+            // of the original description is not ours to strip.
+            out.push({
+              ...m,
+              action: 'update',
+              before: { description: current },
+              after: { description: current },
+            });
+            continue;
+          }
           // Restore the original when untouched, else only remove our prefix (later edits stay).
           const next = current === was ? original : current.replace(PREFIX_RE, '');
           if (next !== current) await putDescription(slug, before, next);

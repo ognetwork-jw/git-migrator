@@ -141,8 +141,34 @@ export interface InvitationWriter {
 }
 
 export interface SourceLock {
-  apply(ref: RepositoryRef, ctx: { targetWebUrl: string }): Promise<MutationRecord[]>;
+  /**
+   * Applies the lock. With `originals` (from `originals()`, taken before), a resource the lock
+   * updates in place is written only while it still shows its original; otherwise the call fails
+   * instead, so any update the framework makes is over exactly the recorded original.
+   */
+  apply(
+    ref: RepositoryRef,
+    ctx: { targetWebUrl: string; originals?: readonly MutationRecord[] },
+  ): Promise<MutationRecord[]>;
   undo(ref: RepositoryRef, mutations: MutationRecord[]): Promise<MutationRecord[]>;
+  /**
+   * Reads the source for state shaped like the lock and returns one record per piece found, flagged
+   * `resourceRef.possiblyFramework`. Used to make an unrecorded lock (a crash, a lost response)
+   * undoable, and to check after undo that none remains. A record of a resource updated in place
+   * carries `before` only when `originals` hold that resource's original and the lock written over
+   * it explains what the source shows; otherwise `before` is `null` and the record cannot be
+   * undone. `before` is never inferred from the current state. Writes nothing.
+   */
+  inspect?(
+    ref: RepositoryRef,
+    options?: { originals?: readonly MutationRecord[] },
+  ): Promise<MutationRecord[]>;
+  /**
+   * Reads the current state of every resource the lock updates in place, whatever its shape, as
+   * `update` records whose `after` is that state (`before` is `null`). Kept as part of a baseline
+   * before any write. Writes nothing.
+   */
+  originals?(ref: RepositoryRef): Promise<MutationRecord[]>;
 }
 
 export interface ProviderLimits {
@@ -200,7 +226,18 @@ export interface GitClient {
 }
 
 export type FacetTarget =
-  | { scope: 'repository'; repository: RepositoryRef; namespace: NamespaceRef }
+  | {
+      scope: 'repository';
+      repository: RepositoryRef;
+      namespace: NamespaceRef;
+      /**
+       * Source reads only: the `resourceRef` of every resource the framework created or holds on the
+       * source (the read-only lock, LIF-070). A driver leaves them out of what it reads, before it
+       * combines resources into the canonical document, so the document is what the source would
+       * hold without them (LIF-045). Drivers of Facets the lock does not touch ignore it.
+       */
+      frameworkResources?: readonly Readonly<Record<string, unknown>>[];
+    }
   | { scope: 'endpoint'; namespace: NamespaceRef };
 
 export interface AdapterWarning {

@@ -47,6 +47,7 @@ import {
   webhookRow,
 } from './mappers.ts';
 import { type Ctx, Reader } from './reader.ts';
+import { frameworkRestrictionIds } from './source-lock.ts';
 
 type Read<K extends FacetKey> = FacetRead<CanonicalData<K>>;
 
@@ -241,7 +242,13 @@ export function createFacetDrivers(
           'branching model',
         ),
       ]);
-      const { rules, warnings } = mapBranchRules(restrictions.items, model.data ?? {});
+      // LIF-045: the framework's own restrictions are left out before restrictions are combined
+      // into rules, so the rule is what the source holds without them (matched by id).
+      const own = frameworkRestrictionIds(target, slug);
+      const { rules, warnings } = mapBranchRules(
+        restrictions.items.filter((r) => !own.has(r.id)),
+        model.data ?? {},
+      );
       return finish(
         'branch-rules',
         { rules },
