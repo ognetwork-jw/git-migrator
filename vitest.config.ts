@@ -50,7 +50,6 @@ export default defineConfig({
         '**/*.d.ts',
         '**/*.child.ts',
         '**/*.fixture.ts',
-        'tools/not-implemented.ts',
         'packages/db/src/generated/**',
         'apps/worker/src/db-cli.ts',
       ],

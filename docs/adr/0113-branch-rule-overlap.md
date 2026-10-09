@@ -26,7 +26,7 @@ So an exact name always beats a wildcard rule, and among wildcard rules the **ol
 
 The `/overlap` path segment is not a canonical field: decisions are keyed by path and this key needs its own path beside `/pattern` (`pattern-approximated`) and the rule path (`patterns-merged`).
 
-Both new keys are agent-decided and pending a fold into FAC-BRR-003.
+Both new keys are agent-decided; they are folded into FAC-BRR-003 (docs/spec/05-facets.md).
 
 ## Alternatives
 

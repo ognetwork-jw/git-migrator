@@ -14,11 +14,11 @@
 
 ## Commands
 
-The root [README](../README.md) lists the commands; the ones added by T-001 are `pnpm lint` (Biome plus the ARC-012 dependency check), `pnpm typecheck` (`tsc -b`), `pnpm test` (Vitest with the TST-005 coverage thresholds), `pnpm check:packages` (the same checks through Turborepo), `pnpm spec:coverage` (requirement IDs without tests; add `-- --strict` to gate) and `pnpm spec:must-test` (regenerate `must-test.txt`). `pnpm --filter @git-migrator/provider-fakes start` starts the provider fakes (fake Bitbucket on 4010; see `testing/provider-fakes/README.md`). Commands owned by later tasks currently print "not yet implemented (T-xxx)". T-002 extends the getting-started section below.
+The root [README](../README.md) lists every root command with its purpose; it is the DEV-040 table, kept in step with the `package.json` scripts. In short: `pnpm lint` (Biome plus the ARC-012 dependency check), `pnpm typecheck`, `pnpm test` (Vitest with the TST-005 coverage thresholds), `pnpm test:integration`, `pnpm test:e2e` and `pnpm test:visual`, `pnpm test:e2e:live` (and `:dry`, `e2e:live:reset`), `pnpm db:migrate|seed|reset`, `pnpm generate`, `pnpm helm:check`, `pnpm spec:coverage` (add `-- --strict` to gate; CI does) and `pnpm spec:must-test`. `pnpm --filter @git-migrator/provider-fakes start` starts the provider fakes (Bitbucket on 4010, GitHub on 4020, git on 4030; see `testing/provider-fakes/README.md`). The getting-started section below covers the development environment.
 
 ## Getting started
 
-Two paths run the same commands (DEV-001): [devenv](https://devenv.sh) (Nix) and Docker Compose. Pick one. Both start PostgreSQL 16 on `127.0.0.1:5432` (database and role `git_migrator`) and run `pnpm dev` (web on port 3000, and the worker) with the placeholder apps.
+Two paths run the same commands (DEV-001): [devenv](https://devenv.sh) (Nix) and Docker Compose. Pick one. Both start PostgreSQL 16 on `127.0.0.1:5432` (database and role `git_migrator`) and run `pnpm dev` (web on port 3000, and the worker).
 
 ### Secrets (secretspec)
 
@@ -48,7 +48,7 @@ One checkout per path. Compose installs into your checkout as your host user. Ne
 2. Export your identity so the containers run as you: `export UID; export GID=$(id -g)`. bash keeps `UID` read-only and does not export `GID` by default, so both lines matter. Without them the containers run as 1000:1000.
 3. `docker compose up -d postgres` starts the database and waits for its healthcheck. Set `POSTGRES_HOST_PORT` if 5432 is already taken on the host.
 4. `docker compose up --build dev` runs `install` once (`pnpm install --frozen-lockfile`, as your user), then `pnpm dev` in `dev`. Open <http://localhost:3000/>.
-5. For the provider fakes, add the test profile: `docker compose --profile test up -d fakes`. Bitbucket is on 4010, git on 4030, and GitHub on 4020 is published but has no listener until T-042 lands. Clone and LFS links use the name `fakes`, so other containers on the network can follow them.
+5. For the provider fakes, add the test profile: `docker compose --profile test up -d fakes`. Bitbucket is on 4010, git on 4030, and GitHub on 4020. Clone and LFS links use the name `fakes`, so other containers on the network can follow them.
 6. Secrets: run Compose through secretspec: `secretspec run --profile development -- docker compose up --build dev`. Without it, only `POSTGRES_PASSWORD` has a default.
 7. Dependencies changed? Run `docker compose run --rm install`, then restart `dev` and `fakes` (`docker compose restart dev fakes`). They do not reinstall on their own.
 8. Changing `POSTGRES_PASSWORD` after the first start needs `docker compose down -v`, because the database volume keeps the old password.
@@ -57,7 +57,7 @@ One checkout per path. Compose installs into your checkout as your host user. Ne
 
 ```sh
 pnpm install             # host path. If Compose uses this checkout, use a separate clone (ADR-0068)
-pnpm dev                 # web on :3000 and the worker heartbeat; placeholders until T-021 and T-028
+pnpm dev                 # web on :3000 and the worker
 pnpm lint && pnpm typecheck && pnpm test
 ```
 

@@ -95,7 +95,7 @@ services:
       retries: 60
       start_period: 20s
 
-  # Provider fakes: Bitbucket 4010, git 4030 (GitHub 4020 once T-042 lands). Only with --profile test.
+  # Provider fakes: Bitbucket 4010, git 4030 and GitHub 4020. Only with --profile test.
   # Clone and LFS links use the name `fakes`, so other containers on the network can follow them.
   fakes:
     build: *dev-build

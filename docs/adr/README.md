@@ -88,33 +88,34 @@
 | [0111](0111-branch-rules-principal-findings.md) | Principal findings of branch-rules | accepted (no spec change needed) |
 | [0112](0112-branch-rules-normalization-and-compare.md) | Branch-rules normalization and comparison | accepted (no spec change needed) |
 | [0113](0113-branch-rule-overlap.md) | Overlapping branch-rule patterns and merged restrictions | accepted (spec updated) |
-| [0130](0130-fixture-world-structure.md) | Fixture world structure, async fixtures and expectation derivation | accepted (no spec change needed) |
-| [0140](0140-facet-context-plain-json.md) | The facet translate context must be plain JSON | accepted (no spec change needed) |
-| [0141](0141-webhooks-facet.md) | webhooks facet semantics | accepted (spec updated) |
-| [0142](0142-deploy-keys-facet.md) | deploy-keys facet semantics | accepted (no spec change needed) |
-| [0145](0145-environments-variables-secrets-facets.md) | environments, variables and secrets facet semantics | accepted (spec updated) |
-| [0155](0155-change-requests-facet.md) | change-requests facet: blocker parameters, list cap and desired state | accepted (no spec change needed) |
-| [0156](0156-extras-facet.md) | extras facet: detect-only warnings and desired state | accepted (no spec change needed) |
-| [0150](0150-endpoint-facets-members-teams.md) | members and teams facets: planned slug contract, skipped members, invitation candidates, target-only parity | accepted (spec updated) |
-| [0151](0151-org-variables-secrets-facets.md) | org-variables and org-secrets facets: names, lossy key, one set-value task | accepted (spec updated) |
-| [0152](0152-org-webhooks-facet.md) | org-webhooks facet: FAC-WEB rules under org codes and policy key | accepted (spec updated) |
 | [0120](0120-zenstack-verification-and-dependencies.md) | ZenStack 3.9.7 verified (multi-schema, field `@deny`, `uuid(7)`); extra dependencies | accepted (no spec change needed) |
 | [0121](0121-schema-decisions.md) | Domain model details: `Route.retiredAt`, endpoint-scope Migration, timestamptz, plain Json | accepted (spec updated) |
 | [0122](0122-policy-decisions.md) | Access policy decisions: roles, hash and body denial, field-level narrowing | accepted (spec updated) |
 | [0123](0123-migrations-tests-and-entrypoint.md) | Raw-SQL indexes, database tests in the unit tier, migrate entrypoint location | accepted (no spec change needed) |
+| [0130](0130-fixture-world-structure.md) | Fixture world structure, async fixtures and expectation derivation | accepted (no spec change needed) |
+| [0135](0135-headless-secrets-in-devenv-ci.md) | Headless secretspec route for the devenv CI job (env provider, test profile) | accepted (spec updated) |
+| [0136](0136-devenv-ci-cli-and-lock.md) | devenv CI pins the CLI to the v2.4.0 tag and uses the devenv cache; devenv.lock not committed yet | accepted (no spec change needed) |
+| [0137](0137-devenv-test-readiness.md) | devenv test waits on readiness probes; Postgres probed over the socket; CREATEDB for the app role | accepted (spec updated) |
+| [0140](0140-facet-context-plain-json.md) | The facet translate context must be plain JSON | accepted (no spec change needed) |
+| [0141](0141-webhooks-facet.md) | webhooks facet semantics | accepted (spec updated) |
+| [0142](0142-deploy-keys-facet.md) | deploy-keys facet semantics | accepted (no spec change needed) |
+| [0145](0145-environments-variables-secrets-facets.md) | environments, variables and secrets facet semantics | accepted (spec updated) |
+| [0150](0150-endpoint-facets-members-teams.md) | members and teams facets: planned slug contract, skipped members, invitation candidates, target-only parity | accepted (spec updated) |
+| [0151](0151-org-variables-secrets-facets.md) | org-variables and org-secrets facets: names, lossy key, one set-value task | accepted (spec updated) |
+| [0152](0152-org-webhooks-facet.md) | org-webhooks facet: FAC-WEB rules under org codes and policy key | accepted (spec updated) |
+| [0155](0155-change-requests-facet.md) | change-requests facet: blocker parameters, list cap and desired state | accepted (no spec change needed) |
+| [0156](0156-extras-facet.md) | extras facet: detect-only warnings and desired state | accepted (no spec change needed) |
 | [0160](0160-pipelines-facet.md) | pipelines facet and where the pair override lives | accepted (spec updated) |
 | [0161](0161-pipelines-translation-safety.md) | Safety rules of the generated workflows | accepted (spec updated) |
 | [0162](0162-pipelines-translation-structure.md) | Shape of the generated workflows | accepted (spec updated) |
 | [0163](0163-pipelines-corpus-and-test-layout.md) | Where the pipelines corpus and its tests live | accepted (no spec change needed) |
-| [0180](0180-quota-service-design.md) | Quota service design: neutral feedback, near-limit clamp, secondary-hit counter, metrics sink | accepted (spec updated) |
 | [0170](0170-auth-claims-session-and-tenant.md) | Entra claims read in `validateUserInfo`, request-scoped hand-off to Actor sync, tenant check, denial surface | accepted (spec updated) |
 | [0171](0171-auth-provisioning-test-users-and-migration.md) | Actor linking, test sign-in users, production guard, programmatic Better Auth migration | accepted (spec updated) |
+| [0180](0180-quota-service-design.md) | Quota service design: neutral feedback, near-limit clamp, secondary-hit counter, metrics sink | accepted (spec updated) |
 | [0190](0190-adapter-sdk-design.md) | Adapter SDK design: interpret hook, quota gates, origin pinning, raw capture, test allowlist | accepted (spec updated) |
-| [0240](0240-git-package-design.md) | Git package design: askpass confined to one origin, quota interface, resumable mirror, adaptive batched push, injected LFS batch client | accepted (spec updated) |
-| [0241](0241-fake-git-lfs-authenticated-flag.md) | The fake git server's LFS batch responses carry per-action headers | accepted (no spec change needed) |
-| [0135](0135-headless-secrets-in-devenv-ci.md) | Headless secretspec route for the devenv CI job (env provider, test profile) | accepted (spec updated) |
-| [0136](0136-devenv-ci-cli-and-lock.md) | devenv CI pins the CLI to the v2.4.0 tag and uses the devenv cache; devenv.lock not committed yet | accepted (no spec change needed) |
-| [0137](0137-devenv-test-readiness.md) | devenv test waits on readiness probes; Postgres probed over the socket; CREATEDB for the app role | accepted (spec updated) |
+| [0200](0200-facade-argument-clone.md) | The policy facade passes ZenStack a deep clone of its arguments (amends ADR-0122 item 9) | accepted (spec updated) |
+| [0201](0201-rpc-audit-plugin.md) | How RPC mutations are audited: entity-mutation hook in the mutation's transaction, redacted diff, narrow AuditEvent create rule | accepted (spec updated) |
+| [0202](0202-rpc-ids-last-admin-and-error-shapes.md) | RPC primary keys are immutable, the last-admin guard, problem+json for every /api/v1 error, argument limits | accepted (spec updated) |
 | [0210](0210-bullmq-runtime-wiring.md) | BullMQ runtime wiring: shared pool, job tracing, retries | accepted (spec updated) |
 | [0211](0211-worker-process-decisions.md) | Worker process decisions: scratch cleanup, retention gate, leader, entrypoints | accepted (spec updated) |
 | [0212](0212-reaper-and-pending-processors.md) | Run reaper details and processors owned by later tasks | accepted (spec updated) |
@@ -123,17 +124,16 @@
 | [0221](0221-bitbucket-facet-read-mappings.md) | Bitbucket Facet read mappings the spec leaves open (grants, enforcement, webhooks, failure policy) | accepted (spec updated) |
 | [0222](0222-bitbucket-source-lock.md) | Source read-only apply and undo, partial results | accepted (spec updated) |
 | [0223](0223-adapter-http-ban-and-sdk-quota-exports.md) | check-deps rule banning direct HTTP in adapters; SDK quota re-exports | accepted (no spec change needed) |
-| [0200](0200-facade-argument-clone.md) | The policy facade passes ZenStack a deep clone of its arguments (amends ADR-0122 item 9) | accepted (spec updated) |
-| [0201](0201-rpc-audit-plugin.md) | How RPC mutations are audited: entity-mutation hook in the mutation's transaction, redacted diff, narrow AuditEvent create rule | accepted (spec updated) |
-| [0202](0202-rpc-ids-last-admin-and-error-shapes.md) | RPC primary keys are immutable, the last-admin guard, problem+json for every /api/v1 error, argument limits | accepted (spec updated) |
 | [0230](0230-github-adapter-identity-and-connection.md) | GitHub adapter: identifiers, configuration, App token cache, quota buckets, error mapping | accepted (no spec change needed) |
 | [0231](0231-github-facet-drivers.md) | GitHub facet drivers: apply semantics, dynamic capabilities, branch rules, Change Requests | accepted (spec updated) |
+| [0240](0240-git-package-design.md) | Git package design: askpass confined to one origin, quota interface, resumable mirror, adaptive batched push, injected LFS batch client | accepted (spec updated) |
+| [0241](0241-fake-git-lfs-authenticated-flag.md) | The fake git server's LFS batch responses carry per-action headers | accepted (no spec change needed) |
 | [0250](0250-adapter-contract-suite.md) | Adapter contract suite: shape, placement and normalisations | accepted (spec updated) |
 | [0260](0260-capability-matrix-shape.md) | Capability matrix shape, registry ownership, dynamic overlay | accepted (spec updated) |
 | [0261](0261-capability-matrix-vs-mapping-tables.md) | Adapter capabilities aligned to the 05-facets mapping tables | accepted (spec updated) |
+| [0270](0270-events-topics-and-sse-details.md) | Event payload `ids`, topics, authorization, heartbeat, gap handling and stream bounds for SSE | accepted (spec updated) |
 | [0280](0280-inventory-processor.md) | Inventory processor design | accepted (spec updated) |
 | [0281](0281-endpoint-connector.md) | Endpoint connector for jobs | accepted (no spec change needed) |
-| [0270](0270-events-topics-and-sse-details.md) | Event payload `ids`, topics, authorization, heartbeat, gap handling and stream bounds for SSE | accepted (spec updated) |
 | [0290](0290-runtime-image-layout.md) | Runtime image layout, production-pruned workspace, web entrypoint before the UI | accepted (spec updated) |
 | [0291](0291-helm-chart-decisions.md) | Helm chart naming, configuration merge, required values and helm:check | accepted (spec updated) |
 | [0292](0292-release-and-ci-image-jobs.md) | Release workflow and the CI image and chart jobs | accepted (spec updated) |
@@ -145,11 +145,11 @@
 | [0311](0311-analysis-route-index.md) | What the Analysis puts into the translate context (pipelines text, key usage, endpoint index) | accepted (spec updated) |
 | [0312](0312-analysis-feeder.md) | Analysis feeder: capacity, backlog, priority, endpoint Migrations | accepted (spec updated) |
 | [0313](0313-fixture-table-and-implementation.md) | Where the T-043 table and the implementation disagreed | accepted (spec updated) |
+| [0320](0320-identity-mapping-api-csv-and-exclusions.md) | Identity and Group mapping endpoints, CSV rules, exclusions, staleness and events | accepted (spec updated) |
+| [0321](0321-server-side-page-authorization.md) | Server-side capability check for data pages | accepted (spec updated) |
 | [0330](0330-command-endpoints-and-services.md) | Command endpoints (inventory refresh, analyze) and the services `createApiApp` receives | accepted (spec updated) |
 | [0331](0331-diff-and-naming-preview.md) | The diff view and its redaction, the naming preview | accepted (spec updated) |
 | [0332](0332-dashboard-and-quota-views.md) | Dashboard and quota views, backlog and ETA | accepted (spec updated) |
-| [0320](0320-identity-mapping-api-csv-and-exclusions.md) | Identity and Group mapping endpoints, CSV rules, exclusions, staleness and events | accepted (spec updated) |
-| [0321](0321-server-side-page-authorization.md) | Server-side capability check for data pages | accepted (spec updated) |
 | [0340](0340-run-executor-framework.md) | Run executor: registration API, queued start, lease fence, lock order, delay and hand-off, cancel, ending a Run, inline Analysis failures | accepted (spec updated) |
 | [0341](0341-run-step-state-machine.md) | Step statuses, severity per Step, retries across resumes, rate limits are not attempts | accepted (spec updated) |
 | [0342](0342-mutation-ledger.md) | Ledger writes, origin of a record, Expected Difference derivation, undo order, adopted and no-op records | accepted (spec updated) |
@@ -177,18 +177,19 @@
 | [0407](0407-waves-membership-and-feeder-priority.md) | Wave membership: capability, no staleness, CRUD through the Model API, priority already in the feeder | accepted (spec updated) |
 | [0415](0415-run-and-task-endpoints.md) | Run, cancel, complete, task and Expected Difference endpoints: one Run creation path, problem codes, task states, parity triggers | accepted (spec updated) |
 | [0425](0425-source-read-only-steps.md) | Source read-only: step 14 conditions, the two Run kinds, ledgering, undo, and what the Analysis filter removes | agent-decided |
+| [0435](0435-endpoint-migration-steps.md) | Endpoint migration Steps through the planner's scope dispatch, team settlement (GroupMapping confirmed, repository Analyses stale), Teams slug of a mapped group, endpoint pages | accepted (spec updated) |
 | [0445](0445-repository-and-run-detail-pages.md) | Repository and Run detail pages: names instead of provider links, action rules, rollback sequencing, log bounds | agent-decided |
 | [0446](0446-guidance-mount-and-reusable-view.md) | Mounting the guidance catalog and the reusable guidance view | agent-decided |
 | [0455](0455-ci-outage-local-gate.md) | Local gate while GitHub Actions cannot run jobs | agent-decided |
-| [0435](0435-endpoint-migration-steps.md) | Endpoint migration Steps through the planner's scope dispatch, team settlement (GroupMapping confirmed, repository Analyses stale), Teams slug of a mapped group, endpoint pages | accepted (spec updated) |
-| [0475](0475-integration-tier-and-phase1-scenario.md) | The integration tier (Vitest project, script, CI job) and how the Phase-1 scenario is composed | agent-decided |
-| [0490](0490-ci-image-mirrors.md) | CI pulls container images from public mirrors (mirror.gcr.io) instead of Docker Hub | agent-decided |
-| [0491](0491-live-e2e-target-switch.md) | The live e2e chooses its target with `GM_E2E_TARGET` and fails closed; the dry mode runs in CI | agent-decided |
-| [0492](0492-live-e2e-stack-fixture-and-reset.md) | Live e2e stack, fixture constants and reset | agent-decided |
 | [0465](0465-rollback.md) | Rollback: guard availability and "undo first", deletion only on ledger proof, adopted targets reverted newest first, endpoint Runs unmap undone teams | agent-decided |
 | [0466](0466-drift-checks.md) | The drift sweep, drift checks (refs-only source read, LFS skip, containment) and accepting drift | agent-decided |
 | [0467](0467-facet-driver-undo.md) | Facet drivers revert their own records (`FacetDriver.undo`) | agent-decided |
+| [0475](0475-integration-tier-and-phase1-scenario.md) | The integration tier (Vitest project, script, CI job) and how the Phase-1 scenario is composed | agent-decided |
 | [0485](0485-ui-e2e-harness.md) | How the UI e2e tier (TST-021) starts its stack: global setup, fakes, in-process worker, standalone web | agent-decided |
 | [0486](0486-bullmq-external-to-the-web-bundle.md) | The queue library is external to the web bundle, so the standalone build can enqueue | agent-decided |
+| [0490](0490-ci-image-mirrors.md) | CI pulls container images from public mirrors (mirror.gcr.io) instead of Docker Hub | agent-decided |
+| [0491](0491-live-e2e-target-switch.md) | The live e2e chooses its target with `GM_E2E_TARGET` and fails closed; the dry mode runs in CI | agent-decided |
+| [0492](0492-live-e2e-stack-fixture-and-reset.md) | Live e2e stack, fixture constants and reset | agent-decided |
+| [0506](0506-illustrative-requirement-ids.md) | Illustrative IDs in the overview are not requirements | agent-decided |
 
-New ADRs continue from 0028. Implementor decisions use `status: agent-decided` (PROC-005). T-002 uses 0065–0069.
+New ADRs take the next free number, or the range the orchestrator assigns to a task or fix branch (check the highest row above, and the highest file in this directory, before choosing). Implementor decisions use `status: agent-decided` (PROC-005); the orchestrator folds them into the spec and changes the status to `accepted (spec updated)`.

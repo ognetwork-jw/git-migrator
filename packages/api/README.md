@@ -19,7 +19,7 @@ Every request to `/api/model/*` and `/api/v1/*` resolves to an Actor (`resolvePr
 
 Errors are RFC 9457 `application/problem+json` with `type` `https://git-migrator.invalid/problems/<code>` (`problem.ts`); handlers `throw new ProblemError(code)`. The UI maps `code` to `problem.<code>` in `apps/web/messages/en.json`. List endpoints use `PageQuerySchema` and `toPage` (cursor, `limit` at most 200).
 
-The typed client of the custom endpoints is `createApiClient` from `@git-migrator/api/client` (`hc<AppType>`). Endpoints so far: `GET /me`, `POST /actors`, `PATCH /actors/{id}`, `POST /actors/{id}/api-keys`, `DELETE /api-keys/{id}` (T-021), `GET /events` (T-022) and the batch 1 endpoints below (T-062); later tasks add the rest of API-020. Automation users: see `docs/api-usage.md`. Custom endpoints check `can(actor, capability)` from `@git-migrator/auth` and write their `AuditEvent` in the mutation's transaction.
+The typed client of the custom endpoints is `createApiClient` from `@git-migrator/api/client` (`hc<AppType>`). Endpoints so far: `GET /me`, `POST /actors`, `PATCH /actors/{id}`, `POST /actors/{id}/api-keys`, `DELETE /api-keys/{id}` (T-021), `GET /events` (T-022) and the batch 1 endpoints below (T-062); the rest of API-020 is described in the sections below (T-084, T-085, T-088 and later). Automation users: see `docs/api-usage.md`. Custom endpoints check `can(actor, capability)` from `@git-migrator/auth` and write their `AuditEvent` in the mutation's transaction.
 
 ## Error behaviour (ADR-0202)
 
