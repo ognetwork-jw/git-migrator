@@ -20,6 +20,7 @@ import {
   type RunLeaseHandle,
 } from '../run-leases.ts';
 import type { JobHandlers } from '../runtime.ts';
+import { withRunScratch } from '../scratch.ts';
 import {
   isRateLimited,
   isRetryable,
@@ -70,6 +71,11 @@ export interface RunExecutorDeps<S = unknown> {
   readonly workerId: string;
   readonly analysis?: RunAnalysisPort;
   readonly metrics?: ReaperMetrics;
+  /**
+   * `$GM_SCRATCH_DIR`: when set, `runHandlers` runs each job inside `withRunScratch`, so every
+   * Step sees `ctx.scratchDir` and the directory is removed when the job ends (JOB-015).
+   */
+  readonly scratchRoot?: string;
   /** Test seams. */
   readonly now?: () => Date;
   readonly random?: () => number;
@@ -84,6 +90,8 @@ export interface ExecuteOptions {
   /** The process is shutting down: finish the current Step, then hand the Run off (LIF-046). */
   readonly shutdown: AbortSignal;
   readonly log?: Logger;
+  /** The job's scratch directory (`ctx.scratchDir` of every Step). */
+  readonly scratchDir?: string;
 }
 
 export type ExecuteResult =
@@ -695,6 +703,7 @@ class Driver<S> {
       signal: this.#signal,
       log,
       services: this.#deps.services,
+      scratchDir: this.#options.scratchDir,
       ledger: {
         record,
         recordAll: async (write, records) => {
@@ -831,8 +840,13 @@ class Driver<S> {
 /** The `run.execute` handler (JOB-010). Register it in the worker's handler map. */
 export function runHandlers<S>(deps: RunExecutorDeps<S>): JobHandlers {
   return {
-    'run.execute': ({ runId }, ctx) =>
-      executeRun(deps, runId, { jobId: ctx.job.id, shutdown: ctx.shutdown, log: ctx.log }),
+    'run.execute': ({ runId }, ctx) => {
+      const options = { jobId: ctx.job.id, shutdown: ctx.shutdown, log: ctx.log };
+      if (deps.scratchRoot === undefined) return executeRun(deps, runId, options);
+      return withRunScratch(deps.scratchRoot, runId, (scratchDir) =>
+        executeRun(deps, runId, { ...options, scratchDir }),
+      );
+    },
   };
 }
 

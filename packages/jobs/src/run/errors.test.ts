@@ -6,6 +6,7 @@ import {
   RETRY_CAP_MS,
   rateLimitDelayMs,
   retryDelayMs,
+  StepFailure,
   serializeStepError,
 } from './errors.ts';
 
@@ -70,5 +71,24 @@ describe('[LIF-042] stored errors', () => {
       message: 'A non-error value was thrown',
       retryable: false,
     });
+  });
+});
+
+describe('[LIF-042] a Step failure with a code of the framework', () => {
+  it('[LIF-042] is stored with its own code and details, never retried, and its details are scrubbed', () => {
+    const stored = serializeStepError(
+      new StepFailure('preflight.blocked', 'New blockers', {
+        blockers: ['change-requests.open'],
+        authorization: `Bearer ${FAKE_TOKEN}`,
+      }),
+    );
+    expect(stored).toMatchObject({
+      code: 'preflight.blocked',
+      message: 'New blockers',
+      retryable: false,
+      details: { blockers: ['change-requests.open'] },
+    });
+    expect(JSON.stringify(stored)).not.toContain(FAKE_TOKEN);
+    expect(isRetryable(new StepFailure('x', 'y'))).toBe(false);
   });
 });

@@ -2,7 +2,7 @@
  * Step failure handling (LIF-042): how an error is stored, whether it is retried, and the backoff.
  * Decisions: docs/adr/0341-run-step-state-machine.md.
  */
-import { isAdapterError, stripText, stripUrl } from '@git-migrator/adapter-sdk';
+import { isAdapterError, stripBody, stripText, stripUrl } from '@git-migrator/adapter-sdk';
 
 const MAX_MESSAGE_CHARS = 500;
 
@@ -19,6 +19,21 @@ export function retryDelayMs(
 ): number {
   const ceiling = Math.min(capMs, baseMs * 2 ** Math.max(0, retry - 1));
   return Math.floor(random() * ceiling);
+}
+
+/**
+ * A Step failure with a code of the framework's own (`preflight.blocked`, `scratch.insufficient`),
+ * stored as is. Never retried: a Step that wants a retry throws an `AdapterError`.
+ */
+export class StepFailure extends Error {
+  readonly code: string;
+  readonly details: Readonly<Record<string, unknown>> | undefined;
+  constructor(code: string, message: string, details?: Record<string, unknown>) {
+    super(message);
+    this.name = 'StepFailure';
+    this.code = code;
+    this.details = details;
+  }
 }
 
 export interface StoredStepError {
@@ -45,6 +60,16 @@ export function serializeStepError(error: unknown): StoredStepError {
               ...(error.request.status !== undefined ? { status: error.request.status } : {}),
             },
           }
+        : {}),
+    };
+  }
+  if (error instanceof StepFailure) {
+    return {
+      code: error.code,
+      message: stripText(error.message).slice(0, MAX_MESSAGE_CHARS),
+      retryable: false,
+      ...(error.details
+        ? { details: JSON.parse(JSON.stringify(stripBody(error.details))) as unknown }
         : {}),
     };
   }

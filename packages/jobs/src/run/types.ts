@@ -174,6 +174,12 @@ export interface StepContext<S = unknown> {
   readonly log: Logger;
   /** Services of the process (adapters, git, scratch) injected by the worker wiring. */
   readonly services: S;
+  /**
+   * This job's scratch directory (JOB-015), removed when the job ends: after a delay or a hand-off
+   * the next job starts with an empty one, so a Step that needs files rebuilds them. Absent when the
+   * executor runs without scratch handling.
+   */
+  readonly scratchDir: string | undefined;
   readonly ledger: StepLedger;
   readonly findings: StepFindings;
   /** Appends to the Run log and publishes `run.log` (JOB-060). */

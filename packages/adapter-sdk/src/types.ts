@@ -4,8 +4,9 @@
  */
 import type { FacetKey } from '@git-migrator/canonical';
 import type { FacetCapability, FieldDecision, FieldPath, FieldSupport } from '@git-migrator/core';
+import type { BucketSpec } from '@git-migrator/quota';
 import type { ZodType } from 'zod';
-import type { BucketSpec, ProviderHttpClient, ProviderHttpEnvironment } from './http.ts';
+import type { ProviderHttpClient, ProviderHttpEnvironment } from './http.ts';
 import type { Logger } from './logger.ts';
 
 /** One page of a listing. `nextCursor` is opaque to callers; absent on the last page. */

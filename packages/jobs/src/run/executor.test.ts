@@ -32,6 +32,25 @@ afterAll(async () => {
 const harness = () => new Harness(t);
 
 describe('[LIF-040] step framework', () => {
+  it('[JOB-015] hands the job scratch directory to every Step', async () => {
+    const h = harness();
+    const seen: (string | undefined)[] = [];
+    h.registry.register('migrate', {
+      steps: () => [
+        step('git.prepare', async (ctx) => {
+          seen.push(ctx.scratchDir);
+          return { status: 'succeeded' };
+        }),
+      ],
+    });
+    const { runId } = await h.queuedRun();
+    await h.execute(runId, { scratchDir: '/scratch/run-1/abc' });
+    expect(seen).toEqual(['/scratch/run-1/abc']);
+    const other = await h.queuedRun();
+    await h.execute(other.runId);
+    expect(seen[1]).toBeUndefined();
+  });
+
   it('[LIF-040] starts a queued Run, runs its Steps in plan order and finishes it', async () => {
     const h = harness();
     h.registry.register('migrate', {
