@@ -345,7 +345,7 @@ afterAll(async () => {
 }, 60_000);
 
 describe('the endpoint migration against the fixture world', () => {
-  it('[LIF-080] creates the missing team, confirms its Group Mapping and clears access-control.team-missing', async () => {
+  it('[TST-020] [LIF-080] creates the missing team, confirms its Group Mapping and clears access-control.team-missing', async () => {
     const repo = await withGrants();
     await analyze(repo.id);
     expect(await findingCodes(repo.id)).toContain('access-control.team-missing');

@@ -487,7 +487,7 @@ describe('plat/auto-ok: step 14 and the Analysis that follows (LIF-070, LIF-045)
 });
 
 describe('undo_source_read_only restores exactly what was recorded (LIF-070)', () => {
-  it('[LIF-070] deletes the restriction, restores the description and marks the Mutations undone; the flag is cleared', async () => {
+  it('[TST-020] [LIF-070] deletes the restriction, restores the description and marks the Mutations undone; the flag is cleared', async () => {
     const m = await migrationOf('plat/auto-ok');
     const original = (
       await t.db.privileged.mutation.findFirstOrThrow({

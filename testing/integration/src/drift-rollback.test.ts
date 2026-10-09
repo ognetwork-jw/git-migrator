@@ -767,7 +767,7 @@ describe('drift on plat/auto-ok (LIF-065)', () => {
     expect(pushLock('auto-ok')).toHaveLength(1);
   }, 240_000);
 
-  it('[LIF-065] a change made on the target by hand drifts the Migration, keeps the status it left and stores the difference', async () => {
+  it('[TST-020] [LIF-065] a change made on the target by hand drifts the Migration, keeps the status it left and stores the difference', async () => {
     targetRepo('plat-auto-ok').description = 'changed by hand';
     const out = await runParity(parityDeps, id, DRIFT(false));
     expect(out.skipped).toBeUndefined();
@@ -802,7 +802,7 @@ describe('drift on plat/auto-ok (LIF-065)', () => {
     ]);
   }, 240_000);
 
-  it('[LIF-065] revoking the acceptance drifts the Migration again, and resync rewrites the target from the source: running, migrated, verified', async () => {
+  it('[TST-020] [LIF-065] revoking the acceptance drifts the Migration again, and resync rewrites the target from the source: running, migrated, verified', async () => {
     const ed = await t.db.privileged.expectedDifference.findFirstOrThrow({
       where: { migrationId: id, reason: 'manual_accepted', revokedAt: null },
     });
@@ -875,7 +875,7 @@ describe('containment once the source is read-only (FAC-GIT-006, LIF-065)', () =
 const confirmOf = (target: string) => `${ORG}/${target}`;
 
 describe('rollback of a target the framework created (LIF-077)', () => {
-  it('[LIF-077] is refused while the source is read-only: undo_source_read_only first, then the typed confirmation, then the repository is deleted', async () => {
+  it('[TST-020] [LIF-077] is refused while the source is read-only: undo_source_read_only first, then the typed confirmation, then the repository is deleted', async () => {
     const repo = await addSourceRepo();
     const id = repo.migration.id;
     expect((await perform(id)).result).toMatchObject({ status: 'succeeded' });
@@ -973,7 +973,7 @@ describe('rollback of a target the framework created (LIF-077)', () => {
 });
 
 describe('rollback of an adopted target (LIF-077)', () => {
-  it('[LIF-077] leaves the repository and its git refs, and reverts the writes of the framework newest first', async () => {
+  it('[TST-020] [LIF-077] leaves the repository and its git refs, and reverts the writes of the framework newest first', async () => {
     const repo = await addSourceRepo({
       variables: ['ROLL_A', 'ROLL_B'],
       pipelines: PIPELINES_SIMPLE,

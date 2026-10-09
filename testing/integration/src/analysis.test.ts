@@ -229,7 +229,7 @@ afterAll(async () => {
 }, 60_000);
 
 describe('analysis against the fixture world', () => {
-  it('[LIF-020] every fixture repository gets the readiness and findings of the T-043 table', async () => {
+  it('[TST-020] [LIF-020] every fixture repository gets the readiness and findings of the T-043 table', async () => {
     const all = await t.db.privileged.migration.findMany({
       where: { routeId: ROUTE, scope: 'repository' },
     });

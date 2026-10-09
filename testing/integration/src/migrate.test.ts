@@ -646,7 +646,7 @@ describe('a second Run on the same Migration', () => {
 });
 
 describe('batched push and blob blockers', () => {
-  it('[LIF-044] ops/large-history is pushed in several batches under the target push limit', async () => {
+  it('[TST-020] [LIF-044] ops/large-history is pushed in several batches under the target push limit', async () => {
     const m = await migrationOf('ops/large-history');
     await analyze(m.id);
     fakes.git?.clearRequests();
@@ -669,7 +669,7 @@ describe('batched push and blob blockers', () => {
     ).toBeGreaterThanOrEqual(4);
   }, 300_000);
 
-  it('[FAC-GIT-004] ops/big-blob is blocked at git.prepare, with no write to the target', async () => {
+  it('[TST-020] [FAC-GIT-004] ops/big-blob is blocked at git.prepare, with no write to the target', async () => {
     const m = await migrationOf('ops/big-blob');
     await analyze(m.id);
     fakes.github?.clearRequests();
@@ -851,7 +851,7 @@ describe('findings of a Run and the guards around it', () => {
     expect(tasks[0]).toMatchObject({ origin: 'run', phase: 'post', facetKey: 'deploy-keys' });
   }, 300_000);
 
-  it('[LIF-043] run_anyway applies a repository that needs attention, and its pre task stays open', async () => {
+  it('[TST-020] [LIF-043] run_anyway applies a repository that needs attention, and its pre task stays open', async () => {
     const m = await migrationOf('data/unmapped-user');
     await analyze(m.id);
     await expect(

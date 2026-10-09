@@ -336,7 +336,7 @@ describe('candidates and the draft', () => {
 });
 
 describe('a deselection is excluded from parity', () => {
-  it('[AUTH-060] deselecting needs a reason and masks the person in parity; reselecting unmasks', async () => {
+  it('[TST-020] [AUTH-060] deselecting needs a reason and masks the person in parity; reselecting unmasks', async () => {
     const keep = await person();
     const drop = await person();
     const batch = await draft([keep.id, drop.id]);
@@ -458,7 +458,7 @@ describe('nothing is invited outside an approved batch', () => {
 });
 
 describe('sending', () => {
-  it('[AUTH-060] sends only the approved, non-deselected entries, records ids and sets pending_invite', async () => {
+  it('[TST-020] [AUTH-060] sends only the approved, non-deselected entries, records ids and sets pending_invite', async () => {
     const a = await person({ groupSlug: 'platform-team' });
     const b = await person();
     const skipped = await person();
