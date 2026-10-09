@@ -220,6 +220,9 @@ importers:
       '@git-migrator/db':
         specifier: workspace:*
         version: link:../../packages/db
+      '@git-migrator/facets':
+        specifier: workspace:*
+        version: link:../../packages/facets
       '@git-migrator/jobs':
         specifier: workspace:*
         version: link:../../packages/jobs

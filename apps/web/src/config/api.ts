@@ -21,6 +21,11 @@ export interface NamingRuleRow {
 
 export interface RouteConfig {
   readonly id: string;
+  readonly sourceEndpointId: string;
+  readonly targetEndpointId: string;
+  /** The adapter types of the two Endpoints: the pair the capability matrix is keyed by. */
+  readonly sourceEndpoint: { readonly providerType: string };
+  readonly targetEndpoint: { readonly providerType: string };
   readonly defaults: { readonly naming?: PipelinePayload } & Record<string, unknown>;
   readonly policies: { readonly acceptLossy?: string[] } & Record<string, unknown>;
 }
@@ -112,7 +117,15 @@ export const previewNaming = (routeId: string, body: RuleBody, cursor?: string) 
 
 export const fetchRouteConfigs = () =>
   findMany<RouteConfig>('route', {
-    select: { id: true, defaults: true, policies: true },
+    select: {
+      id: true,
+      defaults: true,
+      policies: true,
+      sourceEndpointId: true,
+      targetEndpointId: true,
+      sourceEndpoint: { select: { providerType: true } },
+      targetEndpoint: { select: { providerType: true } },
+    },
     orderBy: { id: 'asc' },
   });
 
@@ -186,13 +199,19 @@ export type OverlayInput = {
   readonly enabled: boolean;
 };
 
+/**
+ * Overlay writes go to the validated `/api/v1/overlays` endpoints, not the RPC mount: the server
+ * checks the document against the Facet's schema (DOM-003, ADR-0362). Reads stay on the RPC mount.
+ */
 export const createOverlay = (routeId: string, input: OverlayInput) =>
-  createRow<OverlayRow>('overlay', { routeId, ...input });
+  apiRequest<OverlayRow>('/api/v1/overlays', { method: 'POST', json: { routeId, ...input } });
 
-export const updateOverlay = (id: string, input: OverlayInput) =>
-  updateRow<OverlayRow>('overlay', { id }, input);
+/** The Facet is fixed once an Overlay exists; its document and flag change. */
+export const updateOverlay = (id: string, input: Omit<OverlayInput, 'facetKey'>) =>
+  apiRequest<OverlayRow>(`/api/v1/overlays/${enc(id)}`, { method: 'PATCH', json: input });
 
-export const deleteOverlay = (id: string) => deleteRow('overlay', { id });
+export const deleteOverlay = (id: string) =>
+  apiRequest<void>(`/api/v1/overlays/${enc(id)}`, { method: 'DELETE' });
 
 export const fetchCapabilityMatrix = () =>
   apiRequest<CapabilityMatrix>('/api/v1/capability-matrix');

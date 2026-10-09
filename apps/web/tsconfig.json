@@ -19,7 +19,9 @@
     "src/**/*.spec.*",
     "app/**/*.test.*",
     "src/test-render.tsx",
-    "src/test-api.ts"
+    "src/test-api.ts",
+    "src/test-naming.ts",
+    "src/test-admin.ts"
   ],
   "references": [
     {
@@ -51,6 +53,9 @@
     },
     {
       "path": "../../packages/facets"
+    },
+    {
+      "path": "../../packages/canonical"
     }
   ]
 }
