@@ -306,7 +306,7 @@ type Pipelines = {
 ```
 
 - **FAC-PIP-001 Read.** Source: `bitbucket-pipelines.yml` at the default branch head (`/src` API) and `pipelines_config.enabled`. Target: `.github/workflows/*.yml` on the default branch, plus open framework Change Requests.
-- **FAC-PIP-002 Translation subset.** The pair override `bitbucket-cloud → github` translates these constructs, and only these. YAML anchors and aliases are resolved first. The file text reaches `translate` only through `FacetRead.attachments` (ADP-011), as `routeIndex.pipelines.sources`.
+- **FAC-PIP-002 Translation subset.** The pair override `bitbucket-cloud → github` translates these constructs, and only these. YAML anchors and aliases are resolved first. The file text reaches `translate` only through the read's `attachments` (ADP-011), as the pipelines `sources` of the route index.
   - `image` (global or step): a public image name, optionally with `username`/`password` referencing variables. Becomes `container:` with credentials from secrets.
   - Triggers:
     - `pipelines.default` → `on.push` (all branches) plus `on.pull_request`.
