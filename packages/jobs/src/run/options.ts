@@ -42,6 +42,19 @@ export function checkRunOptions(input: {
     return { ok: false, code: 'run.options_invalid', message: `Invalid Run options: ${paths}` };
   }
   const options = parsed.data;
+  // LIF-077: every rollback needs the target's full name typed, as the UI types it (any case).
+  // A Migration with no target to name (only Mutations to undo) has nothing to confirm.
+  if (
+    input.kind === 'rollback' &&
+    input.targetFullName !== null &&
+    input.confirm?.trim().toLowerCase() !== input.targetFullName.toLowerCase()
+  ) {
+    return {
+      ok: false,
+      code: 'run.confirmation_required',
+      message: 'a rollback needs confirm set to the target full name',
+    };
+  }
   if (options.adoptNonEmpty === true) {
     if (!GIT_KINDS.includes(input.kind)) {
       return {

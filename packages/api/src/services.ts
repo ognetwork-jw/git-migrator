@@ -14,7 +14,12 @@ export interface ApiServices {
   /** Producer side of the job queues (JOB-010, JOB-011). */
   readonly jobs: Pick<
     JobRuntime,
-    'enqueue' | 'enqueueAnalysis' | 'enqueueInvitationStep' | 'enqueueRun' | 'queue'
+    | 'enqueue'
+    | 'enqueueAnalysis'
+    | 'enqueueInvitationStep'
+    | 'enqueueParity'
+    | 'enqueueRun'
+    | 'queue'
   >;
   /** `GET /quota` (JOB-047). */
   readonly quota: Pick<QuotaService, 'snapshot'>;

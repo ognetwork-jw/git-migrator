@@ -18,6 +18,7 @@ import { parsePendingMarker } from '../run-leases.ts';
 import { endRunIn } from './finish.ts';
 import { checkRunOptions } from './options.ts';
 import { lockMigration, lockRun, publishMigration, publishRun, toJson } from './store.ts';
+import type { Tx } from './types.ts';
 
 export type RunGuardCode =
   | 'run.migration_missing'
@@ -102,6 +103,11 @@ export interface CreateRunInput {
   /** The request body `confirm`: the exact target full name (LIF-043). */
   readonly confirm?: string;
   readonly now?: () => Date;
+  /**
+   * Runs inside the creating transaction, after the Run row exists: a caller writes its AuditEvent
+   * here so the Run and its audit commit or roll back together (AUTH-022).
+   */
+  readonly inTransaction?: (tx: Pick<Db, 'auditEvent'>, created: CreatedRun) => Promise<void>;
 }
 
 export interface CreatedRun {
@@ -198,7 +204,7 @@ export async function createRun(db: Db, input: CreateRunInput): Promise<CreatedR
       });
       await publishRun(tx, { run: run.id, migration: input.migrationId }, now);
       await publishMigration(tx, input.migrationId, now);
-      return {
+      const created: CreatedRun = {
         runId: run.id,
         routing: {
           kind: input.kind,
@@ -206,6 +212,8 @@ export async function createRun(db: Db, input: CreateRunInput): Promise<CreatedR
           sizeClass: (migration.sourceRepository?.sizeClass ?? 'standard') as 'standard' | 'large',
         },
       };
+      await input.inTransaction?.(tx, created);
+      return created;
     });
   } catch (error) {
     if (isActiveRunIndexViolation(error)) {
@@ -241,6 +249,8 @@ export async function requestRunCancel(
   runId: string,
   now: () => Date = () => new Date(),
   log?: Logger,
+  /** Runs inside the cancel's transaction with its outcome (not for a missing Run), for the audit. */
+  inTransaction?: (tx: Pick<Db, 'auditEvent'>, outcome: CancelOutcome) => Promise<void>,
 ): Promise<CancelOutcome> {
   const probe = await db.run.findUnique({ where: { id: runId }, select: { migrationId: true } });
   if (!probe) return 'missing';
@@ -248,7 +258,17 @@ export async function requestRunCancel(
     await lockMigration(tx, probe.migrationId);
     const run = await lockRun(tx, runId);
     if (!run) return 'missing' as const;
-    const base = { runId, migrationId: probe.migrationId, now, ...(log ? { log } : {}) };
+    const outcome = await cancelLocked(tx, run, probe.migrationId);
+    await inTransaction?.(tx, outcome);
+    return outcome;
+  });
+
+  async function cancelLocked(
+    tx: Tx,
+    run: NonNullable<Awaited<ReturnType<typeof lockRun>>>,
+    migrationId: string,
+  ): Promise<CancelOutcome> {
+    const base = { runId, migrationId: migrationId, now, ...(log ? { log } : {}) };
     if (run.status === 'queued') {
       await tx.$executeRaw`
         UPDATE app.run SET cancel_requested_at = clock_timestamp() WHERE id = ${runId}`;
@@ -274,8 +294,8 @@ export async function requestRunCancel(
       await tx.$executeRaw`
         UPDATE app.run SET cancel_requested_at = clock_timestamp(), updated_at = clock_timestamp()
         WHERE id = ${runId}`;
-      await publishRun(tx, { run: runId, migration: probe.migrationId }, now);
+      await publishRun(tx, { run: runId, migration: migrationId }, now);
     }
     return 'requested' as const;
-  });
+  }
 }

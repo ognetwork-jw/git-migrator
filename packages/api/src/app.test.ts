@@ -625,6 +625,7 @@ describe('[API-001] OpenAPI document and typed client', () => {
       '/capability-matrix',
       '/dashboard',
       '/events',
+      '/expected-differences/{id}',
       '/inventory/refresh',
       '/invitation-batches',
       '/invitation-batches/{id}',
@@ -633,7 +634,11 @@ describe('[API-001] OpenAPI document and typed client', () => {
       '/me',
       '/migrations/bulk',
       '/migrations/{id}/analyze',
+      '/migrations/{id}/complete',
       '/migrations/{id}/diff',
+      '/migrations/{id}/expected-differences',
+      '/migrations/{id}/runs',
+      '/migrations/{id}/tasks/{taskId}/{action}',
       '/overlays',
       '/overlays/{id}',
       '/quota',
@@ -647,6 +652,7 @@ describe('[API-001] OpenAPI document and typed client', () => {
       '/routes/{id}/invitation-candidates',
       '/routes/{id}/naming/preview',
       '/routes/{id}/target-identities',
+      '/runs/{id}/cancel',
     ]);
     expect(Object.keys(doc.components.securitySchemes)).toEqual(['bearerAuth', 'sessionCookie']);
     expect(doc.components.schemas.Problem).toBeDefined();

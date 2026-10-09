@@ -47,6 +47,8 @@ const services: ApiServices = {
       });
       return Promise.resolve({} as never);
     },
+    enqueueRun: () => Promise.resolve({} as never),
+    enqueueParity: () => Promise.resolve({} as never),
     queue: () =>
       ({
         getJobs: () =>

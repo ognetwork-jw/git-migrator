@@ -175,5 +175,6 @@
 | [0405](0405-bulk-endpoint-and-migrate-ready.md) | `POST /migrations/bulk` lives in packages/api and creates Runs through `createRun` | agent-decided |
 | [0406](0406-bulk-selection-filter-and-cap.md) | Bulk selection: explicit ids or a saved filter, 200 at most, a 422 above it | agent-decided |
 | [0407](0407-waves-membership-and-feeder-priority.md) | Wave membership: capability, no staleness, CRUD through the Model API, priority already in the feeder | agent-decided |
+| [0415](0415-run-and-task-endpoints.md) | Run, cancel, complete, task and Expected Difference endpoints: one Run creation path, problem codes, task states, parity triggers | agent-decided |
 
 New ADRs continue from 0028. Implementor decisions use `status: agent-decided` (PROC-005). T-002 uses 0065–0069.

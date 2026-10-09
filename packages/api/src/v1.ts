@@ -39,7 +39,9 @@ import {
 import { createOverlays } from './overlays.ts';
 import type { Principal } from './principal.ts';
 import { ProblemError, ProblemSchema } from './problem.ts';
+import { createRuns } from './runs.ts';
 import type { ApiServices } from './services.ts';
+import { createTasks } from './tasks.ts';
 
 export interface ApiEnv {
   Variables: { principal: Principal };
@@ -423,6 +425,24 @@ export function createV1(deps: V1Deps) {
     .route(
       '/',
       createInvitations({
+        db: deps.db,
+        services: deps.services ?? {},
+        ...(deps.onFault ? { onFault: deps.onFault } : {}),
+        validationHook,
+      }),
+    )
+    .route(
+      '/',
+      createRuns({
+        db: deps.db,
+        services: deps.services ?? {},
+        ...(deps.onFault ? { onFault: deps.onFault } : {}),
+        validationHook,
+      }),
+    )
+    .route(
+      '/',
+      createTasks({
         db: deps.db,
         services: deps.services ?? {},
         ...(deps.onFault ? { onFault: deps.onFault } : {}),

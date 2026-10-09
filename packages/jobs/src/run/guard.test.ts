@@ -437,6 +437,18 @@ describe('[LIF-043] Run options', () => {
     expect(created.runId).toBeTruthy();
   });
 
+  it('[LIF-077] a rollback needs the target full name as confirm, in any case; no target means nothing to confirm', () => {
+    const check = (confirm: string | undefined, targetFullName: string | null) =>
+      checkRunOptions({ kind: 'rollback', options: undefined, confirm, targetFullName });
+    expect(check(undefined, 'acme/x')).toMatchObject({
+      ok: false,
+      code: 'run.confirmation_required',
+    });
+    expect(check('acme/y', 'acme/x')).toMatchObject({ ok: false });
+    expect(check('ACME/X', 'acme/x')).toMatchObject({ ok: true });
+    expect(check(undefined, null)).toMatchObject({ ok: true });
+  });
+
   it('[LIF-043] refuses unknown options and adoptNonEmpty on kinds that push no refs', () => {
     const check = (kind: 'migrate' | 'verify', options: unknown, confirm?: string) =>
       checkRunOptions({ kind, options, confirm, targetFullName: 'acme/x' });
