@@ -25,7 +25,7 @@ export const INTEGRATION_INCLUDE = [`testing/integration/**/*.test.${EXT}`];
  * (ADR-0475). UNIT_INCLUDE's `testing/*\/src` glob would match these as well, so the unit project
  * excludes them.
  */
-export const INTEGRATION_ONLY = [`testing/integration/**/phase1.test.${EXT}`];
+export const INTEGRATION_ONLY = [`testing/integration/**/phase1*.test.${EXT}`];
 
 /** Run by other tools/projects (integration tier, Playwright), not by the unit project. */
 export const OTHER_TIER_INCLUDE = [...INTEGRATION_INCLUDE, `testing/e2e/**/*.spec.${EXT}`];
