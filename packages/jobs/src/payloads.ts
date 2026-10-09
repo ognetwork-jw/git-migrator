@@ -20,6 +20,12 @@ export const JOB_PAYLOADS = {
   'maintenance.scratch-cleanup': empty,
   'maintenance.run-reaper': empty,
   'analysis.feeder': empty,
+  // AUTH-060: the steps of an invitation batch that need the provider. IDs only (JOB-011).
+  'invitations.batch': z.discriminatedUnion('step', [
+    z.strictObject({ step: z.literal('seats'), batchId: id }),
+    z.strictObject({ step: z.literal('send'), batchId: id }),
+    z.strictObject({ step: z.literal('revoke'), batchId: id, invitationId: id }),
+  ]),
 } as const satisfies Record<JobName, z.ZodType>;
 
 export type JobPayloads = { [N in JobName]: z.infer<(typeof JOB_PAYLOADS)[N]> };

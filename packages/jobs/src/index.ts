@@ -71,6 +71,25 @@ export {
   matchIdentity,
   normalizeDisplayName,
 } from './inventory/matching.ts';
+export {
+  type CorrelateDeps,
+  type CorrelateResult,
+  correlateInvitations,
+  INVITATION_UNRESOLVED_AFTER_MS,
+  type InvitationDeps,
+  InvitationInterruptedError,
+  type InvitationStep,
+  invitationHandlers,
+  invitationTargetLockKey,
+  normaliseEmail,
+  type RevokeResult,
+  runInvitationRevoke,
+  runInvitationSend,
+  runSeatPreview,
+  type ScheduleInvitationStep,
+  type SeatPreview,
+  type SendResult,
+} from './invitations/index.ts';
 export { LEADER_LOCK_NAME, LeaderElection, type LeaderElectionOptions } from './leader.ts';
 export {
   createPruner,

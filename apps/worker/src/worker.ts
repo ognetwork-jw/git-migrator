@@ -15,6 +15,7 @@ import {
   HEALTH_PORT,
   type HealthServer,
   inventoryHandlers,
+  invitationHandlers,
   type JobHandlers,
   JobRuntime,
   LeaderElection,
@@ -288,6 +289,9 @@ export async function startWorker(options: StartWorkerOptions): Promise<WorkerHa
         registry,
         config,
         log,
+        // AUTH-060 step 5: acceptance is detected at inventory; approved batches are resumed.
+        scheduleInvitation: (step, delayMs) =>
+          jobs.enqueueInvitationStep(step, { delayMs }).then(() => undefined),
       }),
       ...analysisHandlers(analysisDeps),
       ...runHandlers({
@@ -303,6 +307,14 @@ export async function startWorker(options: StartWorkerOptions): Promise<WorkerHa
       }),
       ...feederHandlers({ db: db.privileged, runtime: jobs, quota, log }),
       ...parityHandlers(parityDeps),
+      ...invitationHandlers({
+        db: db.privileged,
+        appPool: db.pool,
+        connector,
+        schedule: (step, delayMs) =>
+          jobs.enqueueInvitationStep(step, { delayMs }).then(() => undefined),
+        log,
+      }),
       ...(options.handlers ?? {}),
     };
     await jobs.startWorkers(role, config, handlers);

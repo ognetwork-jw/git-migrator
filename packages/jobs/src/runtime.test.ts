@@ -100,6 +100,27 @@ describe('job runtime on the PostgreSQL backend', () => {
     expect(runtime.workerQueues).toEqual(queuesForRole('standard'));
   }, 60_000);
 
+  it('[AUTH-060] a running send step can reschedule itself more than once without BullMQ dropping it', async () => {
+    const runtime = makeRuntime(6);
+    await runtime.waitUntilReady();
+    await drainAll(runtime);
+    const step = { step: 'send', batchId: 'b-resched' } as const;
+    let done = false;
+    await runtime.startWorkers('standard', config, {
+      'invitations.batch': async () => {
+        // Two waits from inside the running job (the second must not be a duplicate of the first).
+        await runtime.enqueueInvitationStep(step, { delayMs: 60_000 });
+        await runtime.enqueueInvitationStep(step, { delayMs: 120_000 });
+        done = true;
+      },
+    });
+    await runtime.enqueueInvitationStep(step);
+    await until(() => done);
+    await until(
+      async () => (await runtime.queue('maintenance').getJobCounts('delayed')).delayed === 2,
+    );
+  }, 60_000);
+
   it('[JOB-011] validates payloads on enqueue and refuses a queue that does not carry the job', async () => {
     const runtime = makeRuntime(0);
     await runtime.waitUntilReady();

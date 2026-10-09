@@ -32,6 +32,7 @@ export const QUEUE_DEFINITIONS = {
       'maintenance.scratch-cleanup',
       'maintenance.run-reaper',
       'analysis.feeder',
+      'invitations.batch',
     ],
     consumer: 'standard',
   },

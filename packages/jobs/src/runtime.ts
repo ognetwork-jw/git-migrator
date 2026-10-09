@@ -204,6 +204,26 @@ export class JobRuntime {
     );
   }
 
+  /**
+   * A step of an invitation batch (AUTH-060) on the maintenance queue. An immediate step is
+   * deduplicated per batch; a delayed one (the 24 h wait) has its own id, because the running
+   * job still holds the immediate one. The send step is idempotent whatever the duplicates.
+   */
+  enqueueInvitationStep(
+    step: JobPayloads['invitations.batch'],
+    options: EnqueueOptions = {},
+  ): Promise<Job> {
+    // Every delayed step has its own id (its due time): the running job still holds the immediate
+    // id, and a second reschedule must not be dropped as a duplicate of the first (ADR-0372).
+    const delay = options.delayMs ?? 0;
+    const later = delay > 0 ? `-later-${Date.now() + delay}` : '';
+    const target = step.step === 'revoke' ? `-${step.invitationId}` : '';
+    return this.enqueue('maintenance', 'invitations.batch', step, {
+      dedupeId: `invitations-${step.step}-${step.batchId}${target}${later}`,
+      ...options,
+    });
+  }
+
   /** `run.execute` on the queue the Run's size class and kind select (JOB-010). */
   enqueueRun(runId: string, routing: RunRouting, options: EnqueueOptions = {}): Promise<Job> {
     return this.enqueue(

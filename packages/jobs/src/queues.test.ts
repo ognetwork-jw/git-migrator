@@ -36,6 +36,8 @@ describe('queue definitions', () => {
       'maintenance.scratch-cleanup',
       'maintenance.run-reaper',
       'analysis.feeder',
+      // ADR-0370: the invitation batch steps ride the maintenance queue.
+      'invitations.batch',
     ]);
     expect(QUEUE_DEFINITIONS['analysis-interactive'].jobs).toEqual(['analysis.migration']);
     expect(QUEUE_DEFINITIONS['analysis-background'].jobs).toEqual(['analysis.migration']);

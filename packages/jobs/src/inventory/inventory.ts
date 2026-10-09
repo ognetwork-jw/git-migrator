@@ -22,6 +22,7 @@ import type { Logger } from '@git-migrator/observability';
 import type { ProviderRegistry } from '@git-migrator/registry';
 import type pg from 'pg';
 import { databaseNow } from '../db-clock.ts';
+import { correlateInvitations, type ScheduleInvitationStep } from '../invitations/index.ts';
 import type { JobHandlers } from '../runtime.ts';
 import type { EndpointConnector } from './connector.ts';
 import {
@@ -50,6 +51,8 @@ export interface InventoryDeps {
   readonly registry: Pick<ProviderRegistry, 'adapter'>;
   readonly config: Pick<Config, 'sizeClass'>;
   readonly log: Logger;
+  /** Wakes the send step of approved Invitation Batches after a pass over their target (AUTH-060). */
+  readonly scheduleInvitation?: ScheduleInvitationStep;
   /** Test seam. */
   readonly now?: () => Date;
   /** Test seam: runs between a read and the guarded write that follows it. */
@@ -261,6 +264,7 @@ export async function runInventory(
 
     checkpoint();
     const mappingsChanged = await mapRoutes(routes);
+    await correlateTargetInvitations(connection, routes);
 
     const staleMigrations = repositories.stale;
     log.info(
@@ -290,6 +294,40 @@ export async function runInventory(
       mappingsChanged,
       ...(suspicious ? { suspicious: true as const } : {}),
     };
+  }
+
+  /**
+   * AUTH-060 step 5: sent invitations are matched against the members just listed. A provider
+   * fault here is logged and leaves the invitations as they are; the next pass tries again.
+   */
+  async function correlateTargetInvitations(
+    connection: EndpointConnection,
+    routeRows: readonly RouteRow[],
+  ): Promise<void> {
+    if (!connection.invitations) return;
+    try {
+      const result = await correlateInvitations(
+        {
+          db,
+          appPool: deps.appPool,
+          log,
+          now,
+          ...(deps.scheduleInvitation ? { schedule: deps.scheduleInvitation } : {}),
+        },
+        connection,
+        routeRows,
+        endpointId,
+      );
+      if (result.accepted + result.expired + result.resumed > 0) {
+        log.info({ endpointId, ...result }, 'invitations correlated');
+      }
+    } catch (error) {
+      if (error instanceof InventoryInterruptedError) throw error;
+      log.warn(
+        { endpointId, errorClass: (error as Error | null)?.name },
+        'invitation correlation failed; retried at the next pass',
+      );
+    }
   }
 
   /** DOM-014: one endpoint-scope Migration per Route (a partial unique index backs it). */
