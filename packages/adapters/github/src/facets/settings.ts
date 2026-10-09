@@ -11,8 +11,10 @@ import type {
 import { scopedKey } from '@git-migrator/canonical';
 import { Collector, type Gh, type Json, obj, repoPath, str } from '../gh.ts';
 import {
+  cannotUndo,
   type DriverDeps,
   ghOf,
+  ignoreGone,
   itemPath,
   mutation,
   orgTarget,
@@ -77,6 +79,18 @@ export function deployKeysDriver(deps: DriverDeps): FacetDriver<DeployKeys> {
           throw error;
         }
       }
+    },
+    async undo(ctx, target, record) {
+      const repo = repoTarget(target);
+      if (record.action !== 'create' || record.resourceRef.kind !== 'deploy-key') {
+        throw cannotUndo(record);
+      }
+      await ignoreGone(
+        ghOf(ctx).send(
+          'DELETE',
+          `${repoPath(deps.org, repo.slug)}/keys/${String(record.resourceRef.id)}`,
+        ),
+      );
     },
   };
 }
@@ -170,6 +184,16 @@ export function environmentsDriver(deps: DriverDeps): FacetDriver<Environments> 
           }
           continue;
         }
+        // What the environment really had, to put back exactly (`protected_branches`, custom or
+        // all branches); the canonical `deploymentBranches` cannot tell the first from the last.
+        const rawEnvs = existing
+          ? await gh.list<Json>(`${base}/environments`, {}, (b) => obj(b).environments)
+          : [];
+        const rawPolicy =
+          rawEnvs.find((e) => str(e.name).toLowerCase() === env.name.toLowerCase())
+            ?.deployment_branch_policy ?? null;
+        const haveNames = new Set(existing?.deploymentBranches ?? []);
+        const addedBranches = (wantedBranches ?? []).filter((b) => !haveNames.has(b));
         // No reviewers or wait timers: not available on private Team repositories (provider doc).
         await gh.send('PUT', `${base}/environments/${encodeURIComponent(env.name)}`, {
           deployment_branch_policy:
@@ -184,19 +208,55 @@ export function environmentsDriver(deps: DriverDeps): FacetDriver<Environments> 
           existing ? 'update' : 'create',
           { kind: 'environment', repository: repo.slug, name: env.name },
           [itemPath('environments', 'name', env.name)],
-          existing ?? null,
-          { ...env, category: null, deploymentBranches: wantedBranches },
+          existing ? { ...existing, deploymentBranchPolicy: rawPolicy } : null,
+          { ...env, category: null, deploymentBranches: wantedBranches, addedBranches },
         );
         if (wantedBranches !== null) {
-          const have2 = new Set(existing?.deploymentBranches ?? []);
-          for (const name of wantedBranches) {
-            if (have2.has(name)) continue;
+          for (const name of addedBranches) {
             await gh.send(
               'POST',
               `${base}/environments/${encodeURIComponent(env.name)}/deployment-branch-policies`,
               { name, type: 'branch' },
             );
           }
+        }
+      }
+    },
+    async undo(ctx, target, record) {
+      const repo = repoTarget(target);
+      if (record.resourceRef.kind !== 'environment' || record.action === 'delete') {
+        throw cannotUndo(record);
+      }
+      const gh = ghOf(ctx);
+      const base = repoPath(deps.org, repo.slug);
+      const url = `${base}/environments/${encodeURIComponent(String(record.resourceRef.name))}`;
+      if (record.action === 'create') {
+        await ignoreGone(gh.send('DELETE', url));
+        return;
+      }
+      // An update: back to the policy the environment had, exactly as the provider reported it,
+      // and only the branch policies this apply added are removed. An environment that is gone is
+      // not created again by an undo.
+      if ((await gh.getOrNull(url)) === null) return;
+      const before = obj(record.before);
+      const was =
+        'deploymentBranchPolicy' in before
+          ? before.deploymentBranchPolicy
+          : Array.isArray(before.deploymentBranches)
+            ? { protected_branches: false, custom_branch_policies: true }
+            : null;
+      await gh.send('PUT', url, { deployment_branch_policy: was ?? null });
+      const added = obj(record.after).addedBranches;
+      if (!Array.isArray(added) || added.length === 0) return;
+      const mine = new Set(added.map(String));
+      const policies = await gh.list<Json>(
+        `${url}/deployment-branch-policies`,
+        {},
+        (b) => obj(b).branch_policies,
+      );
+      for (const policy of policies) {
+        if (mine.has(str(policy.name)) && policy.type !== 'tag') {
+          await ignoreGone(gh.send('DELETE', `${url}/deployment-branch-policies/${policy.id}`));
         }
       }
     },
@@ -286,6 +346,28 @@ export function variablesDriver(deps: DriverDeps): FacetDriver<Variables> {
         );
       }
     },
+    async undo(ctx, target, record) {
+      const repo = repoTarget(target);
+      const ref = record.resourceRef;
+      if (ref.kind !== 'variable' || record.action === 'delete') throw cannotUndo(record);
+      const gh = ghOf(ctx);
+      const path = (await scopes(gh, repoPath(deps.org, repo.slug))).find(
+        (s) => s.scope === ref.scope,
+      )?.path;
+      // The environment of a scoped variable is gone: so is the variable.
+      if (path === undefined) return;
+      const name = encodeURIComponent(String(ref.name));
+      if (record.action === 'create') {
+        await ignoreGone(gh.send('DELETE', `${path}/variables/${name}`));
+        return;
+      }
+      await ignoreGone(
+        gh.send('PATCH', `${path}/variables/${name}`, {
+          name: String(ref.name),
+          value: str(obj(record.before).value),
+        }),
+      );
+    },
   };
 }
 
@@ -367,6 +449,24 @@ export function orgVariablesDriver(deps: DriverDeps): FacetDriver<OrgVariables> 
           v,
         );
       }
+    },
+    async undo(ctx, target, record) {
+      if (record.resourceRef.kind !== 'org-variable' || record.action === 'delete') {
+        throw cannotUndo(record);
+      }
+      const gh = ghOf(ctx);
+      const url = `/orgs/${orgTarget(target)}/actions/variables/${encodeURIComponent(String(record.resourceRef.name))}`;
+      if (record.action === 'create') {
+        await ignoreGone(gh.send('DELETE', url));
+        return;
+      }
+      await ignoreGone(
+        gh.send('PATCH', url, {
+          name: String(record.resourceRef.name),
+          value: str(obj(record.before).value),
+          visibility: 'all',
+        }),
+      );
     },
   };
 }

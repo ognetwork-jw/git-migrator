@@ -11,7 +11,16 @@ import {
 } from '@git-migrator/canonical';
 import { Directory } from '../directory.ts';
 import { Collector, type Gh, type Json, obj, str } from '../gh.ts';
-import { type DriverDeps, ghOf, itemPath, mutation, repoTarget, sortBy } from './common.ts';
+import {
+  cannotUndo,
+  type DriverDeps,
+  ghOf,
+  ignoreGone,
+  itemPath,
+  mutation,
+  repoTarget,
+  sortBy,
+} from './common.ts';
 
 const ACTOR = `actor { __typename ... on User { databaseId } ... on Team { databaseId } ... on App { databaseId } }`;
 
@@ -236,7 +245,7 @@ function isValidationError(error: unknown): boolean {
 }
 
 export function branchRulesDriver(deps: DriverDeps): FacetDriver<BranchRules> {
-  return {
+  const driver: FacetDriver<BranchRules> = {
     async read(ctx, target) {
       const repo = repoTarget(target);
       const collector = new Collector();
@@ -385,5 +394,64 @@ export function branchRulesDriver(deps: DriverDeps): FacetDriver<BranchRules> {
         );
       }
     },
+
+    async undo(ctx, target, record) {
+      const ref = record.resourceRef;
+      if (ref.kind !== 'branch-protection-rule') throw cannotUndo(record);
+      const repo = repoTarget(target);
+      const gh = ghOf(ctx);
+      const pattern = String(ref.pattern);
+      const { repositoryId, rules: existing } = await readRules(
+        gh,
+        deps.org,
+        repo.slug,
+        new Collector(),
+      );
+      const current = existing.find((r) => r.rule.pattern === pattern);
+      if (record.action === 'create') {
+        // Only the rule this record created: a rule re-made under the pattern since is not ours.
+        if (current?.id === String(ref.id)) {
+          await ignoreGone(
+            gh.graphql(DELETE, { input: { branchProtectionRuleId: current.id } }, true),
+          );
+        }
+        return;
+      }
+      // An update goes back to the rule it replaced; a delete (step 3a) makes the rule again. Only
+      // this one rule is written, never through `apply`: `managedInput` does not round-trip what
+      // the framework does not manage (admin enforcement, creation blocking, status checks), so
+      // rewriting the other rules would change rules an operator tightened (ADR-0467 round 2).
+      const was = record.before as BranchRule | null;
+      if (was === null || typeof was !== 'object') throw cannotUndo(record);
+      const directory = new Directory(gh, deps.org);
+      const users = await directory.users(repo.slug);
+      const teams = new Map((await directory.teams()).map((t) => [t.id, t]));
+      const push = resolveActors(was.restrictPushes ?? [], users, teams);
+      const bypass = resolveActors(was.forcePushExempt, users, teams);
+      if (record.action === 'update') {
+        if (current?.id !== String(ref.id)) {
+          return { left: { kind: 'branch-rule-replaced', name: pattern } };
+        }
+        const input = {
+          branchProtectionRuleId: current.id,
+          ...managedInput(was, current.checks, push, bypass),
+        };
+        await gh.graphql(UPDATE, { input }, true);
+        return;
+      }
+      if (current) {
+        // A lifted rule that exists again is not made twice.
+        return { left: { kind: 'branch-rule-exists', name: pattern } };
+      }
+      const input = { repositoryId, pattern, ...managedInput(was, false, push, bypass) };
+      try {
+        await gh.graphql(CREATE, { input }, true);
+      } catch (error) {
+        // The bypass list can be refused (ADR-0040): the rule is made without it, which fails closed.
+        if (!(isValidationError(error) && bypass.nodeIds.length > 0)) throw error;
+        await gh.graphql(CREATE, { input: { ...input, bypassForcePushActorIds: [] } }, true);
+      }
+    },
   };
+  return driver;
 }

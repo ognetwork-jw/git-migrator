@@ -98,6 +98,13 @@ function needAdmin(ctx: GqlContext, level: 'read' | 'write'): void {
   if (!GitHubState.allows(ctx.auth.permissions, 'administration', level)) throw forbiddenErr();
 }
 
+/** A read of a repository: the installation's own, or a public one of any owner (as on GitHub). */
+function repoReadable(ctx: GqlContext, repo: RepoRec): boolean {
+  return (
+    repoVisible(ctx, repo) || (ctx.auth.installation !== undefined && repo.visibility === 'public')
+  );
+}
+
 function repoVisible(ctx: GqlContext, repo: RepoRec): boolean {
   const ids = ctx.auth.token?.repositoryIds;
   const inst = ctx.auth.installation;
@@ -287,7 +294,7 @@ function rootValue() {
   return {
     repository: (args: Args, ctx: GqlContext) => {
       const repo = ctx.state.findRepo(String(args.owner), String(args.name));
-      if (!repo || !repoVisible(ctx, repo))
+      if (!repo || !repoReadable(ctx, repo))
         throw err(
           `Could not resolve to a Repository with the name '${String(args.owner)}/${String(args.name)}'.`,
           'NOT_FOUND',
@@ -301,7 +308,7 @@ function rootValue() {
       if (n.type === 'Organization') return orgObj(n.rec);
       if (n.type === 'Team') return teamObj(n.rec);
       if (n.type === 'App') return appObj(n.rec);
-      if (n.type === 'Repository') return repoVisible(ctx, n.rec) ? repoObj(ctx, n.rec) : null;
+      if (n.type === 'Repository') return repoReadable(ctx, n.rec) ? repoObj(ctx, n.rec) : null;
       if (n.type === 'BranchProtectionRule') {
         needAdmin(ctx, 'read');
         return repoVisible(ctx, n.repo) ? ruleObj(ctx, n.repo, n.rec) : null;

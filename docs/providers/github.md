@@ -57,7 +57,7 @@ The backticked names are the permission keys used in the installation manifest a
 | Org | `GET /orgs/{org}` (plan seats) |
 | Members | `GET /orgs/{org}/members`, `GET /orgs/{org}/outside_collaborators`, `GET /orgs/{org}/invitations`, `POST /orgs/{org}/invitations`, `DELETE /orgs/{org}/invitations/{invitation_id}` |
 | Users | `GET /users/{login}` (name, public email); `GET /orgs/{org}/members?role=admin` (owners) |
-| Teams | `GET/POST /orgs/{org}/teams`, `GET /orgs/{org}/teams/{slug}`, `PUT /orgs/{org}/teams/{slug}/memberships/{login}`, `GET /orgs/{org}/teams/{slug}/members` |
+| Teams | `GET/POST /orgs/{org}/teams`, `GET /orgs/{org}/teams/{slug}`, `PUT/DELETE /orgs/{org}/teams/{slug}/memberships/{login}`, `GET /orgs/{org}/teams/{slug}/members`, `DELETE /orgs/{org}/teams/{slug}` (rollback of an endpoint Run, LIF-077; deleting a team deletes its child teams), `GET /orgs/{org}/teams/{slug}/teams` (its child teams, read again with the team just before that delete) |
 | Repo create / get / update / delete | `POST /orgs/{org}/repos`, `GET/PATCH/DELETE /repos/{o}/{r}` |
 | Collaborators | `GET /repos/{o}/{r}/collaborators?affiliation=direct`, `GET /repos/{o}/{r}/invitations`, `PUT/DELETE /repos/{o}/{r}/collaborators/{login}` |
 | Apps | `GET /apps/{app_slug}` (`node_id` for GraphQL push and force-push actors), `GET /app`, `GET /rate_limit` |

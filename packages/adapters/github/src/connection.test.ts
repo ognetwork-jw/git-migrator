@@ -149,6 +149,23 @@ describe('repositories', () => {
     expect(await h.conn.inventory.findRepository(h.org, 'gone')).toBeNull();
   });
 
+  it('[LIF-077] deletes a renamed repository under its current name: the old name redirects, and a write must not follow a redirect', async () => {
+    const h = await setup();
+    const moved = h.fake.state.addRepository('acme', { name: 'before', files: FILES });
+    const renamed = await h.fake.app.fetch(
+      new Request('http://localhost:4020/repos/acme/before', {
+        method: 'PATCH',
+        headers: { authorization: `Bearer ${h.fake.token()}`, 'content-type': 'application/json' },
+        body: JSON.stringify({ name: 'after' }),
+      }),
+    );
+    expect(renamed.status).toBe(200);
+    await h.conn.repositories.delete({ ...h.repo('before'), providerId: moved.nodeId });
+    expect(h.fake.state.findRepo('acme', 'after')).toBeUndefined();
+    const deletes = h.requests.filter((r) => r.method === 'DELETE');
+    expect(deletes.map((r) => new URL(r.url).pathname)).toEqual(['/repos/acme/after']);
+  });
+
   it('[LIF-077] refuses to delete without the provider id, before any request', async () => {
     const h = await setup();
     h.fake.state.addRepository('acme', { name: 'keep', files: FILES });

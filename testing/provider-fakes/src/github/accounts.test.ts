@@ -283,6 +283,24 @@ describe('teams', () => {
     await w.spec('/orgs/{org}/teams/{team_slug}', 'get', '/orgs/acme/teams/nope', {}, 404);
   });
 
+  it('[TST-011] DELETE /orgs/{org}/teams/{team_slug} deletes the team and its child teams, which GET .../teams lists (rollback, LIF-077)', async () => {
+    const w = world();
+    const parent = await w.call('POST', '/orgs/acme/teams', { body: { name: 'parent' } });
+    await w.call('POST', '/orgs/acme/teams', {
+      body: { name: 'child', parent_team_id: parent.body.id },
+    });
+    await w.call('POST', '/orgs/acme/teams', { body: { name: 'other' } });
+    // The child teams of a team (not in the trimmed OpenAPI description either).
+    const children = await w.call('GET', '/orgs/acme/teams/parent/teams');
+    expect(children.body.map((t: { slug: string }) => t.slug)).toEqual(['child']);
+    expect((await w.call('GET', '/orgs/acme/teams/other/teams')).body).toEqual([]);
+    // The trimmed OpenAPI description carries only GET for this path, so the reply is not validated.
+    expect((await w.call('DELETE', '/orgs/acme/teams/parent')).status).toBe(204);
+    const left = await w.call('GET', '/orgs/acme/teams');
+    expect(left.body.map((t: { slug: string }) => t.slug)).toEqual(['other']);
+    expect((await w.call('DELETE', '/orgs/acme/teams/parent')).status).toBe(404);
+  });
+
   it('[TST-011] team membership for members is active, for non-members pending with an invitation', async () => {
     const w = world();
     await w.call('POST', '/orgs/acme/teams', { body: { name: 'plat' } });

@@ -63,6 +63,8 @@ export class GitHubState {
   apps = new Map<number, AppRec>();
   installations = new Map<number, InstallationRec>();
   repos = new Map<string, RepoRec>();
+  /** Former names of renamed repositories, to the repository: GitHub redirects them (301 on a read, 307 otherwise). */
+  renamedRepos = new Map<string, RepoRec>();
   tokens = new Map<string, TokenRec>();
   /** Every deploy key (public key text) in use, to its repository: keys are unique on GitHub. */
   private ids = new Map<string, number>();
@@ -516,6 +518,7 @@ export class GitHubState {
       nextPull: 1,
     };
     this.repos.set(this.repoKey(org.login, input.name), repo);
+    this.renamedRepos.delete(this.repoKey(org.login, input.name));
     if (input.files) {
       repo.git.commitFiles(`refs/heads/${repo.defaultBranch}`, input.files, 'Initial commit');
       repo.pushedAt = now;
@@ -529,7 +532,64 @@ export class GitHubState {
     return repo;
   }
 
+  /**
+   * Transfers a repository to another organization of the fake. GitHub redirects the old name, as
+   * after a rename, until a repository is made on it; the old organization's team grants go.
+   */
+  transferRepository(repo: RepoRec, newOwner: string): void {
+    const org = this.requireOrg(newOwner);
+    const oldKey = this.repoKey(repo.owner, repo.name);
+    const newKey = this.repoKey(org.login, repo.name);
+    if (this.repos.has(newKey))
+      throw validationFailed({
+        resource: 'Repository',
+        code: 'custom',
+        field: 'name',
+        message: 'name already exists on this account',
+      });
+    this.repos.delete(oldKey);
+    for (const o of this.orgs.values()) for (const t of o.teams) t.repos.delete(oldKey);
+    repo.owner = org.login;
+    this.repos.set(newKey, repo);
+    this.renamedRepos.set(oldKey, repo);
+    this.renamedRepos.delete(newKey);
+  }
+
+  /**
+   * Renames an organization. It keeps its id; its repositories' old full names redirect, as after
+   * a rename of the repository, and its installations follow it.
+   */
+  renameOrg(oldLogin: string, newLogin: string): void {
+    const org = this.requireOrg(oldLogin);
+    this.orgs.delete(oldLogin.toLowerCase());
+    org.login = newLogin;
+    this.orgs.set(newLogin.toLowerCase(), org);
+    for (const [oldKey, repo] of [...this.repos]) {
+      if (repo.owner.toLowerCase() !== oldLogin.toLowerCase()) continue;
+      const newKey = this.repoKey(newLogin, repo.name);
+      this.repos.delete(oldKey);
+      repo.owner = newLogin;
+      this.repos.set(newKey, repo);
+      this.renamedRepos.set(oldKey, repo);
+      for (const t of org.teams) {
+        const role = t.repos.get(oldKey);
+        if (role === undefined) continue;
+        t.repos.delete(oldKey);
+        t.repos.set(newKey, role);
+      }
+    }
+    const prefix = `${oldLogin.toLowerCase()}/`;
+    for (const inst of this.installations.values()) {
+      if (inst.account.toLowerCase() !== oldLogin.toLowerCase()) continue;
+      inst.account = newLogin;
+      inst.repositories = inst.repositories.map((r) =>
+        r.toLowerCase().startsWith(prefix) ? `${newLogin}/${r.slice(prefix.length)}` : r,
+      );
+    }
+  }
+
   deleteRepository(repo: RepoRec): void {
+    for (const [key, held] of this.renamedRepos) if (held === repo) this.renamedRepos.delete(key);
     this.repos.delete(this.repoKey(repo.owner, repo.name));
     for (const org of this.orgs.values())
       for (const t of org.teams) t.repos.delete(this.repoKey(repo.owner, repo.name));

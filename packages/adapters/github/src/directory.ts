@@ -42,6 +42,7 @@ export class Directory {
   #members?: Promise<UserInfo[]>;
   #admins?: Promise<Set<string>>;
   #outside?: Promise<UserInfo[]>;
+  #teamRecords?: Promise<Json[]>;
   #teams?: Promise<TeamInfo[]>;
   readonly #collaborators = new Map<string, Promise<UserInfo[]>>();
 
@@ -72,11 +73,21 @@ export class Directory {
     return this.#outside;
   }
 
+  /** The organization's teams as the provider returned them (parent included). */
+  teamRecords(): Promise<Json[]> {
+    this.#teamRecords ??= this.#gh.list<Json>(`/orgs/${this.#org}/teams`);
+    return this.#teamRecords;
+  }
+
   teams(): Promise<TeamInfo[]> {
-    this.#teams ??= this.#gh
-      .list<Json>(`/orgs/${this.#org}/teams`)
-      .then((l) => l.flatMap((t) => teamInfo(t) ?? []));
+    this.#teams ??= this.teamRecords().then((l) => l.flatMap((t) => teamInfo(t) ?? []));
     return this.#teams;
+  }
+
+  /** Forgets the team list, after a team was created or deleted. */
+  invalidateTeams(): void {
+    this.#teamRecords = undefined;
+    this.#teams = undefined;
   }
 
   repoCollaborators(repo: string): Promise<UserInfo[]> {

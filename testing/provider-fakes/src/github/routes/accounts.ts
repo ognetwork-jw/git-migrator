@@ -297,6 +297,34 @@ export function registerAccounts(r: Router, state: GitHubState, limiter: RateLim
     return { body: q.ser.teamFull(org, state.requireTeam(org, q.param('slug'))) };
   });
 
+  // The child teams of a team (one level, as GitHub lists them).
+  r.get('/orgs/:org/teams/:slug/teams', ['members', 'read'], (q) => {
+    const org = orgFor(q, q.param('org'));
+    const team = state.requireTeam(org, q.param('slug'));
+    return q.page(
+      org.teams.filter((t) => t.parentId === team.id),
+      (t) => q.ser.team(org, t),
+    );
+  });
+
+  // Deleting a team deletes its child teams too, and its memberships and repository grants go with it.
+  r.delete('/orgs/:org/teams/:slug', ['members', 'write'], (q) => {
+    const org = orgFor(q, q.param('org'));
+    const team = state.requireTeam(org, q.param('slug'));
+    const doomed = new Set<number>([team.id]);
+    for (let grew = true; grew; ) {
+      grew = false;
+      for (const t of org.teams) {
+        if (t.parentId !== null && doomed.has(t.parentId) && !doomed.has(t.id)) {
+          doomed.add(t.id);
+          grew = true;
+        }
+      }
+    }
+    org.teams = org.teams.filter((t) => !doomed.has(t.id));
+    return {};
+  });
+
   r.get('/orgs/:org/teams/:slug/members', ['members', 'read'], (q) => {
     const org = orgFor(q, q.param('org'));
     const team = state.requireTeam(org, q.param('slug'));

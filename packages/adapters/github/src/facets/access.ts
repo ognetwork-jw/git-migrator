@@ -9,7 +9,18 @@ import type {
 import { partialMutations } from '../change-requests.ts';
 import { Directory } from '../directory.ts';
 import { Collector, type Json, obj, repoPath, str } from '../gh.ts';
-import { type DriverDeps, ghOf, itemPath, mutation, repoTarget, sortBy } from './common.ts';
+import {
+  cannotUndo,
+  type DriverDeps,
+  ghOf,
+  ignoreGone,
+  itemPath,
+  mutation,
+  repoTarget,
+  sortBy,
+  teamStillIs,
+  undoDirectory,
+} from './common.ts';
 
 const TO_API: Record<AccessRole, string> = {
   read: 'pull',
@@ -146,6 +157,41 @@ export function accessControlDriver(deps: DriverDeps): FacetDriver<AccessControl
           grant,
         );
       }
+    },
+    async undo(ctx, target, record) {
+      const ref = record.resourceRef;
+      if (ref.kind !== 'access-grant' || record.action === 'delete') throw cannotUndo(record);
+      const repo = repoTarget(target);
+      const gh = ghOf(ctx);
+      const directory = undoDirectory(ctx, deps.org);
+      const [kind, id] = String(ref.principal).split(/:(.*)/s);
+      const was = record.action === 'update' ? str(obj(record.before).role) : '';
+      const role = TO_API[was as AccessRole];
+      if (kind === 'group') {
+        const team = (await directory.teams()).find((t) => t.id === id);
+        // A team that is gone has no grant left to revert.
+        if (!team) return;
+        // The cached list may be older than this write: the slug may hold another team by now.
+        if (!(await teamStillIs(ctx, directory, deps.org, team.slug, team.id))) {
+          return { left: { kind: 'group-changed', name: team.slug } };
+        }
+        const url = `/orgs/${deps.org}/teams/${team.slug}/repos/${deps.org}/${repo.slug}`;
+        if (record.action === 'create') await ignoreGone(gh.send('DELETE', url));
+        else if (role) await gh.send('PUT', url, { permission: role });
+        return;
+      }
+      // By id among the organization's members and outside collaborators, then among the
+      // repository's direct collaborators (a user who left the organization keeps a direct grant).
+      // Nobody by that id has no grant left to revert.
+      const user = [
+        ...(await directory.members()),
+        ...(await directory.outsideCollaborators()),
+        ...(await directory.repoCollaborators(repo.slug)),
+      ].find((m) => m.id === id);
+      if (!user) return;
+      const url = `${repoPath(deps.org, repo.slug)}/collaborators/${encodeURIComponent(user.login)}`;
+      if (record.action === 'create') await ignoreGone(gh.send('DELETE', url));
+      else if (role) await gh.send('PUT', url, { permission: role });
     },
   };
 }

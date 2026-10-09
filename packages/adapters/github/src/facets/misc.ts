@@ -5,13 +5,17 @@ import { sha256Hex } from '@git-migrator/core';
 import { Directory } from '../directory.ts';
 import { Collector, type Json, obj, repoPath, str } from '../gh.ts';
 import {
+  cannotUndo,
   type DriverDeps,
   ghOf,
+  ignoreGone,
   itemPath,
   mutation,
   orgTarget,
   repoTarget,
   sortBy,
+  teamStillIs,
+  undoDirectory,
 } from './common.ts';
 
 export const FRAMEWORK_BRANCH_PREFIX = 'git-migrator/';
@@ -127,17 +131,24 @@ export function teamsDriver(_deps: DriverDeps): FacetDriver<Teams> {
         (current ?? (await this.read(ctx, target)).data).teams.map((t) => [t.slug, t]),
       );
       const members = await directory.members();
+      // Provider ids of the teams written to, so a record names exactly its team (an undo never
+      // deletes whatever holds the slug later, ADR-0467 round 2).
+      const ids = new Map((await directory.teams()).map((t) => [t.slug, t.id]));
       for (const team of sortBy(desired.teams, (t) => t.slug)) {
         let existing = have.get(team.slug);
         if (!existing) {
           // The slug is derived from the name; use the slug as the name if they would disagree.
           const name = slugify(team.name) === team.slug ? team.name : team.slug;
-          await gh.send('POST', `/orgs/${org}/teams`, { name, privacy: 'closed' });
+          const created = await gh.send<Json>('POST', `/orgs/${org}/teams`, {
+            name,
+            privacy: 'closed',
+          });
+          ids.set(team.slug, String(created.id));
           existing = { slug: team.slug, name, members: [] };
           yield mutation(
             'teams',
             'create',
-            { kind: 'team', slug: team.slug },
+            { kind: 'team', slug: team.slug, id: String(created.id) },
             [itemPath('teams', 'slug', team.slug)],
             null,
             { slug: team.slug, name, members: [] },
@@ -160,13 +171,72 @@ export function teamsDriver(_deps: DriverDeps): FacetDriver<Teams> {
           yield mutation(
             'teams',
             'create',
-            { kind: 'team-membership', team: team.slug, login: user.login },
+            {
+              kind: 'team-membership',
+              team: team.slug,
+              teamId: ids.get(team.slug),
+              login: user.login,
+            },
             [`${itemPath('teams', 'slug', team.slug)}/members[principal=identity:${user.id}]`],
             null,
             { principal: m.principal },
           );
         }
       }
+    },
+    async undo(ctx, target, record) {
+      const ref = record.resourceRef;
+      if (record.action !== 'create') throw cannotUndo(record);
+      if (ref.kind !== 'team' && ref.kind !== 'team-membership') throw cannotUndo(record);
+      const gh = ghOf(ctx);
+      const org = orgTarget(target);
+      const directory = undoDirectory(ctx, org);
+      const id = String(ref.kind === 'team' ? ref.id : ref.teamId);
+      const named = id !== 'undefined' && id !== '';
+      const teams = await directory.teamRecords();
+      // The team is found by its id, never by the slug alone: a hand-made team may hold the slug
+      // now, and a team of the framework may have been renamed.
+      const slugOf = String(ref.kind === 'team' ? ref.slug : ref.team);
+      const ours = named
+        ? teams.find((t) => String(t.id) === id)
+        : teams.find((t) => str(t.slug) === slugOf);
+      // Newest first: a membership goes before its team. A team that is gone took its members.
+      if (!ours) return;
+      // A record written before teams were recorded by id: whatever holds the slug now cannot be
+      // proven the framework's, so it stays (a slug nobody holds means the team is gone).
+      if (!named) return { left: { kind: 'group-unproven', name: slugOf } };
+      const slug = str(ours.slug);
+      if (ref.kind === 'team-membership') {
+        // The slug may hold another team by now (renamed, and a new one made on the old slug).
+        if (!(await teamStillIs(ctx, directory, org, slug, id))) {
+          return { left: { kind: 'group-changed', name: slug } };
+        }
+        await ignoreGone(
+          gh.send(
+            'DELETE',
+            `/orgs/${org}/teams/${slug}/memberships/${encodeURIComponent(String(ref.login))}`,
+          ),
+        );
+        return;
+      }
+      // Renamed: the team keeps its id under another slug; it is left under the name it has now.
+      if (slug !== String(ref.slug)) return { left: { kind: 'group-renamed', name: slug } };
+      // Deleting a team deletes its child teams too: a team that has any is left.
+      if (teams.some((t) => String(obj(t.parent).id ?? '') === id)) {
+        return { left: { kind: 'group-has-children', name: slug } };
+      }
+      // The list above may be older than this record's turn (it is read once per Run): just before
+      // the delete, the team itself and its children are read again (ADR-0467 round 4).
+      if (!(await teamStillIs(ctx, directory, org, slug, id))) {
+        return { left: { kind: 'group-changed', name: slug } };
+      }
+      const children = await gh.list<Json>(`/orgs/${org}/teams/${slug}/teams`);
+      if (children.length > 0) {
+        directory.invalidateTeams();
+        return { left: { kind: 'group-has-children', name: slug } };
+      }
+      await ignoreGone(gh.send('DELETE', `/orgs/${org}/teams/${slug}`));
+      directory.invalidateTeams();
     },
   };
 }

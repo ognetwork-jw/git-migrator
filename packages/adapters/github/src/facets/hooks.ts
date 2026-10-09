@@ -9,8 +9,10 @@ import {
 } from '@git-migrator/canonical';
 import { Collector, type Gh, type Json, obj, repoPath, str } from '../gh.ts';
 import {
+  cannotUndo,
   type DriverDeps,
   ghOf,
+  ignoreGone,
   itemPath,
   mutation,
   orgTarget,
@@ -209,6 +211,43 @@ function hookDriver(
             },
           );
           yield record;
+        }
+      }
+    },
+
+    async undo(ctx, target, record) {
+      const ref = record.resourceRef;
+      if (ref.kind !== 'webhook' || record.action === 'delete') throw cannotUndo(record);
+      const gh = ghOf(ctx);
+      const url = `${baseOf(deps, target)}/hooks/${String(ref.id)}`;
+      if (record.action === 'create') {
+        await ignoreGone(gh.send('DELETE', url));
+        return;
+      }
+      const hook = await gh.getOrNull<Json>(url);
+      if (hook === null) return;
+      const before = obj(record.before);
+      const after = obj(record.after);
+      const wasEvents = (Array.isArray(before.events) ? before.events : []) as CanonicalEvent[];
+      const addedEvents = (Array.isArray(after.events) ? after.events : []).filter(
+        (e) => !wasEvents.includes(e as CanonicalEvent),
+      ) as CanonicalEvent[];
+      // Remove only the delivery events the apply added: events GitHub has that no canonical event
+      // names are not ours, and an event another canonical event still needs stays.
+      const keep = new Set(toGithubEvents(wasEvents));
+      const drop = new Set(toGithubEvents(addedEvents).filter((e) => !keep.has(e)));
+      const have = Array.isArray(hook.events) ? hook.events.map(String) : [];
+      const patch: Json = {};
+      if (drop.size > 0) patch.events = have.filter((e) => !drop.has(e));
+      if (typeof before.active === 'boolean' && before.active !== hook.active) {
+        patch.active = before.active;
+      }
+      if (Object.keys(patch).length > 0) await ignoreGone(gh.send('PATCH', url, patch));
+      if (typeof before.verifyTls === 'boolean') {
+        const insecure = obj(hook.config).insecure_ssl;
+        const wantInsecure = before.verifyTls ? '0' : '1';
+        if (String(insecure ?? '0') !== wantInsecure) {
+          await ignoreGone(gh.send('PATCH', `${url}/config`, { insecure_ssl: wantInsecure }));
         }
       }
     },

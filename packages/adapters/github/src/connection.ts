@@ -126,6 +126,17 @@ export async function connectGitHub(
     namespace: { providerId: namespaceId ?? '', slug: org },
   });
   const ownerOf = (ref: { namespace: NamespaceRef }) => ref.namespace.slug || org;
+  /**
+   * The organization's provider id: the reference's when it carries one, else read once. Owners
+   * are compared by this stable id, never by login: a renamed organization keeps its id, a
+   * repository transferred to another owner does not (ADR-0465 rounds 4 and 5).
+   */
+  const orgId = async (known?: string): Promise<string> => {
+    if (known) return known;
+    if (namespaceId === undefined) await orgInfo();
+    return namespaceId ?? '';
+  };
+  const ownedBy = (body: Json, id: string) => id !== '' && String(obj(body.owner).id) === id;
 
   const access: GitAccess = {
     remoteUrl: (repo) =>
@@ -273,7 +284,69 @@ export async function connectGitHub(
       async getRepository(ref) {
         const body = await gh().getOrNull<Json>(repoPath(ownerOf(ref), ref.slug));
         if (namespaceId === undefined) await orgInfo();
-        return body ? withNamespace(repoRecord(body, ownerOf(ref))) : null;
+        if (!body) return null;
+        // The name redirects to a repository of another owner (a transfer): not in the namespace.
+        const login = str(obj(body.owner).login).toLowerCase();
+        if (
+          login !== ownerOf(ref).toLowerCase() &&
+          !ownedBy(body, await orgId(ref.namespace.providerId))
+        ) {
+          return null;
+        }
+        return withNamespace(repoRecord(body, ownerOf(ref)));
+      },
+
+      async findRepositoryById(providerId) {
+        // The provider id is the repository's node id. `node` answers null for a repository the
+        // credential cannot see as well as for one that is gone; the two are told apart by what
+        // the installation can see at all (ADR-0465). A repository under another owner (a
+        // transfer) is gone from the organization: a public one is still readable, so the owner
+        // is checked by id, never assumed (ADR-0465 rounds 4 and 5).
+        if (providerId === '') {
+          throw new AdapterError({
+            code: 'invalid',
+            provider: PROVIDER,
+            message: 'A repository lookup by id needs the provider id',
+          });
+        }
+        // `node` named a repository, so it existed a moment ago: if the read by that name then
+        // disagrees (a rename or deletion in between), ask again once, and never answer "gone".
+        for (let attempt = 0; attempt < 2; attempt++) {
+          let nameWithOwner = '';
+          try {
+            const data = await gh().graphql<Json>(
+              'query($id: ID!) { node(id: $id) { ... on Repository { nameWithOwner } } }',
+              { id: providerId },
+            );
+            nameWithOwner = str(obj(data.node).nameWithOwner);
+          } catch (error) {
+            if (!(error instanceof AdapterError && error.code === 'not_found')) throw error;
+          }
+          if (nameWithOwner === '') break;
+          const [owner, name] = nameWithOwner.split('/');
+          const found = await gh().getOrNull<Json>(repoPath(owner ?? '', name ?? ''));
+          if (found && str(found.node_id) === providerId) {
+            if (!ownedBy(found, await orgId())) return null;
+            return withNamespace(repoRecord(found, str(obj(found.owner).login)));
+          }
+          if (attempt === 1) {
+            throw new AdapterError({
+              code: 'conflict',
+              provider: PROVIDER,
+              message: 'The repository changed while it was being looked up; try again',
+            });
+          }
+        }
+        const visible = obj(await gh().get('/installation/repositories', { per_page: 1 }));
+        if (visible.repository_selection !== 'all') {
+          throw new AdapterError({
+            code: 'forbidden',
+            provider: PROVIDER,
+            message:
+              'The installation sees only selected repositories, so a repository it cannot find may still exist',
+          });
+        }
+        return null;
       },
 
       async findRepository(ns, name) {
@@ -359,7 +432,20 @@ export async function connectGitHub(
               'The repository with this name is not the one that was created; not deleting it',
           });
         }
-        await gh().send('DELETE', repoPath(ownerOf(ref), ref.slug));
+        // A renamed repository answers its old name with a redirect (a read follows it, a write
+        // must not), so the DELETE goes to the current name the verified read reports. A
+        // repository transferred to another owner is followed there by the read too: it is not
+        // the organization's any more, and is never deleted. The owner is compared by id, so a
+        // renamed organization still deletes its own repository (ADR-0465 rounds 4 and 5).
+        const [owner, name] = str(current.full_name).split('/');
+        if (!owner || !name || !ownedBy(current, await orgId(ref.namespace.providerId))) {
+          throw new AdapterError({
+            code: 'conflict',
+            provider: PROVIDER,
+            message: 'The repository now belongs to another owner; not deleting it',
+          });
+        }
+        await gh().send('DELETE', repoPath(owner, name));
       },
       async isEmpty(ref: RepositoryRef) {
         // Empty means no refs at all, branches and tags alike. A missing repository throws

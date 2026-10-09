@@ -117,10 +117,83 @@ describe('repositories', () => {
       { body: { name: 'renamed' } },
       200,
     );
-    expect((await w.call('GET', '/repos/acme/auto-ok')).status).toBe(404);
+    // The old name redirects, as GitHub does.
+    const moved = await w.call('GET', '/repos/acme/auto-ok');
+    expect(moved.status).toBe(301);
+    expect(moved.headers.get('location')).toBe('http://localhost/repos/acme/renamed');
     expect(
       (await w.call('GET', '/repos/acme/renamed/teams')).body.map((t: { slug: string }) => t.slug),
     ).toEqual(['plat']);
+  });
+
+  it('[LIF-077] the old name of a renamed repository answers 301 to a read and 307 to a write, until a repository is made on it', async () => {
+    const w = world();
+    await w.call('PATCH', '/repos/acme/empty', { body: { name: 'moved' } });
+    const read = await w.call('GET', '/repos/acme/empty/branches?per_page=5');
+    expect(read.status).toBe(301);
+    expect(read.headers.get('location')).toBe(
+      'http://localhost/repos/acme/moved/branches?per_page=5',
+    );
+    const write = await w.call('DELETE', '/repos/acme/empty');
+    expect(write.status).toBe(307);
+    expect(write.headers.get('location')).toBe('http://localhost/repos/acme/moved');
+    expect(w.fake.state.findRepo('acme', 'moved')).toBeDefined();
+    // A new repository on the old name is not redirected.
+    await w.call('POST', '/orgs/acme/repos', { body: { name: 'empty' } });
+    expect((await w.call('GET', '/repos/acme/empty')).status).toBe(200);
+    // Nor is a deleted one.
+    await w.call('DELETE', '/repos/acme/moved');
+    await w.call('PATCH', '/repos/acme/auto-ok', { body: { name: 'gone-soon' } });
+    await w.call('DELETE', '/repos/acme/gone-soon');
+    expect((await w.call('GET', '/repos/acme/auto-ok')).status).toBe(404);
+  });
+
+  it('[LIF-077] a transferred repository: the old name redirects, a public one stays readable to the installation by id and by name, and a write to it is refused', async () => {
+    const w = world();
+    w.fake.state.addOrg({ login: 'other' });
+    const repo = w.fake.state.addRepository('acme', { name: 'pub', private: false });
+    const hidden = w.fake.state.addRepository('acme', { name: 'priv' });
+    w.fake.state.transferRepository(repo, 'other');
+    w.fake.state.transferRepository(hidden, 'other');
+    const moved = await w.call('GET', '/repos/acme/pub');
+    expect(moved.status).toBe(301);
+    expect(moved.headers.get('location')).toBe('http://localhost/repos/other/pub');
+    expect((await w.call('DELETE', '/repos/acme/pub')).status).toBe(307);
+    const there = await w.call('GET', '/repos/other/pub');
+    expect(there.status).toBe(200);
+    expect(there.body.full_name).toBe('other/pub');
+    expect(there.body.node_id).toBe(repo.nodeId);
+    expect((await w.call('DELETE', '/repos/other/pub')).status).toBe(404);
+    // A private one is not visible to an installation on another account.
+    expect((await w.call('GET', '/repos/other/priv')).status).toBe(404);
+    expect((await w.call('GET', '/repos/acme/priv')).status).toBe(404);
+    const node = async (id: string) =>
+      (
+        await w.call('POST', '/graphql', {
+          body: {
+            query: 'query($id: ID!) { node(id: $id) { ... on Repository { nameWithOwner } } }',
+            variables: { id },
+          },
+        })
+      ).body.data.node;
+    expect(await node(repo.nodeId)).toEqual({ nameWithOwner: 'other/pub' });
+    expect(await node(hidden.nodeId)).toBeNull();
+    // A repository made on the old name ends the redirect.
+    await w.call('POST', '/orgs/acme/repos', { body: { name: 'pub' } });
+    expect((await w.call('GET', '/repos/acme/pub')).body.node_id).not.toBe(repo.nodeId);
+  });
+
+  it('[LIF-077] a renamed organization keeps its id, and its repositories’ old full names redirect', async () => {
+    const w = world();
+    const id = w.fake.state.requireOrg('acme').id;
+    w.fake.state.renameOrg('acme', 'acme-renamed');
+    const moved = await w.call('GET', '/repos/acme/empty');
+    expect(moved.status).toBe(301);
+    expect(moved.headers.get('location')).toBe('http://localhost/repos/acme-renamed/empty');
+    const there = await w.call('GET', '/repos/acme-renamed/empty');
+    expect(there.status).toBe(200);
+    expect(there.body.owner.id).toBe(id);
+    expect((await w.call('GET', '/orgs/acme-renamed')).body.id).toBe(id);
   });
 
   it('[LIF-077] DELETE removes the repository and answers 403 when the organization forbids deletion', async () => {

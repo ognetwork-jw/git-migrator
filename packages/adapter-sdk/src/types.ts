@@ -276,6 +276,44 @@ export interface DriverContext {
   signal: AbortSignal;
 }
 
+/**
+ * Why an `undo` left a resource as it is (ADR-0467 rounds 2 and 4). Provider-neutral: guidance
+ * renders each kind in the glossary's terms, and code never builds the sentence.
+ * - `group-unproven`: a Group holds the name, but the record does not name its provider id.
+ * - `group-renamed`: the Group the record names now has another name.
+ * - `group-has-children`: deleting the Group would delete its child Groups.
+ * - `group-changed`: the Group changed between the read and the delete (renamed, replaced or given
+ *   child Groups meanwhile).
+ * - `group-in-use`: a repository Migration of the Route still grants the Group access.
+ * - `group-membership-in-use`: a membership of a Group that is still in use.
+ * - `branch-rule-replaced`: the rule the record names is gone or was replaced.
+ * - `branch-rule-exists`: a lifted rule exists again under its pattern.
+ * - `repository-earlier`: a repository an earlier Run created, which is not this Migration's target.
+ */
+export const UNDO_LEFT_KINDS = [
+  'group-unproven',
+  'group-renamed',
+  'group-has-children',
+  'group-changed',
+  'group-in-use',
+  'group-membership-in-use',
+  'branch-rule-replaced',
+  'branch-rule-exists',
+  'repository-earlier',
+] as const;
+export type UndoLeftKind = (typeof UNDO_LEFT_KINDS)[number];
+
+/** One thing a rollback left: its kind and the name an operator finds it by. */
+export interface UndoLeftEntry {
+  readonly kind: UndoLeftKind;
+  readonly name: string;
+}
+
+/** An `undo` that left the resource as it is, and why (ADR-0467 round 2). */
+export interface UndoLeft {
+  readonly left: UndoLeftEntry;
+}
+
 /** ADP-011. `apply` is idempotent and yields one MutationRecord per provider-side change (ADP-012). */
 export interface FacetDriver<T> {
   read(ctx: DriverContext, target: FacetTarget): Promise<FacetRead<T>>;
@@ -286,6 +324,22 @@ export interface FacetDriver<T> {
     current: T | null,
     plan: FieldDecision[],
   ): AsyncIterable<MutationRecord>;
+  /**
+   * Reverts ONE `MutationRecord` this driver yielded (rollback of an adopted target, LIF-077): a
+   * `create` is deleted, an `update` is written back to `before`, a `delete` is created again from
+   * `before`. Idempotent: state that is already gone or already restored is not an error, because
+   * the record may be an unconfirmed intent (ADR-0342). It touches only the resource the record
+   * names (`resourceRef`), never the rest of the document, and it never deletes anything the record
+   * does not name. When the resource is no longer provably the one the record names (a team that was
+   * renamed, replaced or has since gained child teams; a principal that cannot be resolved), it
+   * changes nothing and returns `{left: {kind, name}}`: the caller keeps the record undoable and
+   * reports it; it never counts as undone. A record of a kind the driver did not yield is refused with `invalid`.
+   */
+  undo?(
+    ctx: DriverContext,
+    target: FacetTarget,
+    mutation: MutationRecord,
+  ): Promise<void | UndoLeft>;
 }
 
 /** ADP-014. Per Facet, what the provider can read, write and represent. */
@@ -299,6 +353,13 @@ export interface EndpointConnection {
     listRepositories(ns: NamespaceRef, cursor?: string): Promise<Page<RepositoryRecord>>;
     getRepository(ref: RepositoryRef): Promise<RepositoryRecord | null>;
     findRepository(ns: NamespaceRef, name: string): Promise<RepositoryRecord | null>;
+    /**
+     * Looks a repository up by its provider id, wherever it is named now. `null` only when the
+     * provider positively says it is gone; a provider that cannot tell (the credential sees only
+     * some repositories) throws `forbidden`. Rollback uses it to tell "deleted" from "not visible"
+     * and from "renamed" (ADR-0465 round 2).
+     */
+    findRepositoryById?(providerId: string): Promise<RepositoryRecord | null>;
     listIdentities(cursor?: string): Promise<Page<IdentityRecord>>;
     /** Includes member ids. */
     listGroups(cursor?: string): Promise<Page<GroupRecord>>;

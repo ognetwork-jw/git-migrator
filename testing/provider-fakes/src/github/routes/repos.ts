@@ -120,6 +120,8 @@ export function registerRepos(r: Router, state: GitHubState): void {
       state.repos.delete(oldKey);
       repo.name = newName;
       state.repos.set(newKey, repo);
+      state.renamedRepos.set(oldKey, repo);
+      state.renamedRepos.delete(newKey);
       for (const org of state.orgs.values())
         for (const t of org.teams) {
           const role = t.repos.get(oldKey);

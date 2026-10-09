@@ -169,10 +169,34 @@ function makeReq(c: Context, auth: AuthCtx, state: GitHubState, ser: Serializer)
   return req;
 }
 
-/** Resolves a repository the caller's installation can see, else 404 (never leaks existence). */
+/**
+ * Resolves a repository the caller's installation can see, else 404 (never leaks existence). A
+ * public repository of another owner can be read (GET and HEAD) by any installation, as on GitHub.
+ */
 export function findRepoFor(r: Req, owner: string, name: string): RepoRec {
+  const read = r.c.req.method === 'GET' || r.c.req.method === 'HEAD';
+  const readable = (repo: RepoRec) =>
+    repoVisibleTo(r.auth, repo) ||
+    (read && r.auth.installation !== undefined && repo.visibility === 'public');
   const repo = r.state.findRepo(owner, name);
-  if (!repo || !repoVisibleTo(r.auth, repo)) throw notFound();
+  if (!repo) {
+    // A renamed or transferred repository's old name redirects to the new one, as GitHub does: a
+    // read gets a 301, anything else a 307, which a client must not follow for a write.
+    const moved = r.state.renamedRepos.get(r.state.repoKey(owner, name));
+    if (moved && (repoVisibleTo(r.auth, moved) || moved.visibility === 'public')) {
+      const from = new RegExp(`/${escapeRegExp(owner)}/${escapeRegExp(name)}(?=/|$)`, 'i');
+      const location = new URL(
+        r.url.pathname.replace(from, `/${moved.owner}/${moved.name}`),
+        r.url,
+      );
+      location.search = r.url.search;
+      throw new GhError(read ? 301 : 307, 'Moved Permanently', {
+        headers: { location: location.toString() },
+      });
+    }
+    throw notFound();
+  }
+  if (!readable(repo)) throw notFound();
   return repo;
 }
 
@@ -200,3 +224,7 @@ export function orgFor(r: Req, login: string) {
 }
 
 export { PRIMARY_DOC };
+
+function escapeRegExp(text: string): string {
+  return text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}

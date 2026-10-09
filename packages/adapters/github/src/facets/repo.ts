@@ -7,7 +7,16 @@ import type {
   RepositorySettings,
 } from '@git-migrator/canonical';
 import { Collector, type Json, obj, repoPath, str } from '../gh.ts';
-import { type DriverDeps, fieldPath, ghOf, mutation, repoTarget, sortBy } from './common.ts';
+import {
+  cannotUndo,
+  type DriverDeps,
+  fieldPath,
+  ghOf,
+  ignoreGone,
+  mutation,
+  repoTarget,
+  sortBy,
+} from './common.ts';
 
 // -- git-refs (read only: refs are written by git push) -----------------------------------------
 
@@ -149,6 +158,22 @@ export function repositorySettingsDriver(deps: DriverDeps): FacetDriver<Reposito
         after,
       );
     },
+    async undo(ctx, target, record) {
+      if (record.resourceRef.kind !== 'repository' || record.action !== 'update') {
+        throw cannotUndo(record);
+      }
+      // `before` holds exactly the fields the apply changed, so only those are written back.
+      const was = obj(record.before);
+      const patch: Json = {};
+      if ('description' in was) patch.description = str(was.description);
+      if ('homepage' in was) patch.homepage = was.homepage == null ? '' : str(was.homepage);
+      if ('visibility' in was) patch.private = was.visibility === 'private';
+      if ('issues' in was) patch.has_issues = was.issues === true;
+      if ('wiki' in was) patch.has_wiki = was.wiki === true;
+      if ('forking' in was) patch.allow_forking = was.forking !== 'disallowed';
+      if (Object.keys(patch).length === 0) return;
+      await ignoreGone(ghOf(ctx).send('PATCH', repoPath(deps.org, repoTarget(target).slug), patch));
+    },
   };
 }
 
@@ -212,6 +237,25 @@ export function mergeSettingsDriver(deps: DriverDeps): FacetDriver<MergeSettings
         { allowed: [...wanted].sort(), deleteBranchOnMerge: desired.deleteBranchOnMerge },
       );
       yield record;
+    },
+    async undo(ctx, target, record) {
+      if (record.resourceRef.kind !== 'repository' || record.action !== 'update') {
+        throw cannotUndo(record);
+      }
+      const was = obj(record.before);
+      const allowed = Array.isArray(was.allowed) ? (was.allowed as MergeStrategy[]) : undefined;
+      const patch: Json = {};
+      // A before with no strategy at all is not written (GitHub refuses a repository with none).
+      if (allowed && allowed.length > 0) {
+        patch.allow_merge_commit = allowed.includes('merge-commit');
+        patch.allow_squash_merge = allowed.includes('squash');
+        patch.allow_rebase_merge = allowed.includes('rebase');
+      }
+      if (typeof was.deleteBranchOnMerge === 'boolean') {
+        patch.delete_branch_on_merge = was.deleteBranchOnMerge;
+      }
+      if (Object.keys(patch).length === 0) return;
+      await ignoreGone(ghOf(ctx).send('PATCH', repoPath(deps.org, repoTarget(target).slug), patch));
     },
   };
 }
