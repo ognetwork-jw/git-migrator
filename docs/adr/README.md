@@ -182,6 +182,7 @@
 | [0455](0455-ci-outage-local-gate.md) | Local gate while GitHub Actions cannot run jobs | agent-decided |
 | [0435](0435-endpoint-migration-steps.md) | Endpoint migration Steps through the planner's scope dispatch, team settlement (GroupMapping confirmed, repository Analyses stale), Teams slug of a mapped group, endpoint pages | accepted (spec updated) |
 | [0475](0475-integration-tier-and-phase1-scenario.md) | The integration tier (Vitest project, script, CI job) and how the Phase-1 scenario is composed | agent-decided |
+| [0490](0490-ci-image-mirrors.md) | CI pulls container images from public mirrors (mirror.gcr.io) instead of Docker Hub | agent-decided |
 | [0465](0465-rollback.md) | Rollback: guard availability and "undo first", deletion only on ledger proof, adopted targets reverted newest first, endpoint Runs unmap undone teams | agent-decided |
 | [0466](0466-drift-checks.md) | The drift sweep, drift checks (refs-only source read, LFS skip, containment) and accepting drift | agent-decided |
 | [0467](0467-facet-driver-undo.md) | Facet drivers revert their own records (`FacetDriver.undo`) | agent-decided |

@@ -8,10 +8,11 @@
 # entrypoint path with Key Vault swapped for a file (ADR-0293). Starts a throw-away Postgres on a
 # private network, then checks `migrate`, `web` (/api/healthz, /api/readyz, :9464/metrics) and
 # `worker` (/readyz, :9464/metrics), and that SIGTERM stops both long-running processes with status 0.
-# Needs Docker; pulls postgres:16. Fake values only.
+# Needs Docker; pulls $GM_SMOKE_POSTGRES_IMAGE (default postgres:16; CI sets a registry mirror, ADR-0490). Fake values only.
 set -euo pipefail
 
 image="${1:?usage: smoke.sh <image>}"
+pg_image="${GM_SMOKE_POSTGRES_IMAGE:-postgres:16}"
 suffix="$$"
 network="gm-smoke-${suffix}"
 pg="gm-smoke-pg-${suffix}"
@@ -65,7 +66,7 @@ hardening=(
 docker network create "$network" >/dev/null
 docker run -d --name "$pg" --network "$network" \
   -e POSTGRES_DB=git_migrator -e POSTGRES_USER=git_migrator -e POSTGRES_PASSWORD=smoke-password \
-  postgres:16 >/dev/null
+  "$pg_image" >/dev/null
 # The image starts a temporary server on the unix socket while it initialises, so the probe must go
 # over TCP: that only answers once the final server is up.
 pg_ready=0
