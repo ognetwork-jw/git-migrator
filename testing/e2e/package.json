@@ -12,9 +12,18 @@
     "typecheck": "tsc -b",
     "lint": "biome check .",
     "test": "vitest run --root ../.. --project unit testing/e2e",
-    "test:visual": "playwright test --config visual/playwright.config.ts"
+    "test:visual": "playwright test --config visual/playwright.config.ts",
+    "test:e2e": "playwright test --config playwright.config.ts"
   },
   "devDependencies": {
     "@playwright/test": "1.64.0"
+  },
+  "dependencies": {
+    "@git-migrator/config": "workspace:*",
+    "@git-migrator/db": "workspace:*",
+    "@git-migrator/fixtures": "workspace:*",
+    "@git-migrator/observability": "workspace:*",
+    "@git-migrator/provider-fakes": "workspace:*",
+    "@git-migrator/worker": "workspace:*"
   }
 }

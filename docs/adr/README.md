@@ -186,5 +186,7 @@
 | [0465](0465-rollback.md) | Rollback: guard availability and "undo first", deletion only on ledger proof, adopted targets reverted newest first, endpoint Runs unmap undone teams | agent-decided |
 | [0466](0466-drift-checks.md) | The drift sweep, drift checks (refs-only source read, LFS skip, containment) and accepting drift | agent-decided |
 | [0467](0467-facet-driver-undo.md) | Facet drivers revert their own records (`FacetDriver.undo`) | agent-decided |
+| [0485](0485-ui-e2e-harness.md) | How the UI e2e tier (TST-021) starts its stack: global setup, fakes, in-process worker, standalone web | agent-decided |
+| [0486](0486-bullmq-external-to-the-web-bundle.md) | The queue library is external to the web bundle, so the standalone build can enqueue | agent-decided |
 
 New ADRs continue from 0028. Implementor decisions use `status: agent-decided` (PROC-005). T-002 uses 0065–0069.

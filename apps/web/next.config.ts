@@ -20,6 +20,8 @@ const config: NextConfig = {
     '@git-migrator/guidance',
     '@git-migrator/observability',
   ],
+  // bullmq reads its SQL command files from disk next to its own modules; a bundle loses them.
+  serverExternalPackages: ['bullmq'],
   poweredByHeader: false,
   reactStrictMode: true,
 };

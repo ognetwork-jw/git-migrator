@@ -21,7 +21,7 @@
     "typecheck": "tsc -b && tsc -p tsconfig.tests.json",
     "test": "vitest run --coverage --project unit",
     "test:integration": "vitest run --project integration",
-    "test:e2e": "node tools/not-implemented.ts test:e2e T-083",
+    "test:e2e": "pnpm --filter @git-migrator/web build && pnpm --filter @git-migrator/e2e test:e2e",
     "test:visual": "pnpm --filter @git-migrator/web build && pnpm --filter @git-migrator/e2e test:visual",
     "test:e2e:live": "node tools/not-implemented.ts test:e2e:live T-095",
     "e2e:live:reset": "node tools/not-implemented.ts e2e:live:reset T-095",
