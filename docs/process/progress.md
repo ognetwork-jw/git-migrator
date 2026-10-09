@@ -42,24 +42,24 @@ The orchestrator maintains this table (see [workflow](workflow.md)). Integration
 | T-060 | merged | task/T-060-inventory | [#37](https://github.com/ognetwork-jw/git-migrator/pull/37) | 2 | merged to ai-main cc60a17 (r2 ACCEPTABLE; MINORs → followups.md); ADRs folded (9f10315) |
 | T-061 | merged | task/T-061-analysis | [#40](https://github.com/ognetwork-jw/git-migrator/pull/40) | 4 | merged to ai-main 7ff846c (r4 ACCEPTABLE both; MINORs → followups.md); ADR folding pending |
 | T-062 | merged | task/T-062-endpoints | [#42](https://github.com/ognetwork-jw/git-migrator/pull/42) | 2 | merged to ai-main 4c3bf46 (r2 ACCEPTABLE both; MINORs → followups.md); ADR folding pending |
-| T-070 | in_review | task/T-070-run-executor | [#43](https://github.com/ognetwork-jw/git-migrator/pull/43) | 2 | r2: spec ACCEPTABLE, adversarial 1 MAJOR (late ledger write vs cancel); fix pass |
-| T-071 | todo |  | | | |
-| T-072 | todo |  | | | |
+| T-070 | merged | task/T-070-run-executor | [#43](https://github.com/ognetwork-jw/git-migrator/pull/43) | 5 | merged to ai-main 614242b at the 5-round cap (r5 ACCEPTABLE both; MINORs → followups.md); ADR folding pending |
+| T-071 | in_progress | task/T-071-migration-steps | | | implementor dispatched |
+| T-072 | in_progress | task/T-072-parity | | | implementor dispatched |
 | T-073 | todo |  | | | |
 | T-074 | todo |  | | | |
 | T-075 | todo |  | | | |
 | T-080 | merged | task/T-080-web-shell | [#39](https://github.com/ognetwork-jw/git-migrator/pull/39) | 2 | merged to ai-main 31b7577 (MINORs → followups.md); ADRs folded (9f10315) |
-| T-081 | in_progress | task/T-081-dashboard | | | implementor dispatched |
+| T-081 | in_review | task/T-081-dashboard | [#44](https://github.com/ognetwork-jw/git-migrator/pull/44) | 2 | r2: spec ACCEPTABLE, adversarial 1 MAJOR (test flakiness); fix pass |
 | T-082 | todo |  | | | |
 | T-083 | todo |  | | | |
 | T-084 | merged | task/T-084-identity-mapping | [#41](https://github.com/ognetwork-jw/git-migrator/pull/41) | 3 | merged to ai-main f66c9ae (r3 ACCEPTABLE both; MINORs → followups.md); ADR folding pending |
-| T-085 | in_progress | task/T-085-invitations | | | implementor dispatched |
+| T-085 | in_review | task/T-085-invitations | [#46](https://github.com/ognetwork-jw/git-migrator/pull/46) | 1 | r1: 3 BLOCKER (duplicate invitations); fix pass |
 | T-086 | todo |  | | | |
 | T-087 | todo |  | | | |
 | T-088 | todo |  | | | |
 | T-089 | todo |  | | | |
 | T-090 | merged | task/T-090-release | [#38](https://github.com/ognetwork-jw/git-migrator/pull/38) | 2 | merged to ai-main 441c0ff (r2 ACCEPTABLE + reviewed erasable-syntax CI fix); ADRs folded (9f10315) |
-| T-091 | in_progress | task/T-091-admin-pages | | | implementor dispatched |
+| T-091 | in_review | task/T-091-admin-pages | [#45](https://github.com/ognetwork-jw/git-migrator/pull/45) | 2 | r1 BLOCKER (overlay validation) fixed, implementor escalated to sonnet; r2 review |
 | T-093 | merged | task/T-093-devenv-ci | [#18](https://github.com/ognetwork-jw/git-migrator/pull/18) | 2 | merged to ai-main 8dba617 (r2 ACCEPTABLE; CI green incl. devenv test); ADR-0135/0137 folded into DEV-010/DEV-030 |
 | T-095 | todo |  | | | |
 | T-096 | todo |  | | | |
