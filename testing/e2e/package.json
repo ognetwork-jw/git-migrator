@@ -13,7 +13,10 @@
     "lint": "biome check .",
     "test": "vitest run --root ../.. --project unit testing/e2e",
     "test:visual": "playwright test --config visual/playwright.config.ts",
-    "test:e2e": "playwright test --config playwright.config.ts"
+    "test:e2e": "playwright test --config playwright.config.ts",
+    "test:e2e:live:dry": "GM_E2E_TARGET=fakes playwright test --config live/playwright.config.ts",
+    "test:e2e:live": "GM_E2E_TARGET=live GM_CONFIG_FILE=${GM_CONFIG_FILE:-live/config.e2e.yaml} playwright test --config live/playwright.config.ts",
+    "e2e:live:reset": "GM_E2E_TARGET=live GM_CONFIG_FILE=${GM_CONFIG_FILE:-live/config.e2e.yaml} node live/reset.ts"
   },
   "devDependencies": {
     "@playwright/test": "1.64.0"
@@ -24,6 +27,7 @@
     "@git-migrator/fixtures": "workspace:*",
     "@git-migrator/observability": "workspace:*",
     "@git-migrator/provider-fakes": "workspace:*",
-    "@git-migrator/worker": "workspace:*"
+    "@git-migrator/worker": "workspace:*",
+    "octokit": "5.0.5"
   }
 }
