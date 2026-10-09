@@ -62,7 +62,7 @@ The orchestrator maintains this table (see [workflow](workflow.md)). Integration
 | T-091 | merged | task/T-091-admin-pages | [#45](https://github.com/ognetwork-jw/git-migrator/pull/45) | 2 | merged to ai-main 1108bc4 (r2 ACCEPTABLE both; MINORs → followups.md); ADR folding pending |
 | T-093 | merged | task/T-093-devenv-ci | [#18](https://github.com/ognetwork-jw/git-migrator/pull/18) | 2 | merged to ai-main 8dba617 (r2 ACCEPTABLE; CI green incl. devenv test); ADR-0135/0137 folded into DEV-010/DEV-030 |
 | T-095 | in_progress | task/T-095-live-e2e | | | implementor dispatched |
-| T-096 | todo |  | | | |
+| T-096 | in_progress | task/T-096-integration-scenarios | | | implementor dispatched |
 | T-097 | todo |  | | | |
 
 > 2026-10-09 12:53 UTC: GitHub Actions jobs fail instantly with no runner (runner_id 0, no logs) on every PR. Merges use the local gate of ADR-0455 until Actions runs jobs again; re-run CI on the ai-main head then.
