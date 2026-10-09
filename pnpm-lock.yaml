@@ -705,6 +705,9 @@ importers:
       '@git-migrator/api':
         specifier: workspace:*
         version: link:../../packages/api
+      '@git-migrator/auth':
+        specifier: workspace:*
+        version: link:../../packages/auth
       '@git-migrator/canonical':
         specifier: workspace:*
         version: link:../../packages/canonical
@@ -744,6 +747,12 @@ importers:
       '@git-migrator/registry':
         specifier: workspace:*
         version: link:../../packages/registry
+      '@git-migrator/web':
+        specifier: workspace:*
+        version: link:../../apps/web
+      '@git-migrator/worker':
+        specifier: workspace:*
+        version: link:../../apps/worker
 
   testing/provider-fakes:
     dependencies:

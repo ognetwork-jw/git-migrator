@@ -61,6 +61,6 @@ pnpm dev                 # web on :3000 and the worker heartbeat; placeholders u
 pnpm lint && pnpm typecheck && pnpm test
 ```
 
-`pnpm test` needs no services. `pnpm test:integration` (T-075) needs the PostgreSQL and fakes above.
+`pnpm test` runs the unit project. Most of its suites use a throw-away PostgreSQL database (ADR-0123). `pnpm test:integration` runs the integration tier (`testing/integration`, ADR-0475) and needs the PostgreSQL and the provider fakes, which it starts itself.
 
 The test profile (`secretspec` profile `test`) uses the fake values in the committed [`.env.test`](../.env.test) and the throwaway key `testing/fixtures/fake-github-app.pem` (ADR-0069). Nothing in it reaches a real provider (TST-006).

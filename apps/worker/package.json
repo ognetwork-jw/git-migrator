@@ -5,7 +5,9 @@
   "type": "module",
   "description": "Process entrypoints: worker roles, scheduler, migrate.",
   "exports": {
-    ".": "./src/index.ts"
+    ".": "./src/index.ts",
+    "./db-commands": "./src/db-commands.ts",
+    "./worker": "./src/worker.ts"
   },
   "scripts": {
     "build": "tsc -b",

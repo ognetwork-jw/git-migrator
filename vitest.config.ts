@@ -1,5 +1,5 @@
-import { defineConfig } from 'vitest/config';
-import { UNIT_INCLUDE } from './tools/test-globs.ts';
+import { configDefaults, defineConfig } from 'vitest/config';
+import { INTEGRATION_INCLUDE, INTEGRATION_ONLY, UNIT_INCLUDE } from './tools/test-globs.ts';
 
 /**
  * Unit tier (TST-001). Per-package coverage thresholds follow TST-005 and are expressed as glob
@@ -17,6 +17,18 @@ export default defineConfig({
         test: {
           name: 'unit',
           include: UNIT_INCLUDE,
+          // The Phase-1 scenario is slow and runs only in the integration project (ADR-0475).
+          exclude: [...configDefaults.exclude, ...INTEGRATION_ONLY],
+        },
+      },
+      {
+        // TST-001: API + worker + Postgres + provider fakes. Each file creates its own database
+        // and fakes on free ports, so files may run side by side; the scenarios are slow.
+        test: {
+          name: 'integration',
+          include: INTEGRATION_INCLUDE,
+          testTimeout: 120_000,
+          hookTimeout: 180_000,
         },
       },
     ],

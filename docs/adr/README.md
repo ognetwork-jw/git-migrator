@@ -179,5 +179,6 @@
 | [0425](0425-source-read-only-steps.md) | Source read-only: step 14 conditions, the two Run kinds, ledgering, undo, and what the Analysis filter removes | agent-decided |
 | [0455](0455-ci-outage-local-gate.md) | Local gate while GitHub Actions cannot run jobs | agent-decided |
 | [0435](0435-endpoint-migration-steps.md) | Endpoint migration Steps through the planner's scope dispatch, team settlement (GroupMapping confirmed, repository Analyses stale), Teams slug of a mapped group, endpoint pages | accepted (spec updated) |
+| [0475](0475-integration-tier-and-phase1-scenario.md) | The integration tier (Vitest project, script, CI job) and how the Phase-1 scenario is composed | agent-decided |
 
 New ADRs continue from 0028. Implementor decisions use `status: agent-decided` (PROC-005). T-002 uses 0065–0069.

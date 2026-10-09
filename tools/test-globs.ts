@@ -13,11 +13,22 @@ export const UNIT_INCLUDE = [
   'tools/*.test.ts',
 ];
 
+/**
+ * Integration tier (TST-001): the Vitest `integration` project, run by `pnpm test:integration`
+ * (ADR-0475). It runs every file of `testing/integration`.
+ */
+export const INTEGRATION_INCLUDE = [`testing/integration/**/*.test.${EXT}`];
+
+/**
+ * Files that only the integration project runs. The other files of the tier also stay in the unit
+ * project, because the TST-005 thresholds of `jobs` and the adapters are measured from them
+ * (ADR-0475). UNIT_INCLUDE's `testing/*\/src` glob would match these as well, so the unit project
+ * excludes them.
+ */
+export const INTEGRATION_ONLY = [`testing/integration/**/phase1.test.${EXT}`];
+
 /** Run by other tools/projects (integration tier, Playwright), not by the unit project. */
-export const OTHER_TIER_INCLUDE = [
-  `testing/integration/**/*.test.${EXT}`,
-  `testing/e2e/**/*.spec.${EXT}`,
-];
+export const OTHER_TIER_INCLUDE = [...INTEGRATION_INCLUDE, `testing/e2e/**/*.spec.${EXT}`];
 
 export const ALL_TEST_INCLUDE = [...UNIT_INCLUDE, ...OTHER_TIER_INCLUDE];
 

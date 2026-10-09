@@ -5,7 +5,8 @@
   "type": "module",
   "description": "Next.js app: UI and Hono API.",
   "exports": {
-    ".": "./src/index.ts"
+    ".": "./src/index.ts",
+    "./server/api": "./src/server/api.ts"
   },
   "scripts": {
     "build": "tsc -b && next build",
