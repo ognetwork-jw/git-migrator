@@ -12,6 +12,7 @@ import {
   invitationTargetLockKey,
   publishEventIn,
   routeMappingLockKey,
+  supersedeParityChecks,
 } from '@git-migrator/db';
 import { normaliseEmail } from '@git-migrator/jobs';
 import { exclusionPatterns } from '../mapping/expected-differences.ts';
@@ -766,6 +767,7 @@ export async function deselectItem(
         createdById: by.actorId,
       }));
       await tx.expectedDifference.createMany({ data });
+      await supersedeParityChecks(tx, { routeId: batch.routeId });
     }
     await setToInvite(tx, batchId);
     await audit(tx, by.actorId, 'invitation.deselect', batchId, { itemId, reason: text });
@@ -805,10 +807,11 @@ export async function selectItem(
       where: { id: itemId },
       data: { status: 'selected', deselectReason: null },
     });
-    await tx.expectedDifference.updateMany({
+    const revoked = await tx.expectedDifference.updateMany({
       where: { invitationId: itemId, reason: 'identity_excluded', revokedAt: null },
       data: { revokedAt: now },
     });
+    if (revoked.count > 0) await supersedeParityChecks(tx, { routeId: batch.routeId });
     await setToInvite(tx, batchId);
     await audit(tx, by.actorId, 'invitation.select', batchId, { itemId });
     await announce(tx, batchId, now);

@@ -636,6 +636,7 @@ describe('[API-001] OpenAPI document and typed client', () => {
       '/migrations/{id}/analyze',
       '/migrations/{id}/complete',
       '/migrations/{id}/diff',
+      '/migrations/{id}/drift/accept',
       '/migrations/{id}/expected-differences',
       '/migrations/{id}/runs',
       '/migrations/{id}/tasks/{taskId}/{action}',

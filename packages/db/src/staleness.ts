@@ -76,3 +76,26 @@ export async function markAnalysesStale(
                AND (l.analysis_stale_at IS NULL OR l.analysis_stale_at > clock_timestamp())) AS newly`;
   return marked.filter((m) => m.newly).map((m) => m.id);
 }
+
+/**
+ * Expected Differences are inputs of a Parity Check. A check that read the old ones and has not
+ * stored yet must not replace the check a change enqueues, so the Migration's `parityGeneration`
+ * moves in the same transaction as the change: the stale check is then the one superseded
+ * (ADR-0396, ADR-0466 round 3). Call it from every transaction that creates or revokes an
+ * Expected Difference.
+ */
+export async function supersedeParityChecks(
+  db: Pick<Db, '$executeRaw'>,
+  scope:
+    | { readonly id: string }
+    | { readonly routeId: string }
+    | { readonly routeIds: readonly string[] },
+): Promise<void> {
+  if ('id' in scope) {
+    await db.$executeRaw`UPDATE app.migration SET parity_generation = parity_generation + 1 WHERE id = ${scope.id}`;
+  } else if ('routeId' in scope) {
+    await db.$executeRaw`UPDATE app.migration SET parity_generation = parity_generation + 1 WHERE route_id = ${scope.routeId}`;
+  } else if (scope.routeIds.length > 0) {
+    await db.$executeRaw`UPDATE app.migration SET parity_generation = parity_generation + 1 WHERE route_id::text = ANY(${[...scope.routeIds]}::text[])`;
+  }
+}

@@ -352,6 +352,23 @@ describe('[AUTH-060] select and deselect', () => {
   const act = (batchId: string, itemId: string, action: string, body?: unknown) =>
     post(`/api/v1/invitation-batches/${batchId}/items/${itemId}/${action}`, body);
 
+  it('[AUTH-060] deselecting and reselecting supersede the Parity Checks that read the Expected Differences', async () => {
+    const batch = await draft(['ann', 'ben']);
+    const item = await itemFor(batch.id, 'ann');
+    const generation = async () =>
+      (await t.db.privileged.migration.findMany({ select: { parityGeneration: true } })).map(
+        (m) => m.parityGeneration,
+      );
+    const start = await generation();
+    expect((await act(batch.id, item.id, 'deselect', { reason: 'left the company' })).status).toBe(
+      200,
+    );
+    const deselected = await generation();
+    expect(deselected.every((g, i) => g > (start[i] as bigint))).toBe(true);
+    expect((await act(batch.id, item.id, 'select')).status).toBe(200);
+    expect((await generation()).every((g, i) => g > (deselected[i] as bigint))).toBe(true);
+  });
+
   it('[AUTH-060] deselecting needs a reason, updates the seat preview and creates the exclusions', async () => {
     const batch = await draft(['ann', 'ben']);
     const item = await itemFor(batch.id, 'ann');

@@ -1,4 +1,5 @@
 import { type AuthService, issueApiKey } from '@git-migrator/auth';
+import { parsePathPattern } from '@git-migrator/core';
 import { createTestDatabase, type TestDatabase } from '@git-migrator/db/testing';
 import { createBuiltinRegistry } from '@git-migrator/registry';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
@@ -245,7 +246,8 @@ describe('[API-021] [AUTH-021] the run, task and Expected Difference endpoints e
         note: 'n',
       },
     });
-    return { m, task, ed };
+    const drifted = await mkMigration({ status: 'drifted', statusBeforeDrift: 'verified' });
+    return { m, task, ed, drifted };
   };
   const roleCases: [
     string,
@@ -276,6 +278,11 @@ describe('[API-021] [AUTH-021] the run, task and Expected Difference endpoints e
       ],
     ],
     ['DELETE /expected-differences/{id}', 'DELETE', (f) => [`/expected-differences/${f.ed.id}`]],
+    [
+      'POST /migrations/{id}/drift/accept',
+      'POST',
+      (f) => [`/migrations/${f.drifted.id}/drift/accept`, { note: 'on purpose' }],
+    ],
   ];
   void cases;
   for (const [name, method, build] of roleCases) {
@@ -507,7 +514,33 @@ describe('POST /migrations/{id}/runs', () => {
   });
 
   it('[LIF-077] a rollback needs the target full name typed: none, a wrong one and the right one', async () => {
-    const m = await mkMigration({ status: 'migrated' });
+    // A rollback needs a target or Mutations to undo (LIF-077): this one has a target.
+    const ns = await t.db.privileged.namespace.upsert({
+      where: { endpointId_providerId: { endpointId: 'dst', providerId: 'org' } },
+      update: {},
+      create: {
+        endpointId: 'dst',
+        providerId: 'org',
+        kind: 'organization',
+        slug: 'acme',
+        key: 'acme',
+        name: 'acme',
+      },
+    });
+    counter += 1;
+    const target = await t.db.privileged.repository.create({
+      data: {
+        endpointId: 'dst',
+        namespaceId: ns.id,
+        providerId: `t-${counter}`,
+        slug: `plat-t-${counter}`,
+        name: `plat-t-${counter}`,
+        fullPath: `acme/plat-t-${counter}`,
+        isPrivate: true,
+        lastInventoriedAt: new Date('2026-01-01T00:00:00.000Z'),
+      },
+    });
+    const m = await mkMigration({ status: 'migrated', targetRepositoryId: target.id });
     const send = (body: unknown) =>
       call(`/migrations/${m.id}/runs`, { method: 'POST', role: 'operator', body });
     await expectProblem(await send({ kind: 'rollback' }), 422, 'confirmation_required');
@@ -519,7 +552,7 @@ describe('POST /migrations/{id}/runs', () => {
     expect(await t.db.privileged.run.count({ where: { migrationId: m.id } })).toBe(0);
     const ok = await send({
       kind: 'rollback',
-      confirm: `ACME/${m.plannedTargetName}`.toUpperCase(),
+      confirm: target.fullPath.toUpperCase(),
     });
     expect(ok.status).toBe(202);
   });
@@ -1050,5 +1083,151 @@ describe('Expected Difference endpoints', () => {
     ).toBe(200);
     expect(await gen(inRoute.id)).toBe(a0 + 1n);
     expect(await gen(elsewhere.id)).toBe(b0);
+  });
+});
+
+describe('POST /migrations/{id}/drift/accept (LIF-065)', () => {
+  const accept = (
+    id: string,
+    role: Role | undefined = 'operator',
+    body: unknown = { note: 'ok' },
+  ) => call(`/migrations/${id}/drift/accept`, { method: 'POST', ...(role ? { role } : {}), body });
+
+  async function drifted() {
+    const m = await mkMigration({ status: 'drifted', statusBeforeDrift: 'verified' });
+    await t.db.privileged.parityResult.createMany({
+      data: [
+        {
+          migrationId: m.id,
+          facetKey: 'webhooks',
+          status: 'different',
+          diffs: [
+            { path: '/hooks[key=a]/active', source: true, target: false },
+            { path: '/hooks[key=b]', source: { key: 'b' }, target: null },
+          ],
+          excluded: [],
+          checkedAt: new Date('2026-01-01T00:00:00.000Z'),
+        },
+        {
+          migrationId: m.id,
+          facetKey: 'git-refs',
+          status: 'different',
+          diffs: [{ path: '/refs[name=refs/heads/release/*]', source: 'a', target: 'b' }],
+          excluded: [],
+          checkedAt: new Date('2026-01-01T00:00:00.000Z'),
+        },
+        {
+          migrationId: m.id,
+          facetKey: 'variables',
+          status: 'equal',
+          diffs: [],
+          excluded: [],
+          checkedAt: new Date('2026-01-01T00:00:00.000Z'),
+        },
+      ],
+    });
+    return m;
+  }
+
+  it('[API-020] [LIF-065] accepts every differing path of every Facet as manual_accepted, audited, stales the Analysis and enqueues a Parity Check', async () => {
+    const m = await drifted();
+    const before = (await t.db.privileged.migration.findUniqueOrThrow({ where: { id: m.id } }))
+      .staleGeneration;
+    const res = await accept(m.id, 'operator', { note: 'we meant it' });
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({
+      migrationId: m.id,
+      accepted: 3,
+      alreadyAccepted: 0,
+      skipped: [],
+      truncated: false,
+    });
+    const eds = await t.db.privileged.expectedDifference.findMany({
+      where: { migrationId: m.id },
+      orderBy: [{ facetKey: 'asc' }, { path: 'asc' }],
+    });
+    expect(eds.map((e) => [e.facetKey, e.path, e.reason, e.note, e.createdById])).toEqual([
+      [
+        'git-refs',
+        '/refs[name=refs/heads/release/\\*]',
+        'manual_accepted',
+        'we meant it',
+        actorIds.operator,
+      ],
+      ['webhooks', '/hooks[key=a]/active', 'manual_accepted', 'we meant it', actorIds.operator],
+      ['webhooks', '/hooks[key=b]', 'manual_accepted', 'we meant it', actorIds.operator],
+    ]);
+    expect(
+      (await t.db.privileged.migration.findUniqueOrThrow({ where: { id: m.id } })).staleGeneration,
+    ).toBe(before + 1n);
+    // The status moves only when the Parity Check the accept enqueued finds nothing left.
+    expect(
+      (await t.db.privileged.migration.findUniqueOrThrow({ where: { id: m.id } })).status,
+    ).toBe('drifted');
+    expect(parityJobs).toEqual([m.id]);
+    expect(await audits('migration.drift_accept', m.id)).toHaveLength(1);
+    for (const e of eds) expect(await audits('expected_difference.create', e.id)).toHaveLength(1);
+  });
+
+  it('[LIF-065] accept supersedes a Parity Check that read the old inputs: the generation moves in the same transaction, and so does a create or a revoke of an Expected Difference', async () => {
+    const generation = async (id: string) =>
+      (await t.db.privileged.migration.findUniqueOrThrow({ where: { id } })).parityGeneration;
+    const m = await drifted();
+    const g0 = await generation(m.id);
+    await accept(m.id);
+    expect(await generation(m.id)).toBe(g0 + 1n);
+    const other = await mkMigration();
+    const g1 = await generation(other.id);
+    const created = await call(`/migrations/${other.id}/expected-differences`, {
+      method: 'POST',
+      role: 'operator',
+      body: { facetKey: 'webhooks', path: '/hooks[key=z]', note: 'n' },
+    });
+    expect(await generation(other.id)).toBe(g1 + 1n);
+    const ed = (await created.json()) as { id: string };
+    await call(`/expected-differences/${ed.id}`, { method: 'DELETE', role: 'operator' });
+    expect(await generation(other.id)).toBe(g1 + 2n);
+  });
+
+  it('[LIF-065] a glob in a stored path is escaped: the acceptance matches that path only', async () => {
+    const m = await drifted();
+    await accept(m.id);
+    const ed = await t.db.privileged.expectedDifference.findFirstOrThrow({
+      where: { migrationId: m.id, facetKey: 'git-refs' },
+    });
+    expect(() => parsePathPattern(ed.path)).not.toThrow();
+    expect(ed.path).toContain('\\*');
+  });
+
+  it('[LIF-065] a second accept creates nothing new', async () => {
+    const m = await drifted();
+    expect((await accept(m.id)).status).toBe(200);
+    const again = await accept(m.id);
+    expect(await again.json()).toMatchObject({ accepted: 0, alreadyAccepted: 3 });
+    expect(await t.db.privileged.expectedDifference.count({ where: { migrationId: m.id } })).toBe(
+      3,
+    );
+  });
+
+  it('[API-020] [LIF-065] only a drifted Migration can accept drift (409); an unknown one is 404; a missing note is 422', async () => {
+    const verified = await mkMigration({ status: 'verified' });
+    await expectProblem(await accept(verified.id), 409, 'conflict');
+    await expectProblem(await accept('nope'), 404, 'not_found');
+    const m = await drifted();
+    await expectProblem(await accept(m.id, 'operator', { note: '  ' }), 422, 'validation_failed');
+    await expectProblem(await accept(m.id, 'operator', {}), 422, 'validation_failed');
+    expect(await t.db.privileged.expectedDifference.count({ where: { migrationId: m.id } })).toBe(
+      0,
+    );
+  });
+
+  it('[LIF-065] a Parity Check that cannot be enqueued does not undo the acceptance', async () => {
+    const m = await drifted();
+    failParityEnqueue = true;
+    expect((await accept(m.id)).status).toBe(200);
+    expect(faults).toHaveLength(1);
+    expect(await t.db.privileged.expectedDifference.count({ where: { migrationId: m.id } })).toBe(
+      3,
+    );
   });
 });

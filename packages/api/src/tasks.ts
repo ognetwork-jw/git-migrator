@@ -11,9 +11,14 @@
  */
 
 import { randomUUID } from 'node:crypto';
-import { parsePathPattern } from '@git-migrator/core';
-import { type Db, markAnalysesStale, publishEventIn } from '@git-migrator/db';
-import { recomputeReadiness } from '@git-migrator/jobs';
+import { parsePathPattern, patternForPath } from '@git-migrator/core';
+import {
+  type Db,
+  markAnalysesStale,
+  publishEventIn,
+  supersedeParityChecks as supersedeChecks,
+} from '@git-migrator/db';
+import { MAX_STORED_DIFFS, recomputeReadiness } from '@git-migrator/jobs';
 import { createRoute, OpenAPIHono, z } from '@hono/zod-openapi';
 import {
   type Env,
@@ -111,6 +116,39 @@ const createEdRoute = createRoute({
   },
 });
 
+const DriftAcceptedSchema = z
+  .object({
+    migrationId: z.string(),
+    /** Expected Differences created, one per differing path of every Facet. */
+    accepted: z.number().int(),
+    /** Paths an active acceptance already covered. */
+    alreadyAccepted: z.number().int(),
+    /** Paths that could not be turned into a pattern (none are accepted for them). */
+    skipped: z.array(z.object({ facetKey: z.string(), path: z.string() })),
+    /** A Facet stored as many differences as a result keeps: a re-check may show more. */
+    truncated: z.boolean(),
+  })
+  .openapi('DriftAccepted');
+
+const acceptDriftRoute = createRoute({
+  method: 'post',
+  path: '/migrations/{id}/drift/accept',
+  summary:
+    'Accept all current drift differences as manual_accepted Expected Differences, then re-run parity (LIF-065)',
+  security,
+  request: {
+    params: z.object({ id: Id }),
+    body: {
+      required: true,
+      content: json(z.strictObject({ note: z.string().trim().min(1).max(MAX_NOTE) })),
+    },
+  },
+  responses: {
+    200: { description: 'Accepted', content: json(DriftAcceptedSchema) },
+    ...problems(401, 403, 404, 409, 503),
+  },
+});
+
 const revokeEdRoute = createRoute({
   method: 'delete',
   path: '/expected-differences/{id}',
@@ -125,7 +163,13 @@ const revokeEdRoute = createRoute({
 
 type Tx = Pick<
   Db,
-  'migration' | 'manualTask' | 'expectedDifference' | 'auditEvent' | '$queryRaw' | '$executeRaw'
+  | 'migration'
+  | 'manualTask'
+  | 'expectedDifference'
+  | 'auditEvent'
+  | 'parityResult'
+  | '$queryRaw'
+  | '$executeRaw'
 >;
 
 const lockMigration = (tx: Pick<Tx, '$queryRaw'>, id: string) =>
@@ -350,7 +394,10 @@ export function createTasks(deps: TasksDeps) {
           }
         }
         // Expected Differences are Analysis inputs (LIF-021).
-        if (acceptanceChanged) await markAnalysesStale(tx, { ids: [id] });
+        if (acceptanceChanged) {
+          await markAnalysesStale(tx, { ids: [id] });
+          await supersedeChecks(tx, { id });
+        }
 
         await recomputeReadiness(tx, id);
         await tx.auditEvent.create({
@@ -426,6 +473,7 @@ export function createTasks(deps: TasksDeps) {
           },
         })) as EdRow;
         await markAnalysesStale(tx, { ids: [id] });
+        await supersedeChecks(tx, { id });
         await tx.auditEvent.create({
           data: {
             actorId,
@@ -444,6 +492,114 @@ export function createTasks(deps: TasksDeps) {
       });
       await triggerParity(id);
       return c.json(edView(created), 201);
+    })
+    .openapi(acceptDriftRoute, async (c) => {
+      requireCapability(c, 'manageTasks');
+      const { id } = c.req.valid('param');
+      const { note } = c.req.valid('json');
+      const actorId = c.get('principal').actor.id;
+      const result = await privileged.$transaction(async (tx) => {
+        await lockMigration(tx, id);
+        const migration = await tx.migration.findUnique({
+          where: { id },
+          select: { routeId: true, status: true },
+        });
+        if (!migration) throw new ProblemError('not_found');
+        // Drift is a status of its own (LIF-065); accepting is its resolution.
+        if (migration.status !== 'drifted') {
+          throw conflict(`the Migration is ${migration.status}, not drifted`);
+        }
+        const results = (await tx.parityResult.findMany({
+          where: { migrationId: id, status: 'different' },
+          select: { facetKey: true, diffs: true },
+          orderBy: { facetKey: 'asc' },
+        })) as { facetKey: string; diffs: unknown }[];
+        const accepted: EdRow[] = [];
+        const skipped: { facetKey: string; path: string }[] = [];
+        let alreadyAccepted = 0;
+        let truncated = false;
+        for (const result of results) {
+          const diffs = Array.isArray(result.diffs) ? (result.diffs as { path?: unknown }[]) : [];
+          if (diffs.length >= MAX_STORED_DIFFS) truncated = true;
+          for (const diff of diffs) {
+            if (typeof diff.path !== 'string') continue;
+            // The stored path is a concrete field path: it becomes a pattern only through
+            // `patternForPath`, which escapes it so it masks that path and nothing else.
+            let pattern: string;
+            try {
+              pattern = patternForPath(diff.path);
+              parsePathPattern(pattern);
+            } catch {
+              skipped.push({ facetKey: result.facetKey, path: diff.path });
+              continue;
+            }
+            const existing = await tx.expectedDifference.findFirst({
+              where: {
+                routeId: migration.routeId,
+                migrationId: id,
+                facetKey: result.facetKey,
+                path: pattern,
+                reason: 'manual_accepted',
+                revokedAt: null,
+              },
+              select: { id: true },
+            });
+            if (existing) {
+              alreadyAccepted += 1;
+              continue;
+            }
+            const row = (await tx.expectedDifference.create({
+              data: {
+                routeId: migration.routeId,
+                migrationId: id,
+                facetKey: result.facetKey,
+                path: pattern,
+                reason: 'manual_accepted',
+                note,
+                createdById: actorId,
+              },
+            })) as EdRow;
+            accepted.push(row);
+            await tx.auditEvent.create({
+              data: {
+                actorId,
+                action: 'expected_difference.create',
+                subjectType: 'expected_difference',
+                subjectId: row.id,
+                data: { migrationId: id, facetKey: result.facetKey, path: pattern, note },
+              },
+            });
+          }
+        }
+        // Expected Differences are Analysis inputs (LIF-021).
+        await markAnalysesStale(tx, { ids: [id] });
+        await supersedeChecks(tx, { id });
+        await tx.auditEvent.create({
+          data: {
+            actorId,
+            action: 'migration.drift_accept',
+            subjectType: 'migration',
+            subjectId: id,
+            data: {
+              accepted: accepted.length,
+              alreadyAccepted,
+              skipped: skipped.length,
+              facets: results.map((r) => r.facetKey),
+              note,
+            },
+          },
+        });
+        await publishEventIn(tx, {
+          type: 'migration.updated',
+          ids: { migration: id },
+          at: new Date().toISOString(),
+        });
+        return { accepted: accepted.length, alreadyAccepted, skipped, truncated };
+      });
+      // `parity_equal` returns the Migration to its status before the drift (LIF-065), after the
+      // commit and never inline (LIF-062).
+      await triggerParity(id);
+      return c.json({ migrationId: id, ...result }, 200);
     })
     .openapi(revokeEdRoute, async (c) => {
       requireCapability(c, 'manageTasks');
@@ -480,6 +636,10 @@ export function createTasks(deps: TasksDeps) {
         await markAnalysesStale(
           tx,
           row.migrationId ? { ids: [row.migrationId] } : { routeId: row.routeId },
+        );
+        await supersedeChecks(
+          tx,
+          row.migrationId ? { id: row.migrationId } : { routeId: row.routeId },
         );
         await tx.auditEvent.create({
           data: {

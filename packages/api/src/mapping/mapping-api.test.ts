@@ -530,6 +530,20 @@ describe('[AUTH-050] exclude', () => {
     );
   });
 
+  it('[AUTH-050] creating and revoking an exclusion supersedes the Parity Checks that read the Expected Differences', async () => {
+    const generations = async () =>
+      (await t.db.privileged.migration.findMany({ select: { parityGeneration: true } })).map(
+        (m) => m.parityGeneration,
+      );
+    const start = await generations();
+    await post(`${base}/identity-mappings/${ids['m-bob']}/exclude`, { reason: 'left' });
+    const excluded = await generations();
+    expect(excluded.every((g, i) => g > (start[i] as bigint))).toBe(true);
+    await post(`${base}/identity-mappings/${ids['m-bob']}/unmap`, {});
+    const unmapped = await generations();
+    expect(unmapped.every((g, i) => g > (excluded[i] as bigint))).toBe(true);
+  });
+
   it('[AUTH-050] excluding a confirmed mapping also covers the former target', async () => {
     await post(`${base}/identity-mappings/${ids['m-dave']}/exclude`, { reason: 'bot' });
     const paths = (await activeEds()).map((e) => e.path);

@@ -5,6 +5,7 @@ import {
   invitationTargetLockKey,
   publishEventIn,
   routeMappingLockKey,
+  supersedeParityChecks,
 } from '@git-migrator/db';
 import { ProblemError } from '../problem.ts';
 import { type CsvErrorCode, parseMappingCsv } from './csv.ts';
@@ -85,7 +86,13 @@ const exclusionNote = (reason: string): string => reason;
 async function revokeExclusions(tx: Tx, mappingIds: readonly string[], now: Date): Promise<number> {
   if (mappingIds.length === 0) return 0;
   let count = 0;
+  const routeIds = new Set<string>();
   for (const part of chunks(mappingIds, 10_000)) {
+    for (const row of await tx.identityMapping.findMany({
+      where: { id: { in: part } },
+      select: { routeId: true },
+    }))
+      routeIds.add(row.routeId);
     const result = await tx.expectedDifference.updateMany({
       where: {
         reason: 'identity_excluded',
@@ -96,6 +103,8 @@ async function revokeExclusions(tx: Tx, mappingIds: readonly string[], now: Date
     });
     count += result.count;
   }
+  // The Route's Parity Checks read these Expected Differences (ADR-0466 round 3).
+  if (count > 0) await supersedeParityChecks(tx, { routeIds: [...routeIds] });
   return count;
 }
 
@@ -132,6 +141,7 @@ async function createExclusions(
     ),
   );
   for (const part of chunks(data)) await tx.expectedDifference.createMany({ data: part });
+  if (data.length > 0) await supersedeParityChecks(tx, { routeId: route.id });
 }
 
 async function audit(
