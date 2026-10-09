@@ -1459,6 +1459,12 @@ export class SchemaType implements SchemaDef {
                     attributes: [{ name: "@default", args: [{ name: "value", value: ExpressionUtils.literal(false) }] }, { name: "@map", args: [{ name: "name", value: ExpressionUtils.literal("has_mutations") }] }] as readonly AttributeApplication[],
                     default: false as FieldDefault
                 },
+                cancelRequestedAt: {
+                    name: "cancelRequestedAt",
+                    type: "DateTime",
+                    optional: true,
+                    attributes: [{ name: "@map", args: [{ name: "name", value: ExpressionUtils.literal("cancel_requested_at") }] }, { name: "@db.Timestamptz", args: [{ name: "x", value: ExpressionUtils.literal(3) }] }] as readonly AttributeApplication[]
+                },
                 error: {
                     name: "error",
                     type: "Json",
@@ -1569,6 +1575,23 @@ export class SchemaType implements SchemaDef {
                     attributes: [{ name: "@default", args: [{ name: "value", value: ExpressionUtils.literal(0) }] }] as readonly AttributeApplication[],
                     default: 0 as FieldDefault
                 },
+                delays: {
+                    name: "delays",
+                    type: "Int",
+                    attributes: [{ name: "@default", args: [{ name: "value", value: ExpressionUtils.literal(0) }] }] as readonly AttributeApplication[],
+                    default: 0 as FieldDefault
+                },
+                failures: {
+                    name: "failures",
+                    type: "Int",
+                    attributes: [{ name: "@default", args: [{ name: "value", value: ExpressionUtils.literal(0) }] }] as readonly AttributeApplication[],
+                    default: 0 as FieldDefault
+                },
+                severity: {
+                    name: "severity",
+                    type: "String",
+                    optional: true
+                },
                 startedAt: {
                     name: "startedAt",
                     type: "DateTime",
@@ -1612,13 +1635,15 @@ export class SchemaType implements SchemaDef {
                 }
             },
             attributes: [
+                { name: "@@unique", args: [{ name: "fields", value: ExpressionUtils.array("String", [ExpressionUtils.field("runId"), ExpressionUtils.field("order")]) }] },
                 { name: "@@map", args: [{ name: "name", value: ExpressionUtils.literal("run_step") }] },
                 { name: "@@schema", args: [{ name: "map", value: ExpressionUtils.literal("app") }] },
                 { name: "@@allow", args: [{ name: "operation", value: ExpressionUtils.literal("read") }, { name: "condition", value: ExpressionUtils.binary(ExpressionUtils.binary(ExpressionUtils.call("auth"), "!=", ExpressionUtils._null()), "&&", ExpressionUtils.binary(ExpressionUtils.member(ExpressionUtils.call("auth"), ["disabled"]), "==", ExpressionUtils.literal(false))) }] }
             ] as readonly AttributeApplication[],
             idFields: ["id"],
             uniqueFields: {
-                id: { type: "String" }
+                id: { type: "String" },
+                runId_order: { runId: { type: "String" }, order: { type: "Int" } }
             }
         },
         RunLog: {
@@ -1755,6 +1780,37 @@ export class SchemaType implements SchemaDef {
                     optional: true,
                     attributes: [{ name: "@map", args: [{ name: "name", value: ExpressionUtils.literal("undone_at") }] }, { name: "@db.Timestamptz", args: [{ name: "x", value: ExpressionUtils.literal(3) }] }] as readonly AttributeApplication[]
                 },
+                seq: {
+                    name: "seq",
+                    type: "BigInt",
+                    unique: true,
+                    attributes: [{ name: "@unique" }, { name: "@default", args: [{ name: "value", value: ExpressionUtils.call("autoincrement") }] }] as readonly AttributeApplication[],
+                    default: ExpressionUtils.call("autoincrement") as FieldDefault
+                },
+                state: {
+                    name: "state",
+                    type: "String",
+                    attributes: [{ name: "@default", args: [{ name: "value", value: ExpressionUtils.literal("recorded") }] }] as readonly AttributeApplication[],
+                    default: "recorded" as FieldDefault
+                },
+                writtenByStep: {
+                    name: "writtenByStep",
+                    type: "String",
+                    optional: true,
+                    attributes: [{ name: "@map", args: [{ name: "name", value: ExpressionUtils.literal("written_by_step") }] }] as readonly AttributeApplication[]
+                },
+                origin: {
+                    name: "origin",
+                    type: "String",
+                    attributes: [{ name: "@default", args: [{ name: "value", value: ExpressionUtils.literal("desired") }] }] as readonly AttributeApplication[],
+                    default: "desired" as FieldDefault
+                },
+                derivedDifferences: {
+                    name: "derivedDifferences",
+                    type: "Json",
+                    attributes: [{ name: "@default", args: [{ name: "value", value: ExpressionUtils.literal("[]") }] }, { name: "@map", args: [{ name: "name", value: ExpressionUtils.literal("derived_differences") }] }] as readonly AttributeApplication[],
+                    default: "[]" as FieldDefault
+                },
                 createdAt: {
                     name: "createdAt",
                     type: "DateTime",
@@ -1787,7 +1843,8 @@ export class SchemaType implements SchemaDef {
             ] as readonly AttributeApplication[],
             idFields: ["id"],
             uniqueFields: {
-                id: { type: "String" }
+                id: { type: "String" },
+                seq: { type: "BigInt" }
             }
         },
         ManualTask: {

@@ -470,6 +470,7 @@ model Run {
     leaseExpiresAt DateTime?  @map("lease_expires_at") @db.Timestamptz(3)
     reaperResumes  Int        @default(0) @map("reaper_resumes")
     hasMutations   Boolean    @default(false) @map("has_mutations")
+    cancelRequestedAt DateTime? @map("cancel_requested_at") @db.Timestamptz(3) // cooperative cancel (LIF-040, ADR-0340)
     error          Json?
     createdAt      DateTime   @default(now()) @map("created_at") @db.Timestamptz(3)
     updatedAt      DateTime   @updatedAt @map("updated_at") @db.Timestamptz(3)
@@ -508,6 +509,9 @@ model RunStep {
     order      Int
     status     StepStatus @default(pending)
     attempts   Int        @default(0)
+    delays     Int        @default(0) // times the Run was delayed at this step (rate limit, scratch; ADR-0341)
+    failures   Int        @default(0) // attempts that ended in a retryable failure or a crash: the retry budget (ADR-0341)
+    severity   String? // fatal | independent | advisory, as planned when the row was created (ADR-0341)
     startedAt  DateTime?  @map("started_at") @db.Timestamptz(3)
     finishedAt DateTime?  @map("finished_at") @db.Timestamptz(3)
     error      Json? // AdapterError serialized
@@ -518,6 +522,7 @@ model RunStep {
 
     logs       RunLog[]
 
+    @@unique([runId, order])
     @@map("run_step")
     @@schema('app')
     @@allow('read', auth() != null && auth().disabled == false)
@@ -554,6 +559,11 @@ model Mutation {
     before      Json?
     after       Json?
     undoneAt    DateTime? @map("undone_at") @db.Timestamptz(3)
+    seq         BigInt    @unique @default(autoincrement()) // recording order: undo runs newest first (ADR-0342)
+    state       String    @default("recorded") // intended | recorded | not_applied (ADR-0342)
+    writtenByStep String? @map("written_by_step") // the Step that wrote it, so a resumed Step finds its open intents
+    origin      String    @default("desired") // desired | framework (ADR-0342)
+    derivedDifferences Json @default("[]") @map("derived_differences") // [{facetKey, path}] of the Expected Differences this record caused
     createdAt   DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
     updatedAt   DateTime  @updatedAt @map("updated_at") @db.Timestamptz(3)
 
