@@ -16,4 +16,8 @@ To add an adapter: write a connection factory and one scenario per readable Face
 
 `src/inventory.test.ts` runs the inventory processor against the TST-012 fixture world with a throw-away Postgres database.
 
-Declared internal dependencies (ARC-012, checked by `pnpm lint`): adapters, `adapter-sdk`, `canonical`, `config`, `core`, `db`, `facets`, `fixtures`, `guidance`, `jobs`, `observability`, `provider-fakes`, `quota` and `registry`.
+## Parity (T-072)
+
+`src/parity.test.ts` migrates `plat/auto-ok` by hand with the real adapters and the git package (create the repository, mirror, LFS and refs, then each writable Facet's `apply`) and runs the Parity Check against it: every Facet `equal`, the Migration `verified`, a missing LFS object and a missing branch as differences, post-cutover containment, and the Route's `framework_mutation` record hiding a framework branch. The fake GitHub's compare API reads its own in-memory store, not the git server, so containment through the compare API is covered by the unit tests in `packages/jobs/src/parity`.
+
+Declared internal dependencies (ARC-012, checked by `pnpm lint`): adapters, `adapter-sdk`, `canonical`, `config`, `core`, `db`, `facets`, `fixtures`, `git`, `guidance`, `jobs`, `observability`, `provider-fakes`, `quota` and `registry`.

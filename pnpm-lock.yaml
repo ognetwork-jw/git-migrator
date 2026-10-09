@@ -720,6 +720,9 @@ importers:
       '@git-migrator/fixtures':
         specifier: workspace:*
         version: link:../fixtures
+      '@git-migrator/git':
+        specifier: workspace:*
+        version: link:../../packages/git
       '@git-migrator/guidance':
         specifier: workspace:*
         version: link:../../packages/guidance

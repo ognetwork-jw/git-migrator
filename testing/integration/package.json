@@ -23,6 +23,7 @@
     "@git-migrator/db": "workspace:*",
     "@git-migrator/facets": "workspace:*",
     "@git-migrator/fixtures": "workspace:*",
+    "@git-migrator/git": "workspace:*",
     "@git-migrator/guidance": "workspace:*",
     "@git-migrator/jobs": "workspace:*",
     "@git-migrator/observability": "workspace:*",
