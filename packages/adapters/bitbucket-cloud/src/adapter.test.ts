@@ -114,6 +114,12 @@ describe('adapter surface', () => {
     });
     expect((await custom.conn.git.credential(ref)).username).toBe('custom-user');
   });
+
+  it('[JOB-043] git access names the credential git bucket, so git commands are metered', async () => {
+    const { conn } = await makeConnection(makeWorld());
+    expect(conn.git.quota).toMatchObject({ limit: 60000, windowSeconds: 3600 });
+    expect(conn.git.quota?.key.endsWith(':git')).toBe(true);
+  });
 });
 
 describe('inventory (JOB-030)', () => {

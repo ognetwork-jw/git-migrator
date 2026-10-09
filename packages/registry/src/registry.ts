@@ -19,12 +19,42 @@ import {
 import { type OverlayIssue, validateOverlayDocument } from '@git-migrator/facets/overlays';
 import { type CapabilityMatrix, computeCell, type MatrixRow } from './matrix.ts';
 
+/** What a delivery gets (LIF-047): the source file text and the facts the translation also used. */
+export interface PipelinesDeliveryInput {
+  readonly text: string;
+  readonly variables?: unknown;
+  readonly secrets?: unknown;
+  readonly workspaceVariables?: readonly unknown[];
+  readonly workspaceSecrets?: readonly unknown[];
+}
+
+/** The Change Request that delivers translated pipelines (LIF-047, FAC-PIP-003). */
+export interface PipelinesDeliveryResult {
+  /** Its branch is `git-migrator/<purpose>`. */
+  readonly purpose: string;
+  readonly title: string;
+  readonly body: string;
+  readonly files: readonly { path: string; content: string }[];
+}
+
+/**
+ * Renders the files of the pipelines Change Request for one provider pair. It lives with the
+ * target adapter (it names provider constructs), and the lifecycle reaches it through the
+ * registry (ARC-012).
+ */
+export interface PipelinesDelivery {
+  readonly source: string;
+  readonly target: string;
+  render(input: PipelinesDeliveryInput): PipelinesDeliveryResult;
+}
+
 export interface RegistryParts {
   readonly facets: readonly FacetDefinition<never>[];
   readonly adapters: readonly ProviderAdapter[];
   readonly overrides?: readonly PairOverride<never>[];
   /** Static provider limits by adapter type, for answers that need no connection (naming preview). */
   readonly limits?: Readonly<Record<string, ProviderLimits>>;
+  readonly deliveries?: readonly PipelinesDelivery[];
 }
 
 /** A detect-only Facet is never written (FAC-EXT-001), so the target's declarations do not matter. */
@@ -50,6 +80,7 @@ export class ProviderRegistry {
   /** Capabilities copied at construction, so a later change to an adapter object cannot alter the matrix. */
   readonly #capabilities = new Map<string, ProviderCapabilities>();
   readonly #limits = new Map<string, ProviderLimits>();
+  readonly #deliveries = new Map<string, PipelinesDelivery>();
 
   constructor(parts: RegistryParts) {
     const reg = this.#facets;
@@ -102,6 +133,20 @@ export class ProviderRegistry {
       }
       this.#facets.registerOverride(override as PairOverride<unknown>);
     }
+    for (const delivery of parts.deliveries ?? []) {
+      for (const side of [delivery.source, delivery.target]) {
+        if (!this.#adapters.has(side)) {
+          throw new RegistryError(`delivery references unregistered adapter ${side}`);
+        }
+      }
+      const key = `${delivery.source}\u0000${delivery.target}`;
+      if (this.#deliveries.has(key)) {
+        throw new RegistryError(
+          `delivery for ${delivery.source} to ${delivery.target} is already registered`,
+        );
+      }
+      this.#deliveries.set(key, delivery);
+    }
     // Fail at composition time on a missing dependency or a cycle.
     this.#facets.ordered();
   }
@@ -151,6 +196,11 @@ export class ProviderRegistry {
   /** The translate override for the pair and Facet, if any (ADP-032). */
   override(source: string, target: string, facet: FacetKey): PairOverride<unknown> | undefined {
     return this.#facets.override({ source, target }, facet);
+  }
+
+  /** The pipelines Change Request renderer for the pair, if any (LIF-047). */
+  pipelinesDelivery(source: string, target: string): PipelinesDelivery | undefined {
+    return this.#deliveries.get(`${source}\u0000${target}`);
   }
 
   /** API-020 capability matrix: every Facet times every ordered pair of distinct adapters. */

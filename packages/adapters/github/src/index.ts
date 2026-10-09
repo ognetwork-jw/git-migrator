@@ -10,4 +10,5 @@ export { LIMITS as githubLimits } from './connection.ts';
 export { parseCodeowners, renderCodeowners } from './facets/access.ts';
 export { fromGithubEvents, GITHUB_EVENTS, toGithubEvents } from './facets/hooks.ts';
 export { createClassifier, createInterpreter, endpointLabel, TOKEN_SHAPES } from './http.ts';
+export * from './pair-overrides/bitbucket-cloud-pipelines/delivery.ts';
 export * from './pair-overrides/bitbucket-cloud-pipelines/index.ts';

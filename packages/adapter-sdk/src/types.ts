@@ -5,7 +5,7 @@
 import type { FacetKey } from '@git-migrator/canonical';
 import type { FacetCapability, FieldDecision, FieldPath, FieldSupport } from '@git-migrator/core';
 import type { ZodType } from 'zod';
-import type { ProviderHttpClient, ProviderHttpEnvironment } from './http.ts';
+import type { BucketSpec, ProviderHttpClient, ProviderHttpEnvironment } from './http.ts';
 import type { Logger } from './logger.ts';
 
 /** One page of a listing. `nextCursor` is opaque to callers; absent on the last page. */
@@ -161,6 +161,12 @@ export interface GitAccess {
   /** https URL without credentials. */
   remoteUrl(repo: RepositoryRef): string;
   credential(repo: RepositoryRef): Promise<GitCredential>;
+  /**
+   * The quota bucket that the git smart-HTTP requests of this credential count in (JOB-040), when
+   * the provider meters them. The `git` package pre-acquires units in it before every command
+   * (JOB-041); without it git commands are not metered here.
+   */
+  readonly quota?: BucketSpec;
 }
 
 /** One ref from `ls-remote` (FAC-GIT-001). */

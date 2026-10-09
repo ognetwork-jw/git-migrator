@@ -100,7 +100,7 @@ export const bitbucketCloudAdapter: ProviderAdapter = {
       endpoint.credential,
       'credential',
     );
-    const { client } = createClient({
+    const { client, setup } = createClient({
       endpointId: endpoint.id,
       baseUrl: endpoint.baseUrl,
       config,
@@ -112,6 +112,7 @@ export const bitbucketCloudAdapter: ProviderAdapter = {
       workspace: config.workspace,
       gitBaseUrl: config.gitBaseUrl,
       credential,
+      quota: setup,
     });
     const reader = new Reader({ workspace: config.workspace, git });
     const ctxOf = (): Ctx => ({

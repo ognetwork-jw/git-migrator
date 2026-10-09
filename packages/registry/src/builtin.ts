@@ -5,6 +5,7 @@ import {
 } from '@git-migrator/adapter-bitbucket-cloud';
 import {
   bitbucketCloudToGithubPipelines,
+  bitbucketCloudToGithubPipelinesDelivery,
   githubAdapter,
   githubLimits,
 } from '@git-migrator/adapter-github';
@@ -60,5 +61,6 @@ export function createBuiltinRegistry(): ProviderRegistry {
       [githubAdapter.type]: githubLimits,
     },
     overrides: [bitbucketCloudToGithubPipelines as never],
+    deliveries: [bitbucketCloudToGithubPipelinesDelivery],
   });
 }

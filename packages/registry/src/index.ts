@@ -12,4 +12,10 @@ export {
   type MatrixRow,
   worstFidelity,
 } from './matrix.ts';
-export { ProviderRegistry, type RegistryParts } from './registry.ts';
+export {
+  type PipelinesDelivery,
+  type PipelinesDeliveryInput,
+  type PipelinesDeliveryResult,
+  ProviderRegistry,
+  type RegistryParts,
+} from './registry.ts';

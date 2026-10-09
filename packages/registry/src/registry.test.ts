@@ -55,6 +55,34 @@ describe('ProviderRegistry', () => {
     ).toThrow(/already registered/);
   });
 
+  it('[LIF-047] a pipelines delivery is found by pair, and only for registered adapters', () => {
+    const delivery = {
+      source: 'a',
+      target: 'b',
+      render: () => ({ purpose: 'ci', title: 't', body: 'b', files: [] }),
+    };
+    const reg = new ProviderRegistry({ facets, adapters: [A, B], deliveries: [delivery] });
+    expect(reg.pipelinesDelivery('a', 'b')).toBe(delivery);
+    expect(reg.pipelinesDelivery('b', 'a')).toBeUndefined();
+    expect(() => new ProviderRegistry({ facets, adapters: [A], deliveries: [delivery] })).toThrow(
+      /unregistered adapter b/,
+    );
+    expect(
+      () => new ProviderRegistry({ facets, adapters: [A, B], deliveries: [delivery, delivery] }),
+    ).toThrow(/already registered/);
+  });
+
+  it('[LIF-047] the built-in registry delivers pipelines from Bitbucket Cloud to GitHub', () => {
+    const delivery = createBuiltinRegistry().pipelinesDelivery('bitbucket-cloud', 'github');
+    expect(
+      delivery
+        ?.render({
+          text: 'pipelines:\n  default:\n    - step:\n        script:\n          - make\n',
+        })
+        .files.map((f) => f.path),
+    ).toEqual(['.github/workflows/ci.yml', '.github/git-migrator/bitbucket-pipelines.yml']);
+  });
+
   it('[ADP-032] rejects a duplicate adapter, capabilities for an unregistered facet and unknown lookups', () => {
     expect(() => new ProviderRegistry({ facets, adapters: [A, A] })).toThrow(/already registered/);
     expect(
