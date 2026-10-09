@@ -7,8 +7,10 @@ import {
   analyzeForRun,
   createAnalysisGitClient,
   createEndpointConnector,
+  createMirrorLfsSource,
   createProviderEnvironment,
   createRunAnalysisPort,
+  createVerifyPlanner,
   feederHandlers,
   HEALTH_PORT,
   type HealthServer,
@@ -18,6 +20,8 @@ import {
   LeaderElection,
   maintenanceHandlers,
   noGitClient,
+  type ParityDeps,
+  parityHandlers,
   type QueueName,
   queuesForRole,
   RunStepRegistry,
@@ -255,6 +259,17 @@ export async function startWorker(options: StartWorkerOptions): Promise<WorkerHa
     // The Steps of each Run kind are registered here by the migration tasks (T-071 and later); until
     // then a Run of a kind without Steps fails with `run.kind_unsupported` (LIF-040).
     const runSteps = new RunStepRegistry();
+    // The Parity Check (LIF-060): the LFS object ids come from a mirror in scratch (FAC-GIT-005).
+    const parityDeps: ParityDeps = {
+      db: db.privileged,
+      appPool: db.pool,
+      connector,
+      registry,
+      git,
+      log,
+      lfs: createMirrorLfsSource({ scratchRoot: scratchRoot(env), log }),
+    };
+    runSteps.register('verify', createVerifyPlanner(parityDeps));
     const handlers = {
       ...maintenanceHandlers({
         db: db.privileged,
@@ -287,6 +302,7 @@ export async function startWorker(options: StartWorkerOptions): Promise<WorkerHa
         metrics: recorders,
       }),
       ...feederHandlers({ db: db.privileged, runtime: jobs, quota, log }),
+      ...parityHandlers(parityDeps),
       ...(options.handlers ?? {}),
     };
     await jobs.startWorkers(role, config, handlers);
