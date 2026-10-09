@@ -138,7 +138,7 @@ export function targetRefOf(
   return { providerId: repo.providerId, namespace: world.targetNamespaceRef, slug: repo.slug };
 }
 
-export function repositoryTarget(world: RunWorld, ref: RepositoryRef): FacetTarget {
+export function repositoryTarget(_world: RunWorld, ref: RepositoryRef): FacetTarget {
   return { scope: 'repository', repository: ref, namespace: ref.namespace };
 }
 

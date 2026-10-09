@@ -1,6 +1,6 @@
 # @git-migrator/jobs
 
-Queue names, job payloads, the BullMQ runtime on PostgreSQL, the scheduler leader, schedulers, maintenance jobs, Run leases and the reaper, retention, scratch handling and the worker health server (JOB-010 to JOB-015, JOB-046, JOB-050, ARC-023, LIF-046, DATA-020). Inventory (JOB-030, DOM-014, AUTH-050 step 2). Analysis and feeder (LIF-020 to LIF-022, JOB-020, JOB-022). Invitation batches (AUTH-060, AUTH-061). Run executor (LIF-040, LIF-042, LIF-043, LIF-045, LIF-046, LIF-049, DOM-010). Decisions: ADR-0210, ADR-0211, ADR-0212, ADR-0280, ADR-0281, ADR-0310, ADR-0311, ADR-0312, ADR-0340, ADR-0341, ADR-0342, ADR-0343, ADR-0370, ADR-0371, ADR-0372.
+Queue names, job payloads, the BullMQ runtime on PostgreSQL, the scheduler leader, schedulers, maintenance jobs, Run leases and the reaper, retention, scratch handling and the worker health server (JOB-010 to JOB-015, JOB-046, JOB-050, ARC-023, LIF-046, DATA-020). Inventory (JOB-030, DOM-014, AUTH-050 step 2). Analysis and feeder (LIF-020 to LIF-022, JOB-020, JOB-022). Invitation batches (AUTH-060, AUTH-061). Run executor (LIF-040, LIF-042, LIF-043, LIF-045, LIF-046, LIF-049, DOM-010). Decisions: ADR-0210, ADR-0211, ADR-0212, ADR-0280, ADR-0281, ADR-0310, ADR-0311, ADR-0312, ADR-0340, ADR-0341, ADR-0342, ADR-0343, ADR-0370, ADR-0371, ADR-0372, ADR-0380.
 
 Internal dependencies (ARC-012, checked by `pnpm lint`): @git-migrator/core, @git-migrator/canonical, @git-migrator/db, @git-migrator/quota, @git-migrator/registry, @git-migrator/git, @git-migrator/adapter-sdk, @git-migrator/config, @git-migrator/observability, @git-migrator/guidance.
 
@@ -48,3 +48,14 @@ Internal dependencies (ARC-012, checked by `pnpm lint`): @git-migrator/core, @gi
 Handlers are registered by the process: `JobHandlers` maps a job name to `(payload, { job, queue, log, shutdown }) => Promise`. A job without a handler fails without retry.
 
 Tests use a throw-away Postgres database (`@git-migrator/db/testing`) and real BullMQ; no provider is contacted.
+
+## Migration Steps (T-071)
+
+`migrate/` holds LIF-040 steps 1 to 12 of `migrate`, `run_anyway` and `resync` Runs (ADR-0380). `registerMigrationSteps(registry, services)` registers one planner for the three kinds; the worker builds `MigrationServices` (connector, registry, config, quota, scratch root, `MigrationLinks`, `reanalyze`).
+
+- `plan.ts`: the Steps come from the Run's Analysis (`step` PlanItems); `analysis.refresh` ends the Run. Steps of later tasks join through `MigrationServices.extraSteps` by key: T-072 adds `verify`, T-073 adds `source.read-only`.
+- `prepare.ts`: `preflight` (LIF-041) and `git.prepare` (disk precheck with `delay`, mirror, blob scan, LFS fetch).
+- `repository.ts`: `target.ensure-repository` (create or adopt, claim under an advisory lock) and `target.lift-protection`.
+- `push.ts`: `git.push-lfs`, `git.push-refs` (LIF-044, default branch, `adoptNonEmpty` reconcile).
+- `facets.ts`: `facet.<key>.apply` with the run-time findings. `change-requests.ts`: step 9. `overlays.ts`: step 12 with `core.mergeOverlay`.
+- Every provider write has an intent before and a confirmation after; resumed Steps settle open intents first. Tests: `migrate/*.test.ts` and `testing/integration/src/migrate.test.ts` (fixture world, real adapters and git, fakes).

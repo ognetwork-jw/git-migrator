@@ -213,8 +213,8 @@ export function gitPrepareStep(): StepDefinition<MigrationServices> {
             code: blocker.code,
             params: {
               path: blocker.params.path,
-              size: blocker.params.size,
-              limit: blocker.params.limit,
+              size: formatSize(blocker.params.size),
+              limit: formatSize(blocker.params.limit).replace(' ', ''),
             },
           });
         }
@@ -247,4 +247,14 @@ async function updateRepositorySize(
   });
 }
 
-export { effectiveMaxPushBytes };
+/** `1.5 MiB`: the text the guidance parameters `size` and `limit` take. */
+export function formatSize(bytes: number): string {
+  const units = ['B', 'KiB', 'MiB', 'GiB', 'TiB'];
+  let value = bytes;
+  let unit = 0;
+  while (value >= 1024 && unit < units.length - 1) {
+    value /= 1024;
+    unit += 1;
+  }
+  return `${Number.isInteger(value) ? value : value.toFixed(1)} ${units[unit]}`;
+}

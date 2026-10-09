@@ -97,6 +97,10 @@ export const GUIDANCE: Readonly<Record<FindingCode, Guidance>> = {
     step('git-refs.blob-too-large', 2),
   ]),
   'git-refs.blob-large': plain('git-refs.blob-large', [step('git-refs.blob-large', 1)]),
+  'git-refs.push-too-large': plain('git-refs.push-too-large', [
+    step('git-refs.push-too-large', 1),
+    step('git-refs.push-too-large', 2),
+  ]),
   'git-refs.hidden-refs-skipped': plain('git-refs.hidden-refs-skipped', [
     step('git-refs.hidden-refs-skipped', 1),
   ]),
@@ -131,6 +135,9 @@ export const GUIDANCE: Readonly<Record<FindingCode, Guidance>> = {
     [step('branch-rules.configure-status-checks', 1)],
     VERIFICATION.statusChecks,
   ),
+  'branch-rules.exemptions-not-applied': plain('branch-rules.exemptions-not-applied', [
+    step('branch-rules.exemptions-not-applied', 1),
+  ]),
   'branch-rules.unknown-kind': plain('branch-rules.unknown-kind', [
     step('branch-rules.unknown-kind', 1),
   ]),

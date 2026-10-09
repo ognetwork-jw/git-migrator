@@ -280,7 +280,24 @@ routes:
     async connect(endpointId, options) {
       const connection = await real.connect(endpointId, options);
       if (endpointId === TARGET) {
-        return { ...connection, limits: { ...connection.limits, ...WORLD_LIMITS } };
+        return {
+          ...connection,
+          limits: { ...connection.limits, ...WORLD_LIMITS },
+          changeRequests: connection.changeRequests && {
+            ...connection.changeRequests,
+            // The real provider is one store: a pushed branch is visible to the REST API at once.
+            // The fake keeps them apart, so the REST side is told of the pushed default branch.
+            async upsert(ref, req) {
+              const state = fakes.github?.state;
+              const repo = state?.findRepo(ORG, ref.slug);
+              const branch = repo?.defaultBranch ?? 'main';
+              if (state && repo && !repo.git.refs.has(`refs/heads/${branch}`)) {
+                state.addBranch(repo, branch, { 'README.md': 'pushed' });
+              }
+              return connection.changeRequests?.upsert(ref, req) as never;
+            },
+          },
+        };
       }
       const inventory: EndpointConnection['inventory'] = {
         ...connection.inventory,
@@ -667,4 +684,30 @@ describe('findings of a Run and the guards around it', () => {
     });
     expect(open.map((x) => x.code)).toContain('access-control.unmapped-principal');
   }, 240_000);
+});
+
+describe('Change Requests (LIF-047)', () => {
+  it('[LIF-047] pipelines reach the target as a Change Request from git-migrator/ci, and the branch is a framework Expected Difference', async () => {
+    const m = await migrationOf('data/pipelines-simple');
+    await analyze(m.id);
+    const { runId, result } = await perform(m.id);
+    const failed = await t.db.privileged.runStep.findMany({ where: { runId, status: 'failed' } });
+    expect(failed.map((f) => `${f.stepKey} ${JSON.stringify(f.error)}`)).toEqual([]);
+    expect(result).toEqual({ outcome: 'finished', status: 'succeeded' });
+    expect((await stepStatuses(runId))['change-requests.open']).toBe('succeeded');
+    const state = fakes.github?.state;
+    const repo = state?.findRepo(ORG, 'data-pipelines-simple');
+    expect(repo?.pulls).toHaveLength(1);
+    expect(repo?.git.refs.has('refs/heads/git-migrator/ci')).toBe(true);
+    const framework = await t.db.privileged.expectedDifference.findMany({
+      where: { migrationId: m.id, reason: 'framework_mutation' },
+    });
+    expect(framework.map((e) => `${e.facetKey} ${e.path}`)).toContain(
+      'git-refs /refs[name=refs/heads/git-migrator/ci]',
+    );
+    const ledger = await t.db.privileged.mutation.findMany({
+      where: { runId, facetKey: 'change-requests' },
+    });
+    expect(ledger.length).toBeGreaterThan(0);
+  }, 300_000);
 });

@@ -34,6 +34,13 @@ export const FINDING_SPECS = [
     ref: 'FAC-GIT-004',
   },
   {
+    code: 'git-refs.push-too-large',
+    facet: 'git-refs',
+    severity: 'blocker',
+    verifiable: false,
+    ref: 'LIF-042',
+  },
+  {
     code: 'git-refs.blob-large',
     facet: 'git-refs',
     severity: 'warning',
@@ -112,6 +119,13 @@ export const FINDING_SPECS = [
     facet: 'branch-rules',
     severity: 'post',
     verifiable: true,
+    ref: 'FAC-BRR-002',
+  },
+  {
+    code: 'branch-rules.exemptions-not-applied',
+    facet: 'branch-rules',
+    severity: 'post',
+    verifiable: false,
     ref: 'FAC-BRR-002',
   },
   {

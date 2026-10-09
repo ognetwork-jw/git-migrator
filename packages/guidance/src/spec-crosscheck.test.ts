@@ -80,7 +80,12 @@ const KNOWN_POLICY_KEYS: readonly string[] = [
  * Codes that implementors added where the spec is silent (PROC-005). They are in `codes.ts` and have
  * guidance, but the spec does not name them yet. Each one is recorded in an agent-decided ADR.
  */
-const AGENT_DECIDED_CODES: Readonly<Record<string, string>> = {};
+const AGENT_DECIDED_CODES: Readonly<Record<string, string>> = {
+  // Named in the lifecycle spec (LIF-042, LIF-049), not in 05-facets.md (ADR-0380).
+  'git-refs.push-too-large': 'run-origin blocker of LIF-042',
+  // The run-time observation behind the policy key of the same prefix (ADR-0040, ADR-0380).
+  'branch-rules.exemptions-not-applied': 'run-origin post task for a refused bypass list',
+};
 
 /**
  * Policy keys decided by an implementor (agent-decided ADR) and not yet folded into the spec. They

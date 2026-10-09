@@ -17,8 +17,6 @@ import {
 } from './services.ts';
 import { loadRunWorld, type RunWorld, repositoryTarget, targetOf } from './world.ts';
 
-const write = { side: 'target', origin: 'desired' } as const;
-
 type Json = Record<string, unknown>;
 
 /** Passes records through while keeping them for the hooks below. */
@@ -102,7 +100,7 @@ function patternOf(record: MutationRecord): string | undefined {
 }
 
 /** Hooks: findings that only the write itself reveals. */
-async function afterApply(
+export async function afterApply(
   ctx: MigrationContext,
   world: RunWorld,
   facetKey: string,
