@@ -203,7 +203,7 @@ export function IdentityMappingView() {
                     {t('action.exclude')}
                   </Button>
                 ) : null}
-                {m.status !== 'unmapped' ? (
+                {m.status !== 'unmapped' && m.status !== 'pending_invite' ? (
                   <Button
                     size="small"
                     onClick={() => decide.mutate({ mapping: m, action: 'unmap' })}

@@ -15,6 +15,10 @@ Status: the API is mounted (T-021) and the UI shell exists (T-080). `pnpm dev` r
 - Build: `pnpm --filter @git-migrator/web build` (`tsc -b && next build`, standalone output). `pnpm --filter @git-migrator/web start` runs `.next/standalone` (ADR-0301).
 - Visual regression: `pnpm test:visual` (Playwright in `testing/e2e/visual`, mocked API). Update baselines with `pnpm --filter @git-migrator/e2e exec playwright test --config visual/playwright.config.ts --update-snapshots` after a build.
 
+## Invitation batches (UI-029, T-085)
+
+`/people/invitations` (`src/invitations/invitations-view.tsx`) lists the batches of a Route and drafts a new one from candidates (all, or the people picked). `/people/invitations/[batchId]` (`batch-view.tsx`) shows the seat preview ("unknown" until the worker has read it), the entries with select and deselect (a reason is required), the approve button with a confirmation of the final count, the send status of each entry after approval, revoke for sent invitations, and the possible invitees to confirm. Both pages are gated on the server with `authorizePage` (`manageInvitations`, operator), follow `list:invitations` and `invitation:<id>` through `useLiveInvalidation`, and take every string from `messages/en.json` (`invitations`).
+
 ## Production entrypoint (DEP-002, ADR-0290)
 
 `src/web.ts` is what the image runs as `web` (`/app/dist/web.js`). Until the Next.js app lands it serves the Hono API (`/api/healthz`, `/api/readyz`, `/api/v1`, `/api/auth`) with `@hono/node-server` on port 3000 (`PORT`, `HOST`), starts the metrics server on `metrics.port` and tracing, and on SIGTERM stops accepting connections, finishes in-flight requests, cuts streams still open after 20 s and exits 0. T-080 swaps the server for the Next.js standalone one.

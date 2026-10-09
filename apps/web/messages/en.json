@@ -175,7 +175,8 @@
     "internal_error": "Something went wrong on our side. Try again, or contact an administrator if it keeps happening.",
     "bad_request": "The request could not be understood. Reload the page and try again.",
     "unsupported_media_type": "The request was sent in a format the service does not accept.",
-    "last_admin": "This change would leave the system without an enabled administrator. Make another account an administrator first."
+    "last_admin": "This change would leave the system without an enabled administrator. Make another account an administrator first.",
+    "revoke_first": "An invitation is pending for this person. Revoke it in its invitation batch first."
   },
   "mapping": {
     "route": "Route",
@@ -293,7 +294,8 @@
         "duplicate_source": "This source appears more than once.",
         "target_taken": "This target is already mapped to another source.",
         "email_conflict": "The source already has a different email from its provider.",
-        "already_decided": "This identity is already confirmed or excluded. Unmap it first."
+        "already_decided": "This identity is already confirmed or excluded. Unmap it first.",
+        "invite_pending": "An invitation is pending for this person. Revoke it in its invitation batch first."
       }
     },
     "groups": {
@@ -878,5 +880,114 @@
     },
     "editLabel": "Edit {name}",
     "deleteLabel": "Delete {name}"
+  },
+  "invitations": {
+    "noRoutes": "There are no Routes yet. Invitation batches appear once a Route is configured and its endpoints have been inventoried.",
+    "empty": "No invitation batches yet.",
+    "loadMore": "Load more",
+    "back": "Back to all batches",
+    "batchTitle": "Invitation batch",
+    "batchLabel": "Batch of {when}",
+    "safety": "Nobody is invited unless an operator approves a batch. Approving sends the selected invitations to the target organization, and they cannot be taken back in bulk.",
+    "counts": "{selected} selected, {sent} sent, {accepted} accepted, {failed} failed or expired, {deselected} left out",
+    "approvedBy": "{when} by {who}",
+    "notApproved": "Not approved",
+    "nextAttempt": "Next attempt",
+    "rateLimited": "The provider limited the number of invitations. The remaining entries stay selected and are sent automatically after the wait.",
+    "draftHelp": "This batch is a draft. Review the entries, leave out anyone who should not be invited (a reason is required), then approve it.",
+    "approvedHelp": "This batch is approved. Its entries can no longer change; the status of each invitation is shown below.",
+    "reasonLabel": "Reason: {reason}",
+    "errorLabel": "Problem: {error}",
+    "sentAt": "Sent {when}",
+    "noEntries": "No entries match.",
+    "filter": {
+      "status": "Filter batches by status",
+      "itemStatus": "Filter entries by status",
+      "allStatuses": "All statuses"
+    },
+    "batchStatus": {
+      "draft": "Draft",
+      "approved": "Approved",
+      "sending": "Sending",
+      "sent": "Sent",
+      "partial": "Partly sent"
+    },
+    "itemStatus": {
+      "selected": "Selected",
+      "deselected": "Left out",
+      "sent": "Invitation sent",
+      "accepted": "Accepted",
+      "failed": "Failed",
+      "expired": "Expired",
+      "unknown": "Outcome unknown"
+    },
+    "column": {
+      "batch": "Batch",
+      "status": "Status",
+      "entries": "Entries",
+      "seats": "Seats",
+      "createdBy": "Created by",
+      "approved": "Approved",
+      "route": "Route",
+      "person": "Person",
+      "teams": "Teams",
+      "sendStatus": "Invitation",
+      "maybeInvitee": "Possible invitee",
+      "actions": "Actions"
+    },
+    "seats": {
+      "unknown": "{toInvite, plural, one {# invitation} other {# invitations}}; seats unknown",
+      "known": "{toInvite, plural, one {# invitation} other {# invitations}}; {filled} seats used{limited, select, yes { of {total}} other {}}, {projected} after sending{limited, select, yes { of {total}} other {}}"
+    },
+    "action": {
+      "select": "Include again",
+      "deselect": "Leave out",
+      "revoke": "Revoke invitation",
+      "wasInvited": "It was invited",
+      "wasNotInvited": "It was not invited"
+    },
+    "suggestion": {
+      "confirm": "This is {name}"
+    },
+    "new": {
+      "open": "New batch",
+      "title": "New invitation batch",
+      "close": "Close the new batch panel",
+      "help": "Pick the people to invite, or draft a batch from everyone listed. A draft sends nothing: you review and approve it on the next page.",
+      "search": "Search candidates",
+      "searchPlaceholder": "Search by name, login or email",
+      "none": "There are no candidates: everyone with a known email is mapped, excluded, invited or in another open batch.",
+      "loadMore": "Load more",
+      "createPicked": "{count, plural, =0 {Draft a batch from the selection} one {Draft a batch of # person} other {Draft a batch of # people}}",
+      "createAll": "Draft a batch of everyone listed",
+      "column": {
+        "person": "Person",
+        "email": "Email",
+        "teams": "Teams to join"
+      }
+    },
+    "deselect": {
+      "title": "Leave out of the batch",
+      "body": "{name} will not be invited and will not count against parity. A reason is required.",
+      "reason": "Reason",
+      "reasonPlaceholder": "Why is this person left out?",
+      "submit": "Leave out",
+      "cancel": "Cancel"
+    },
+    "approve": {
+      "open": "Approve batch",
+      "title": "Approve and send invitations",
+      "body": "{count, plural, one {# invitation will be sent to the target organization.} other {# invitations will be sent to the target organization.}} This cannot be undone in bulk, and the entries can no longer change.",
+      "submit": "{count, plural, one {Approve and send #} other {Approve and send #}}",
+      "cancel": "Cancel"
+    },
+    "revoke": {
+      "title": "Revoke the invitation",
+      "body": "The invitation to {name} is withdrawn and they become a candidate again.",
+      "unlocated": "No invitation is recorded for this entry. It is looked up by e-mail address; if it cannot be found in the target organization, the person and the address are released and can be invited again.",
+      "submit": "Revoke",
+      "cancel": "Keep"
+    },
+    "unknownHelp": "An entry with an unknown outcome may or may not have been invited. The person and the address stay held until you check the target organization and say which it was."
   }
 }
