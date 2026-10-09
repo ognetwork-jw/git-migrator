@@ -154,5 +154,15 @@
 | [0341](0341-run-step-state-machine.md) | Step statuses, severity per Step, retries across resumes, rate limits are not attempts | agent-decided |
 | [0342](0342-mutation-ledger.md) | Ledger writes, origin of a record, Expected Difference derivation, undo order, adopted and no-op records | agent-decided |
 | [0343](0343-run-guard-and-findings.md) | Run guard (DOM-010, LIF-005), run-origin findings, queued and orphaned Runs | agent-decided |
+| [0360](0360-config-pages-rpc-client.md) | Configuration and admin pages read and write through the ZenStack RPC mount | agent-decided |
+| [0361](0361-route-default-read-only.md) | The Route default naming pipeline is shown, not edited, on the naming page | agent-decided |
+| [0362](0362-overlay-document-validation.md) | Overlay writes go through validated `/api/v1/overlays` endpoints, not RPC | agent-decided |
+| [0363](0363-naming-save-gate.md) | Saving a naming rule waits for a preview; collisions block it unless confirmed | agent-decided |
+| [0364](0364-override-rule-placeholder-pipeline.md) | An override NamingRule stores an empty placeholder pipeline | agent-decided |
+| [0365](0365-api-key-shown-once.md) | An issued API key lives only in the one-time dialog's state | agent-decided |
+| [0366](0366-webhook-tester-in-browser.md) | The webhook pattern tester runs in the browser with the facets matcher | agent-decided |
+| [0367](0367-capability-matrix-page.md) | The capability matrix page pivots the matrix and reads the lossy policies from Route.policies | agent-decided |
+| [0368](0368-audit-log-pagination.md) | Audit log paging and date bounds | agent-decided |
+| [0369](0369-actor-administration-surface.md) | What the Actors page offers: creation, disable and enable, keys; no role change in the UI | agent-decided |
 
 New ADRs continue from 0028. Implementor decisions use `status: agent-decided` (PROC-005). T-002 uses 0065–0069.
