@@ -311,6 +311,56 @@ describe('[DATA-030] step 5: config sync', () => {
     ).toBeNull();
   });
 
+  it.each([
+    ['policies', { policies: { acceptLossy: ['branch-rules.advisory-enforced'] } }],
+    ['defaults', { defaults: { mergeSettings: { deleteBranchOnMerge: false } } }],
+  ])(
+    '[LIF-011] a change to only the Route %s marks its analysed Migrations stale',
+    async (_field, over) => {
+      const p = s.db.privileged;
+      const m = await p.migration.findFirstOrThrow({ where: { routeId: 'sync-route' } });
+      const analysis = await p.analysis.create({
+        data: {
+          migrationId: m.id,
+          sourceSnapshotIds: [],
+          targetSnapshotIds: [],
+          readiness: 'ready',
+          translation: {},
+        },
+      });
+      const future = new Date(Date.now() + 7 * 86_400_000);
+      await p.migration.update({
+        where: { id: m.id },
+        data: { latestAnalysisId: analysis.id, analysisStaleAt: future },
+      });
+      const before = await p.route.findUniqueOrThrow({ where: { id: 'sync-route' } });
+      const changed = route('sync-route', {
+        targetNamespacePath: before.targetNamespacePath,
+        ...over,
+      });
+      expect(changed.configHash).not.toBe(before.configHash);
+
+      try {
+        const result = await syncConfig(p, snapshot({ routes: [changed] }));
+        expect(result.routes.updated).toBe(1);
+        expect(result.staleMigrations).toBeGreaterThan(0);
+        const after = await p.migration.findUniqueOrThrow({ where: { id: m.id } });
+        expect((after.analysisStaleAt as Date).getTime()).toBeLessThanOrEqual(Date.now());
+        expect((await p.route.findUniqueOrThrow({ where: { id: 'sync-route' } })).configHash).toBe(
+          changed.configHash,
+        );
+      } finally {
+        // Restore the original so the following tests see the baseline Route.
+        await syncConfig(
+          p,
+          snapshot({
+            routes: [route('sync-route', { targetNamespacePath: before.targetNamespacePath })],
+          }),
+        );
+      }
+    },
+  );
+
   it('[DATA-030] marks Endpoints and Routes missing from config retired, and revives them when they return', async () => {
     const p = s.db.privileged;
     const gone = await syncConfig(p, { endpoints: [endpoint('sync-src')], routes: [] });

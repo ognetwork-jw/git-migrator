@@ -93,6 +93,32 @@ describe('migrate entrypoint (DATA-030)', () => {
     expect(changed.routes[0]?.configHash).not.toBe(snapshot.routes[0]?.configHash);
   });
 
+  it('[LIF-011] a change to only a Route policies or only its defaults changes the Route configHash', () => {
+    const base = toConfigSnapshot(resolveConfig({ text: YAML, env: {} })).routes[0]?.configHash;
+    const withPolicies = toConfigSnapshot(
+      resolveConfig({
+        text: YAML.replace(
+          'targetNamespace: acme-org',
+          'targetNamespace: acme-org\n    policies: { webhookAllowlistEnabled: false }',
+        ),
+        env: {},
+      }),
+    ).routes[0];
+    const withDefaults = toConfigSnapshot(
+      resolveConfig({
+        text: YAML.replace(
+          'targetNamespace: acme-org',
+          'targetNamespace: acme-org\n    defaults: { mergeSettings: { deleteBranchOnMerge: false } }',
+        ),
+        env: {},
+      }),
+    ).routes[0];
+    expect(withPolicies?.targetNamespacePath).toBe('acme-org');
+    expect(withPolicies?.configHash).not.toBe(base);
+    expect(withDefaults?.configHash).not.toBe(base);
+    expect(withDefaults?.configHash).not.toBe(withPolicies?.configHash);
+  });
+
   it('[DATA-030] runs steps 1, 2 and 5 and can run again', async () => {
     const first = await runMigrate(configFor(t), envFor(t));
     expect(first.endpoints.created).toBe(2);
