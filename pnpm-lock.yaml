@@ -702,6 +702,9 @@ importers:
       '@git-migrator/adapter-sdk':
         specifier: workspace:*
         version: link:../../packages/adapter-sdk
+      '@git-migrator/api':
+        specifier: workspace:*
+        version: link:../../packages/api
       '@git-migrator/canonical':
         specifier: workspace:*
         version: link:../../packages/canonical

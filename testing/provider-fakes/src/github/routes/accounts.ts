@@ -220,8 +220,9 @@ export function registerAccounts(r: Router, state: GitHubState, limiter: RateLim
 
   r.get('/orgs/:org/failed_invitations', ['members', 'read'], (q) => {
     const org = orgFor(q, q.param('org'));
+    state.purgeExpired(org);
     return q.page(
-      org.invitations.filter((i) => i.failedAt != null),
+      [...org.invitations.filter((i) => i.failedAt != null), ...org.expiredInvitations],
       (i) => q.ser.orgInvitation(org, i),
     );
   });

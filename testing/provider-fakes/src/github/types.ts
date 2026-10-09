@@ -110,6 +110,8 @@ export interface OrgRec {
   customRoles: Record<string, Role>;
   members: Map<string, 'admin' | 'member'>;
   invitations: InvitationRec[];
+  /** Invitations that ran out (7 days): GitHub lists them as failed, no longer as pending. */
+  expiredInvitations: InvitationRec[];
   /** Creation times of every invitation sent, for the 24 h limit (cancelled ones still count). */
   invitationLog: number[];
   teams: TeamRec[];

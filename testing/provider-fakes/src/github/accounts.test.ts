@@ -175,6 +175,24 @@ describe('members and invitations', () => {
     );
   });
 
+  it('[TST-011] an invitation that ran out is listed as failed, not as pending', async () => {
+    let now = Date.parse('2026-10-08T00:00:00Z');
+    const w = world({ clock: () => now });
+    const sent = await w.call('POST', '/orgs/acme/invitations', {
+      body: { email: 'late@test.local' },
+    });
+    now += 7 * 24 * 3600 * 1000 + 1000;
+    const token = { token: w.fake.token() };
+    expect((await w.call('GET', '/orgs/acme/invitations', token)).body).toEqual([]);
+    const failed = (await w.call('GET', '/orgs/acme/failed_invitations', token)).body;
+    expect(failed).toHaveLength(1);
+    expect(failed[0]).toMatchObject({
+      id: sent.body.id,
+      email: 'late@test.local',
+      failed_reason: 'Invitation expired',
+    });
+  });
+
   it('[TST-011] invitation validation: existing member, duplicates, missing invitee', async () => {
     const w = world();
     const bob = w.fake.state.findUser('bob')?.id;

@@ -192,6 +192,7 @@ export class GitHubState {
       customRoles: input.customRoles ?? {},
       members: new Map(),
       invitations: [],
+      expiredInvitations: [],
       invitationLog: [],
       teams: [],
       secrets: [],
@@ -326,6 +327,13 @@ export class GitHubState {
 
   purgeExpired(org: OrgRec): void {
     const now = this.clock();
+    for (const lapsed of org.invitations.filter((i) => i.expiresAt <= now)) {
+      org.expiredInvitations.push({
+        ...lapsed,
+        failedAt: lapsed.expiresAt,
+        failedReason: lapsed.failedReason ?? 'Invitation expired',
+      });
+    }
     org.invitations = org.invitations.filter((i) => i.expiresAt > now);
     for (const repo of this.repos.values()) {
       if (repo.owner.toLowerCase() !== org.login.toLowerCase()) continue;
