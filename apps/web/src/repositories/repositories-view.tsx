@@ -287,11 +287,15 @@ export function RepositoriesView({
         render: (_: unknown, row) => {
           const run = row.runs[0];
           if (run === undefined) return t('never');
-          return t('lastRun', {
-            kind: tRun.has(run.kind) ? tRun(run.kind) : run.kind,
-            status: tRunStatus.has(run.status) ? tRunStatus(run.status) : run.status,
-            when: formatDateTime(run.finishedAt ?? run.createdAt),
-          });
+          return (
+            <Link href={`/runs/${encodeURIComponent(run.id)}`}>
+              {t('lastRun', {
+                kind: tRun.has(run.kind) ? tRun(run.kind) : run.kind,
+                status: tRunStatus.has(run.status) ? tRunStatus(run.status) : run.status,
+                when: formatDateTime(run.finishedAt ?? run.createdAt),
+              })}
+            </Link>
+          );
         },
       },
       ...(operator

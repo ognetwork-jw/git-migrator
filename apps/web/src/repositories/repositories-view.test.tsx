@@ -165,6 +165,35 @@ describe('[UI-021] repositories list', () => {
     expect(within(first).getByText(/2026/)).toBeTruthy();
   });
 
+  it('[UI-022] [UI-023] a row links to its detail page and its last Run links to the Run page', async () => {
+    source = [
+      row(1, {
+        runs: [
+          {
+            id: 'run9',
+            kind: 'migrate',
+            status: 'succeeded',
+            createdAt: '2026-10-02T10:00:00.000Z',
+            finishedAt: '2026-10-02T10:05:00.000Z',
+          },
+        ],
+      }),
+    ];
+    mockApi();
+    renderView();
+    const first = rowOf(
+      await screen.findByText('acme/plat/repo-1').then((e) => e.textContent ?? ''),
+    );
+    expect(within(first).getByRole('link', { name: 'acme/plat/repo-1' }).getAttribute('href')).toBe(
+      '/repositories/m1',
+    );
+    expect(
+      within(first)
+        .getByRole('link', { name: /Migrate/ })
+        .getAttribute('href'),
+    ).toBe('/runs/run9');
+  });
+
   it('[UI-021] paging asks the server for the next page', async () => {
     mockApi();
     renderView();
