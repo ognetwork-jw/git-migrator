@@ -59,72 +59,11 @@ export function normalizeWebhooks(data: Webhooks): Webhooks {
   return { hooks: data.hooks.map((h) => ({ ...h, events: sortedEvents(h.events) })) };
 }
 
-// -- URL allowlist (FAC-WEB-002) ---------------------------------------------------------------
+// -- URL allowlist (FAC-WEB-002): the matcher lives in ./match.ts ----------------------------
 
-/** Characters that make a raw URL ambiguous between parsers: backslash, whitespace, controls. */
-// biome-ignore lint/suspicious/noControlCharactersInRegex: rejecting control characters is the point
-const AMBIGUOUS_URL = /[\\\s\u0000-\u001f\u007f]/;
+import { matchesAllowlist } from './match.ts';
 
-function parseUrl(value: string): URL | undefined {
-  if (AMBIGUOUS_URL.test(value)) return undefined;
-  try {
-    return new URL(value);
-  } catch {
-    return undefined;
-  }
-}
-
-/** Path glob: `*` stays inside a segment, `**` crosses segments, everything else is literal. */
-function pathGlobToRegExp(glob: string): RegExp {
-  let source = '';
-  for (let i = 0; i < glob.length; i += 1) {
-    const ch = glob.charAt(i);
-    if (ch === '*') {
-      if (glob.charAt(i + 1) === '*') {
-        source += '.*';
-        i += 1;
-      } else {
-        source += '[^/]*';
-      }
-    } else {
-      source += ch.replace(/[.+?^${}()|[\]\\]/g, '\\$&');
-    }
-  }
-  return new RegExp(`^${source}$`, 's');
-}
-
-/** Host glob: a label of `*` matches exactly one label. `**` is not valid in a host. */
-function hostGlobToRegExp(glob: string): RegExp | undefined {
-  if (glob.includes('**')) return undefined;
-  const labels = glob.split('.').map((label) =>
-    label
-      .split('*')
-      .map((part) => part.replace(/[.+?^${}()|[\]\\-]/g, '\\$&'))
-      .join('[^.]+'),
-  );
-  return new RegExp(`^${labels.join('\\.')}$`);
-}
-
-/**
- * Structural match of a hook URL against one allowlist pattern (FAC-WEB-002, ADR-0141). Both are
- * parsed as URLs: the scheme must be equal, the port equal once defaults are removed, the host
- * equal case-insensitively (`*` is one label), and the path must match the glob. The query and the
- * fragment are ignored. A hook URL with a backslash, whitespace or a control character, or one that
- * does not parse, never matches (fail closed).
- */
-export function matchesPattern(url: string, pattern: string): boolean {
-  const target = parseUrl(url);
-  const rule = parseUrl(pattern);
-  if (target === undefined || rule === undefined) return false;
-  if (target.protocol !== rule.protocol || target.port !== rule.port) return false;
-  const host = hostGlobToRegExp(rule.hostname);
-  if (host === undefined || !host.test(target.hostname)) return false;
-  return pathGlobToRegExp(rule.pathname).test(target.pathname);
-}
-
-export function matchesAllowlist(url: string, patterns: readonly string[]): boolean {
-  return patterns.some((p) => matchesPattern(url, p));
-}
+export { matchesAllowlist, matchesPattern, pathGlobMatches } from './match.ts';
 
 /** `ctx.route.webhookAllowlist`: the Route's `WebhookAllowlistEntry` patterns. Malformed throws. */
 export function routeWebhookAllowlist(route: TranslateContext['route']): string[] {
