@@ -1,6 +1,6 @@
 # ADR-0372: The `invitations.batch` job and `InvitationWriter.cancel`
 
-- Status: agent-decided
+- Status: accepted (spec updated)
 - Date: 2026-10-09
 - Task: T-085
 - Affects: JOB-010, JOB-011, JOB-013, ADP-010 (InvitationWriter), AUTH-060

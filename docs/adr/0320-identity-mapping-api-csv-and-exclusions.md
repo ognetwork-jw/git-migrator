@@ -1,6 +1,6 @@
 # ADR-0320: Identity and Group mapping endpoints, CSV rules, exclusions, staleness and events
 
-- Status: agent-decided
+- Status: accepted (spec updated)
 - Date: 2026-10-08
 - Task: T-084
 - Affects: AUTH-050, AUTH-021, AUTH-022, API-020, API-011, UI-027, UI-028, JOB-060, LIF-063

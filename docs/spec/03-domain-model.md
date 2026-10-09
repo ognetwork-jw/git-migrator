@@ -146,6 +146,7 @@ model Migration {
   manualCompletion    Json?               // {actorId, reason, at}
   lastParityAt        DateTime?
   lastDriftCheckAt    DateTime?
+  parityGeneration    BigInt @default(0)  // bumped by every stored Parity Check; a check that started before the last bump stores nothing (LIF-060)
   @@unique([routeId, sourceRepositoryId])
   // plus one endpoint-scope row per route (partial unique index, DATA-011)
 }
@@ -209,13 +210,14 @@ model Run {
   kind        RunKind
   status      RunStatus @default(queued)
   triggeredById String                       // Actor
-  options     Json                           // e.g. {adoptNonEmpty, confirmToken}
+  options     Json                           // LIF-043: {adoptNonEmpty?, skipSourceReadOnly?}, strict; the typed `confirm` is never stored
   startedAt   DateTime?
   finishedAt  DateTime?
   leaseOwner  String?                        // LIF-046
   leaseExpiresAt DateTime?
   reaperResumes Int @default(0)
-  hasMutations Boolean @default(false)
+  hasMutations Boolean @default(false)       // any ledger row that is not `not_applied` (LIF-002, LIF-045)
+  cancelRequestedAt DateTime?                // cooperative cancel of a running Run (LIF-046)
   error       Json?
   steps       RunStep[]
 }
@@ -229,10 +231,14 @@ model RunStep {
   facetKey    String?
   order       Int
   status      StepStatus @default(pending)
-  attempts    Int @default(0)
+  attempts    Int @default(0)                // attempts started, for display
+  delays      Int @default(0)                // times the Run was delayed at this Step (rate limit, scratch); never a failure (LIF-042)
+  failures    Int @default(0)                // attempts that ended in a retryable failure or a worker crash: the retry budget (LIF-042)
+  severity    String?                        // fatal | independent | advisory, as planned when the row was created (LIF-042)
   startedAt   DateTime?
   finishedAt  DateTime?
-  error       Json?                          // AdapterError serialized
+  error       Json?                          // AdapterError serialized: code, scrubbed message, retryable, provider, request; never a stack
+  // a Step row is identified by (runId, stepKey, facetKey) (LIF-040)
 }
 
 model RunLog {
@@ -250,13 +256,18 @@ model Mutation {                              // ledger of framework changes (LI
   migrationId String
   runId       String
   side        String                          // "source" | "target"
-  facetKey    String
+  facetKey    String                          // "framework" for a record without a Facet
   resourceRef Json                            // adapter-defined pointer, enough to undo
   paths       String[]                        // canonical field paths touched (LIF-045)
   action      String                          // create | update | delete
   before      Json?
   after       Json?
   undoneAt    DateTime?
+  seq         BigInt @unique @default(autoincrement())  // recording order; undo runs newest first. JSON carries it as a decimal string
+  state       String @default("recorded")    // intended | recorded | not_applied (LIF-045)
+  writtenByStep String?                       // the RunStep that wrote it, so a resumed Step finds its open intents
+  origin      String @default("desired")     // desired | framework (LIF-045)
+  derivedDifferences Json @default("[]")      // [{facetKey, path}] of the Expected Differences this record caused
 }
 
 enum TaskStatus { open done dismissed }
@@ -292,8 +303,11 @@ model ExpectedDifference {
   reason      ExpectedDifferenceReason
   note        String?
   createdById String?                         // null when created by the system
+  identityMappingId String?                   // the mapping whose exclusion created it (identity_excluded, AUTH-050)
+  invitationId String?                        // the Invitation whose deselection created it (AUTH-060 step 3)
   createdAt   DateTime @default(now())
   revokedAt   DateTime?
+  // plus a partial unique index on (migrationId, facetKey, path) for active framework_mutation rows (LIF-045)
 }
 
 model ParityResult {
@@ -301,9 +315,10 @@ model ParityResult {
   migrationId String
   facetKey    String
   status      String                          // equal | different | unverifiable
-  diffs       Json                            // [{path, source, target}], after exclusions
-  excluded    Json                            // [{path, expectedDifferenceId}]
-  checkedAt   DateTime
+  diffs       Json                            // [{path, source, target}] after exclusions; source = desired, target = actual; at most 1,000
+  excluded    Json                            // [{path, expectedDifferenceId, reason}]; at most 1,000, then {reason: "truncated", total}
+  checkedAt   DateTime                        // start of the check, database clock
+  // one row per (migrationId, facetKey), updated in place (LIF-060, DATA-020)
 }
 
 model Identity {
@@ -355,7 +370,7 @@ model GroupMapping {
 }
 
 enum InvitationBatchStatus { draft approved sending sent partial }
-enum InvitationStatus { selected deselected sent accepted failed expired }
+enum InvitationStatus { selected deselected sent accepted failed expired unknown }
 
 model InvitationBatch {
   id            String @id @default(uuid(7))
@@ -365,6 +380,7 @@ model InvitationBatch {
   createdById   String
   approvedById  String?
   approvedAt    DateTime?
+  nextAttemptAt DateTime?                    // earliest retry after a provider rate limit or cap (AUTH-060 step 4)
   items         Invitation[]
 }
 
@@ -376,7 +392,17 @@ model Invitation {
   teamSlugs        String[]
   status           InvitationStatus @default(selected)
   providerInvitationId String?
-  error            String?
+  error            String?                    // adapter code or a system code, never provider text
+  deselectReason   String?                    // AUTH-060 step 3
+  sendStartedAt    DateTime?                  // stamped by the first send claim and kept; a retry that finds it looks the invitation up (AUTH-061)
+  sentAt           DateTime?
+  inviteeLogin     String?                    // when the provider reports it on the pending invitation (AUTH-060 step 5)
+  routeId          String                     // set by the guard trigger from the batch
+  targetEndpointId String                     // the target organization, set by the guard trigger when the entry is created, then frozen
+  emailNormalised  String                     // trimmed, ASCII lower-cased email, set by the guard trigger
+  @@unique([batchId, sourceIdentityId])
+  // plus partial unique indexes on (targetEndpointId, sourceIdentityId) and (targetEndpointId, emailNormalised)
+  // WHERE status NOT IN ('deselected','failed','expired','accepted') (AUTH-061)
 }
 
 model Wave {
@@ -391,7 +417,7 @@ model NamingRule {                            // LIF-030
   routeId   String
   scope     String                            // namespace | repository (the route default lives in config only)
   scopeRef  String                            // Namespace.id or Repository.id
-  pipeline  Json                              // NamingPipeline type
+  pipeline  Json                              // NamingPipeline type; an override rule stores the placeholder {steps: [], template: ""}
   override  String?                           // literal target name (repository scope)
   @@unique([routeId, scope, scopeRef])
 }
@@ -407,7 +433,7 @@ model Overlay {
   id       String @id @default(uuid(7))
   routeId  String
   facetKey String
-  data     Json                               // partial canonical document for the facet
+  data     Json                               // partial canonical document for the facet; written only through /api/v1/overlays (API-012)
   enabled  Boolean @default(true)
 }
 
@@ -453,7 +479,7 @@ Relations (FKs) are implied by `…Id` fields and MUST be declared with ZenStack
 
 ## Invariants
 
-- **DOM-010** At most one Run per Migration is `queued` or `running`. This is enforced by a partial unique index on `run(migration_id) WHERE status IN ('queued','running')`.
+- **DOM-010** At most one Run per Migration is `queued` or `running`. This is enforced by a partial unique index on `run(migration_id) WHERE status IN ('queued','running')`. Runs are admitted by one guard function (`createRun`) that locks the Migration row and refuses an active Run (409 `run_active`). A violation of the index by any other writer maps to the same refusal. There is no per-Route or per-Endpoint limit on concurrent Runs beyond DOM-010 and DOM-014: worker configuration bounds concurrency (JOB-012) and the quota service bounds provider load.
 - **DOM-011** `Migration.readiness`, `status`, `blockerCodes`, `readinessCounts` and lifecycle timestamps are written only by the server's privileged client. ZenStack policies deny client updates to these fields (API-012).
 - **DOM-012** Snapshots and Analyses are immutable once written. `Analysis.readiness` is the readiness *at analysis time*. The live value is `Migration.readiness` (LIF-004).
 - **DOM-013** Deleting a Wave unsets `waveId` on its Migrations.

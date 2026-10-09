@@ -1,6 +1,6 @@
 # ADR-0407: Wave membership: capability, no staleness, CRUD through the Model API, priority already in the feeder
 
-- Status: agent-decided
+- Status: accepted (spec updated)
 - Date: 2026-10-09
 - Task: T-088
 - Affects: LIF-090, JOB-022, UI-024, AUTH-020, DOM-013

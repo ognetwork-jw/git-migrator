@@ -1,6 +1,6 @@
 # ADR-0340: Run executor framework
 
-- Status: agent-decided
+- Status: accepted (spec updated)
 - Date: 2026-10-09
 - Task: T-070
 - Affects: LIF-002, LIF-022, LIF-040, LIF-042, LIF-046, DOM-010, JOB-010, JOB-044, JOB-060

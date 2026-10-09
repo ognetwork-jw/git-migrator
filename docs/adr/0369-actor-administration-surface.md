@@ -1,6 +1,6 @@
 # ADR-0369: What the Actors page offers: service Actor creation, disable and enable, keys; no role change in the UI
 
-- Status: agent-decided
+- Status: accepted (spec updated)
 - Date: 2026-10-09
 - Task: T-091
 - Affects: UI-034, API-020, AUTH-020, AUTH-040

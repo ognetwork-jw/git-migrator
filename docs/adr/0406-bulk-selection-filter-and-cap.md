@@ -1,6 +1,6 @@
 # ADR-0406: Bulk selection: explicit ids or a saved filter, 200 at most, a 422 above it
 
-- Status: agent-decided
+- Status: accepted (spec updated)
 - Date: 2026-10-09
 - Task: T-088
 - Affects: LIF-090, API-020, UI-021

@@ -1,6 +1,6 @@
 # ADR-0364: An override NamingRule stores an empty placeholder pipeline
 
-- Status: agent-decided
+- Status: accepted (spec updated)
 - Date: 2026-10-09
 - Task: T-091
 - Affects: LIF-030, DOM-003, UI-030

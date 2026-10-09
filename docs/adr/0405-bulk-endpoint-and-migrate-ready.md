@@ -1,6 +1,6 @@
 # ADR-0405: `POST /migrations/bulk` lives in packages/api and creates Runs through `createRun`
 
-- Status: agent-decided
+- Status: accepted (spec updated)
 - Date: 2026-10-09
 - Task: T-088
 - Affects: LIF-090, API-020, LIF-005, DOM-010, UI-021

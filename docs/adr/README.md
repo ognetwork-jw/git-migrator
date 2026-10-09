@@ -145,38 +145,38 @@
 | [0311](0311-analysis-route-index.md) | What the Analysis puts into the translate context (pipelines text, key usage, endpoint index) | accepted (spec updated) |
 | [0312](0312-analysis-feeder.md) | Analysis feeder: capacity, backlog, priority, endpoint Migrations | accepted (spec updated) |
 | [0313](0313-fixture-table-and-implementation.md) | Where the T-043 table and the implementation disagreed | accepted (spec updated) |
-| [0330](0330-command-endpoints-and-services.md) | Command endpoints (inventory refresh, analyze) and the services `createApiApp` receives | agent-decided |
-| [0331](0331-diff-and-naming-preview.md) | The diff view and its redaction, the naming preview | agent-decided |
-| [0332](0332-dashboard-and-quota-views.md) | Dashboard and quota views, backlog and ETA | agent-decided |
-| [0320](0320-identity-mapping-api-csv-and-exclusions.md) | Identity and Group mapping endpoints, CSV rules, exclusions, staleness and events | agent-decided |
-| [0321](0321-server-side-page-authorization.md) | Server-side capability check for data pages | agent-decided |
-| [0340](0340-run-executor-framework.md) | Run executor: registration API, queued start, lease fence, lock order, delay and hand-off, cancel, ending a Run, inline Analysis failures | agent-decided |
-| [0341](0341-run-step-state-machine.md) | Step statuses, severity per Step, retries across resumes, rate limits are not attempts | agent-decided |
-| [0342](0342-mutation-ledger.md) | Ledger writes, origin of a record, Expected Difference derivation, undo order, adopted and no-op records | agent-decided |
-| [0343](0343-run-guard-and-findings.md) | Run guard (DOM-010, LIF-005), run-origin findings, queued and orphaned Runs | agent-decided |
-| [0350](0350-dashboard-and-repositories-ui.md) | Dashboard and repositories list: Model API reads, Facet badges, selection, shared live connection | agent-decided |
-| [0360](0360-config-pages-rpc-client.md) | Configuration and admin pages read and write through the ZenStack RPC mount | agent-decided |
-| [0361](0361-route-default-read-only.md) | The Route default naming pipeline is shown, not edited, on the naming page | agent-decided |
-| [0362](0362-overlay-document-validation.md) | Overlay writes go through validated `/api/v1/overlays` endpoints, not RPC | agent-decided |
-| [0363](0363-naming-save-gate.md) | Saving a naming rule waits for a preview; collisions block it unless confirmed | agent-decided |
-| [0364](0364-override-rule-placeholder-pipeline.md) | An override NamingRule stores an empty placeholder pipeline | agent-decided |
-| [0365](0365-api-key-shown-once.md) | An issued API key lives only in the one-time dialog's state | agent-decided |
-| [0366](0366-webhook-tester-in-browser.md) | The webhook pattern tester runs in the browser with the facets matcher | agent-decided |
-| [0367](0367-capability-matrix-page.md) | The capability matrix page pivots the matrix and reads the lossy policies from Route.policies | agent-decided |
-| [0368](0368-audit-log-pagination.md) | Audit log paging and date bounds | agent-decided |
-| [0369](0369-actor-administration-surface.md) | What the Actors page offers: creation, disable and enable, keys; no role change in the UI | agent-decided |
-| [0370](0370-invitation-batches.md) | Invitation batches: lifecycle, the AUTH-061 guarantee, endpoints and staleness | agent-decided |
-| [0371](0371-invitation-correlation.md) | Acceptance correlation and expiry at inventory | agent-decided |
-| [0372](0372-invitation-job-and-adapter-cancel.md) | The `invitations.batch` job and `InvitationWriter.cancel` | agent-decided |
-| [0380](0380-migration-steps.md) | Migration Steps 1 to 12: planner, scratch, adoption and force-adopt readiness, Change Requests, Overlays, run-time findings | agent-decided |
-| [0395](0395-parity-result-storage.md) | ParityResult storage: one row per Facet updated in place, diff shape, redaction at write | agent-decided |
-| [0396](0396-parity-engine-and-verified-status.md) | Parity Check, verifiable tasks completed by the system, `verified` through the lifecycle table at the end of a Run, parity outside a Run | agent-decided |
-| [0397](0397-parity-git-checks.md) | LFS parity through a mirror and the batch API, post-cutover containment applied to every check | agent-decided |
-| [0405](0405-bulk-endpoint-and-migrate-ready.md) | `POST /migrations/bulk` lives in packages/api and creates Runs through `createRun` | agent-decided |
-| [0406](0406-bulk-selection-filter-and-cap.md) | Bulk selection: explicit ids or a saved filter, 200 at most, a 422 above it | agent-decided |
-| [0407](0407-waves-membership-and-feeder-priority.md) | Wave membership: capability, no staleness, CRUD through the Model API, priority already in the feeder | agent-decided |
-| [0415](0415-run-and-task-endpoints.md) | Run, cancel, complete, task and Expected Difference endpoints: one Run creation path, problem codes, task states, parity triggers | agent-decided |
+| [0330](0330-command-endpoints-and-services.md) | Command endpoints (inventory refresh, analyze) and the services `createApiApp` receives | accepted (spec updated) |
+| [0331](0331-diff-and-naming-preview.md) | The diff view and its redaction, the naming preview | accepted (spec updated) |
+| [0332](0332-dashboard-and-quota-views.md) | Dashboard and quota views, backlog and ETA | accepted (spec updated) |
+| [0320](0320-identity-mapping-api-csv-and-exclusions.md) | Identity and Group mapping endpoints, CSV rules, exclusions, staleness and events | accepted (spec updated) |
+| [0321](0321-server-side-page-authorization.md) | Server-side capability check for data pages | accepted (spec updated) |
+| [0340](0340-run-executor-framework.md) | Run executor: registration API, queued start, lease fence, lock order, delay and hand-off, cancel, ending a Run, inline Analysis failures | accepted (spec updated) |
+| [0341](0341-run-step-state-machine.md) | Step statuses, severity per Step, retries across resumes, rate limits are not attempts | accepted (spec updated) |
+| [0342](0342-mutation-ledger.md) | Ledger writes, origin of a record, Expected Difference derivation, undo order, adopted and no-op records | accepted (spec updated) |
+| [0343](0343-run-guard-and-findings.md) | Run guard (DOM-010, LIF-005), run-origin findings, queued and orphaned Runs | accepted (spec updated) |
+| [0350](0350-dashboard-and-repositories-ui.md) | Dashboard and repositories list: Model API reads, Facet badges, selection, shared live connection | accepted (spec updated) |
+| [0360](0360-config-pages-rpc-client.md) | Configuration and admin pages read and write through the ZenStack RPC mount | accepted (spec updated) |
+| [0361](0361-route-default-read-only.md) | The Route default naming pipeline is shown, not edited, on the naming page | accepted (spec updated) |
+| [0362](0362-overlay-document-validation.md) | Overlay writes go through validated `/api/v1/overlays` endpoints, not RPC | accepted (spec updated) |
+| [0363](0363-naming-save-gate.md) | Saving a naming rule waits for a preview; collisions block it unless confirmed | accepted (spec updated) |
+| [0364](0364-override-rule-placeholder-pipeline.md) | An override NamingRule stores an empty placeholder pipeline | accepted (spec updated) |
+| [0365](0365-api-key-shown-once.md) | An issued API key lives only in the one-time dialog's state | accepted (spec updated) |
+| [0366](0366-webhook-tester-in-browser.md) | The webhook pattern tester runs in the browser with the facets matcher | accepted (spec updated) |
+| [0367](0367-capability-matrix-page.md) | The capability matrix page pivots the matrix and reads the lossy policies from Route.policies | accepted (spec updated) |
+| [0368](0368-audit-log-pagination.md) | Audit log paging and date bounds | accepted (spec updated) |
+| [0369](0369-actor-administration-surface.md) | What the Actors page offers: creation, disable and enable, keys; no role change in the UI | accepted (spec updated) |
+| [0370](0370-invitation-batches.md) | Invitation batches: lifecycle, the AUTH-061 guarantee, endpoints and staleness | accepted (spec updated) |
+| [0371](0371-invitation-correlation.md) | Acceptance correlation and expiry at inventory | accepted (spec updated) |
+| [0372](0372-invitation-job-and-adapter-cancel.md) | The `invitations.batch` job and `InvitationWriter.cancel` | accepted (spec updated) |
+| [0380](0380-migration-steps.md) | Migration Steps 1 to 12: planner, scratch, adoption and force-adopt readiness, Change Requests, Overlays, run-time findings | accepted (spec updated) |
+| [0395](0395-parity-result-storage.md) | ParityResult storage: one row per Facet updated in place, diff shape, redaction at write | accepted (spec updated) |
+| [0396](0396-parity-engine-and-verified-status.md) | Parity Check, verifiable tasks completed by the system, `verified` through the lifecycle table at the end of a Run, parity outside a Run | accepted (spec updated) |
+| [0397](0397-parity-git-checks.md) | LFS parity through a mirror and the batch API, post-cutover containment applied to every check | accepted (spec updated) |
+| [0405](0405-bulk-endpoint-and-migrate-ready.md) | `POST /migrations/bulk` lives in packages/api and creates Runs through `createRun` | accepted (spec updated) |
+| [0406](0406-bulk-selection-filter-and-cap.md) | Bulk selection: explicit ids or a saved filter, 200 at most, a 422 above it | accepted (spec updated) |
+| [0407](0407-waves-membership-and-feeder-priority.md) | Wave membership: capability, no staleness, CRUD through the Model API, priority already in the feeder | accepted (spec updated) |
+| [0415](0415-run-and-task-endpoints.md) | Run, cancel, complete, task and Expected Difference endpoints: one Run creation path, problem codes, task states, parity triggers | accepted (spec updated) |
 | [0455](0455-ci-outage-local-gate.md) | Local gate while GitHub Actions cannot run jobs | agent-decided |
-| [0435](0435-endpoint-migration-steps.md) | Endpoint migration Steps through the planner's scope dispatch, team settlement (GroupMapping confirmed, repository Analyses stale), Teams slug of a mapped group, endpoint pages | agent-decided |
+| [0435](0435-endpoint-migration-steps.md) | Endpoint migration Steps through the planner's scope dispatch, team settlement (GroupMapping confirmed, repository Analyses stale), Teams slug of a mapped group, endpoint pages | accepted (spec updated) |
 
 New ADRs continue from 0028. Implementor decisions use `status: agent-decided` (PROC-005). T-002 uses 0065–0069.

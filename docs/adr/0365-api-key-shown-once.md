@@ -1,6 +1,6 @@
 # ADR-0365: An issued API key lives only in the one-time dialog's state
 
-- Status: agent-decided
+- Status: accepted (spec updated)
 - Date: 2026-10-09
 - Task: T-091
 - Affects: UI-034, API-020, AUTH-040, AUTH-022

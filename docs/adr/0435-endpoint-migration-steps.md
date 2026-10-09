@@ -1,6 +1,6 @@
 # ADR-0435: Endpoint migration Steps, team settlement and the endpoint pages
 
-- Status: agent-decided
+- Status: accepted (spec updated)
 - Date: 2026-10-09
 - Task: T-086
 - Affects: LIF-080, LIF-081, UI-025, UI-026, FAC-ACL-004, AUTH-050, AUTH-060, AUTH-061, ADP-012, LIF-077

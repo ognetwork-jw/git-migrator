@@ -1,6 +1,6 @@
 # ADR-0366: The webhook pattern tester runs in the browser with the facets matcher
 
-- Status: agent-decided
+- Status: accepted (spec updated)
 - Date: 2026-10-09
 - Task: T-091
 - Affects: UI-031, FAC-WEB-002, ARC-012, GLO-002

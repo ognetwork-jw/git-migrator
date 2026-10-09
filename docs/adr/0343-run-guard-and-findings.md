@@ -1,6 +1,6 @@
 # ADR-0343: Run guard, run-origin findings, and Runs between transactions
 
-- Status: agent-decided
+- Status: accepted (spec updated)
 - Date: 2026-10-09
 - Task: T-070
 - Affects: DOM-010, LIF-002, LIF-004, LIF-005, LIF-040, LIF-046, LIF-049, LIF-080

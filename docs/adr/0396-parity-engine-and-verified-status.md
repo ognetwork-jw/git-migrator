@@ -1,6 +1,6 @@
 # ADR-0396: Parity Check, verifiable tasks and the verified status
 
-- Status: agent-decided
+- Status: accepted (spec updated)
 - Date: 2026-10-09
 - Task: T-072
 - Affects: LIF-002, LIF-003, LIF-004, LIF-020, LIF-042, LIF-045, LIF-048, LIF-060, LIF-061, LIF-062, LIF-063, LIF-065, LIF-081, JOB-050

@@ -1,6 +1,6 @@
 # ADR-0363: Saving a naming rule waits for a preview, and collisions block it unless confirmed
 
-- Status: agent-decided
+- Status: accepted (spec updated)
 - Date: 2026-10-09
 - Task: T-091
 - Affects: UI-030, LIF-030, LIF-031, API-020, ADR-0331

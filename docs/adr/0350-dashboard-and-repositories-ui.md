@@ -1,6 +1,6 @@
 # ADR-0350: Dashboard and repositories list: data access, Facet badges, selection, shared live connection
 
-- Status: agent-decided
+- Status: accepted (spec updated)
 - Date: 2026-10-09
 - Task: T-081
 - Affects: UI-020, UI-021, UI-022, API-011, API-012, AUTH-021, JOB-060, LIF-043, UI-001

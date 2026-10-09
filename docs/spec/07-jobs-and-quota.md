@@ -12,7 +12,9 @@ BullMQ runs with its PostgreSQL backend in schema `bullmq`, registered process-w
 | `runs-standard` | `run.execute` for `sizeClass = standard`, all endpoint Runs, all non-git Runs (verify, rollback, source read-only) | worker-standard |
 | `runs-large` | `run.execute` for `sizeClass = large` with git steps | worker-large |
 | `parity` | `parity.migration`, `drift.sweep` | worker-standard |
-| `maintenance` | `maintenance.prune`, `maintenance.scratch-cleanup`, `maintenance.run-reaper`, `analysis.feeder` | worker-standard (leader-scheduled) |
+| `maintenance` | `maintenance.prune`, `maintenance.scratch-cleanup`, `maintenance.run-reaper`, `analysis.feeder`, `invitations.batch` | worker-standard (leader-scheduled, except `invitations.batch`) |
+
+`invitations.batch` carries a strict union on `step`: `{step: seats, batchId}`, `{step: send, batchId}` or `{step: revoke, batchId, invitationId}`. Immediate steps are deduplicated per batch (`invitations-<step>-<batchId>[-<invitationId>]`), and every delayed step gets an id of its own, so a reschedule from inside the running job is not dropped. Its provider calls use the `interactive` pool, because an operator asked for the work (ADR-0372).
 
 - **JOB-011** Job payloads are Zod-validated on enqueue and on processing. A payload carries IDs only, never secrets. Dedupe uses BullMQ's `deduplication: { id }` option (for example `analysis-<migrationId>`), not custom job IDs, so later enqueues after completion are never silently dropped. Every queue sets `removeOnComplete: { age: 86400 }` and `removeOnFail: { age: 604800 }`.
 - **JOB-014** Each process creates **one** `pg.Pool` (with `search_path` including `bullmq`) and passes it as `connection` to every Queue and Worker it constructs, because BullMQ builds its backend from that option and each backend uses the pool without owning it. QueueEvents are not used. The pool holds `workers + 4` connections (each Worker keeps one for its blocking `LISTEN`), so connection usage stays bounded. T-028 measures the resulting connections per process and records the exact formula in `docs/deployment.md`.
@@ -30,7 +32,7 @@ BullMQ runs with its PostgreSQL backend in schema `bullmq`, registered process-w
 
 - `sizeClass = large` when `sizeBytes > sizeClass.largeThresholdBytes` (default 5 GiB) or when size is unknown and the last known LFS bytes exceed the same threshold.
 - Scratch directory: `$GM_SCRATCH_DIR/<runId>` (default `/scratch`). It is removed in `finally`, and `maintenance.scratch-cleanup` removes directories older than 24 h at startup and hourly. The scratch volume is per pod, so every worker pod cleans on its own timer (the job name stays registered for manual use), and a job removes only its own subdirectory. Credential directories (`.gm-askpass-*`) are swept only when no session of the process owns them and they are older than 10 minutes (ADR-0211, ADR-0240).
-- **Disk precheck before `git.prepare`:** estimated need is `sizeBytes × 2.2 + lfsBytes`. The estimate is `ceil(sizeBytes × 2.2) + lfsBytes` in integer arithmetic, and space already reserved by other Runs of the same process but not yet written is subtracted from free space. If `statfs` free space is lower, the job is delayed 10 minutes. After 6 delays the Run fails with `scratch.insufficient`, and the UI suggests the large class.
+- **Disk precheck before `git.prepare`:** estimated need is `sizeBytes × 2.2 + lfsBytes`. The estimate is `ceil(sizeBytes × 2.2) + lfsBytes` in integer arithmetic, and space already reserved by other Runs of the same process but not yet written is subtracted from free space. If `statfs` free space is lower, the job is delayed 10 minutes. After 6 delays the Run fails with `scratch.insufficient`, and the UI suggests the large class. A delay is a Step returning `delay`, handed off as in LIF-046. Scratch is removed with each job, so the next job starts empty and rebuilds what it needs (ADR-0380). A Parity Check outside a Run uses the same precheck but never waits: a short volume makes `git-refs` `unverifiable`. A repository too large for the standard worker's volume is not routed to a large worker for that check (ADR-0397).
 
 ## Inventory (JOB-030)
 
@@ -43,6 +45,7 @@ BullMQ runs with its PostgreSQL backend in schema `bullmq`, registered process-w
 - A pass that lists zero Namespaces or zero Repositories while present Repositories exist upserts what it saw but marks nothing missing, and reports `suspicious`.
 - Identities and Groups are never deleted. Writes that depend on a read are conditional, so an operator decision or a started Run made meanwhile survives (ADR-0280).
 - Runs every `schedules.inventory` (default 6 h) and on demand ("Refresh" button, `POST /api/v1/inventory/refresh`).
+- A pass over a **target** Endpoint ends, after the Identities are current and the matching cascade has run, with the invitation correlation of AUTH-060 step 5. It also schedules the send step of every `approved` or `sending` batch whose `nextAttemptAt` has passed, so a lost enqueue never strands a batch (ADR-0371, ADR-0372).
 
 ## Analysis feeder (JOB-020, JOB-022)
 
@@ -58,7 +61,7 @@ Candidates are picked in this priority order, while their Route's `avgCallsPerAn
 
 A Migration whose `analysisRetryAt` is in the future is not a candidate. Each failed analysis job records `analysisFailureCount` + 1 and `analysisRetryAt` = now + 5 min doubled per earlier failure, capped at 6 h (database clock). BullMQ retries of one job count once. A successful or skipped Analysis clears the markers. Marking stale clears the retry time but keeps the count. A fault no retry fixes (retired Endpoint, unresolved target namespace) fails without retry.
 
-The feeder never selects Migrations in `running`, `verified`, `manually_completed`, `rolled_back` or `source_missing`. Drift checks cover verified ones. The feeder also enqueues the endpoint Migration analysis of each Route after every completed inventory.
+The feeder never selects Migrations in `running`, `verified`, `manually_completed`, `rolled_back` or `source_missing`. This exclusion applies to automatic selection only: an operator may analyze a Migration in any status except `source_missing` (API-020, ADR-0330). Drift checks cover verified ones. The feeder also enqueues the endpoint Migration analysis of each Route after every completed inventory.
 
 `avgCallsPerAnalysis` is a `Route` column starting at 30, updated after each Analysis as an exponential moving mean (weight 0.1) of the provider requests it made.
 
@@ -76,7 +79,7 @@ The feeder never selects Migrations in `running`, `verified`, `manually_complete
 
   A request counted in two resource groups (for example `raw-files` and `repository-data`) acquires both buckets in the same transaction, taking advisory locks in ascending bucket-key order to prevent deadlock. It is granted only if both grant.
 
-  **Git commands** don't go through `ProviderHttpClient`. The `git` package pre-acquires units in the `git` bucket before each command: `ls-remote` 1, `fetch`/`clone` 3, `push` 3 per attempt (a retry spends again), and LFS 1 per 100 objects not yet transferred. LFS batch API calls made by `git-lfs` count here too.
+  **Git commands** don't go through `ProviderHttpClient`. The `git` package pre-acquires units in the `git` bucket before each command: `ls-remote` 1, `fetch`/`clone` 3, `push` 3 per attempt (a retry spends again), and LFS 1 per 100 objects not yet transferred. LFS batch API calls made by `git-lfs` count here too. The bucket is the credential's `GitAccess.quota`. An adapter whose provider does not meter git over HTTPS declares none, and its git commands are not pre-acquired (ADR-0380).
 - **JOB-042 Credential selection.** Among an Endpoint's credentials, pick the one whose bucket has the most free capacity for the needed pool and resource group, and use it for the whole job. A git push of one Run uses one credential throughout.
 - **JOB-043 Bitbucket limits (no headers).** User-scoped API tokens get no rate-limit headers, so buckets are tracked **only** locally, from Atlassian's documented limits. Rolling 1-hour window, per user ID:
 
@@ -92,7 +95,7 @@ The feeder never selects Migrations in `running`, `verified`, `manually_complete
 - **JOB-044 429 handling.**
   - Honor `Retry-After` when present.
   - Otherwise set `QuotaState.blockedUntil = oldestEventInWindow + window`. For Bitbucket that is at least 60 s.
-  - The job calls `moveToDelayed(blockedUntil)` and does not sleep.
+  - The job calls `moveToDelayed(blockedUntil)` and does not sleep. `run.execute` cannot, because its processor has no job token. It releases its lease and enqueues a delayed hand-off job instead (LIF-046, ADR-0340). Invitation steps store `nextAttemptAt` and enqueue a delayed step (ADR-0370).
   - In-flight requests that hit 429 do not count as successful; they still count in the ledger.
 - **JOB-045 GitHub.**
   - Primary limits are read from `x-ratelimit-limit/remaining/reset/resource` and stored in `QuotaState`, one bucket per `resource` (`core`, `graphql`, …).
@@ -104,7 +107,7 @@ The feeder never selects Migrations in `running`, `verified`, `manually_complete
     - content-creating requests (POST/PATCH/PUT/DELETE) ≤ 80 per minute and ≤ 500 per hour, as separate buckets.
   - A 403/429 with a secondary-limit message waits `retry-after`, or 60 s doubled per consecutive hit (cap 15 min).
 - **JOB-046 Pruning.** `maintenance.prune` (every 10 minutes) deletes `QuotaEvent` rows older than 2 × the longest window, and expired `quota_lease` rows. Raw responses and Snapshot and Analysis retention (DATA-020) are pruned by the same job once per hour in each process, in chunks of 1,000 rows. A Snapshot or Analysis that is protected (a Run, or a Migration's latest) is re-checked in the deleting statement (ADR-0211).
-- **JOB-047 Visibility.** `GET /api/v1/quota` returns, per bucket: limit, used in window, pool split, `blockedUntil`, the background backlog (pending analyses) and an ETA (`backlog × avgCallsPerAnalysis ÷ background rate`). The same values are exported as Prometheus gauges.
+- **JOB-047 Visibility.** `GET /api/v1/quota` returns, per bucket: limit, used in window, pool split, `blockedUntil`, the background backlog (pending analyses) and an ETA (`backlog × avgCallsPerAnalysis ÷ background rate`). The same values are exported as Prometheus gauges. Per bucket the response also gives `effectiveLimit`, the pool split, `remaining`, `resetAt`, `nearLimit` and `backgroundRatePerSecond`, with dates as ISO strings. The backlog is the waiting, delayed and prioritized jobs of `analysis-background`, of which at most 10,000 are read, grouped by their Route's source Endpoint. Every bucket of that Endpoint reports the Endpoint's backlog, because an analysis spends calls in several buckets. `avgCallsPerAnalysis` is averaged over the queued analyses. `backlogTotal` counts the whole queue, and `backlogTruncated` marks partial bucket values. The ETA is 0 with nothing queued and `null` without background capacity (ADR-0332).
 
 ## Schedules (JOB-050)
 
@@ -125,6 +128,7 @@ The leader registers BullMQ job schedulers from config. The leader holds a Postg
 ## Events and SSE (JOB-060)
 
 - Workers and API handlers publish domain events with `NOTIFY gm_events, '<json>'`. The payload is ≤ 7,000 bytes: `{ type, ids, at }`. Types include `migration.updated`, `run.updated`, `run.log`, `task.updated`, `inventory.progress`, `quota.updated`, `invitation.updated`. `ids` is an object keyed by kind (`migration`, `run`, `task`, `endpoint`, `invitation`), each value matching `^[A-Za-z0-9_-]{1,64}$`; larger payloads are refused.
+- An event that reports a state change is published in the transaction that makes the change, so a listener never sees a rolled-back state. Jobs that change invitations publish after commit. `invitation.updated` carries the batch id as `ids.invitation`. A write that marks Analyses stale publishes `migration.updated` without ids, which reaches `list:migrations` only. Every Run Step change publishes `run.updated` (ADR-0320, ADR-0340, ADR-0341, ADR-0370). Commands that only enqueue publish nothing: the processors publish when they change state (ADR-0330).
 - Each web pod holds one dedicated `LISTEN gm_events` connection and fans out to SSE subscribers.
 - `GET /api/v1/events?topics=migration:<id>,run:<id>,list:migrations,quota` filters by topic (1 to 50). Topics are `quota`, `list:migrations`, `list:runs`, `list:tasks`, `list:repositories`, `list:invitations` and `<kind>:<id>`; a Run change also reaches `migration:<id>` when `ids.migration` is set. Events carry IDs only, so any role with `read` may subscribe. Clients invalidate the matching TanStack Query keys and refetch through ZenStack or the API, so permissions are enforced on refetch.
 - Every 15 s the server sends the comment `: heartbeat` and a named `heartbeat` event, because scripts cannot see comments; the client's 45 s watchdog resets on the named event. Clients reconnect with backoff, and switch to **polling** every 10 s if no event or heartbeat arrives for 45 s, or if `EventSource` is unavailable. They return to SSE after a successful reconnect (Q24).

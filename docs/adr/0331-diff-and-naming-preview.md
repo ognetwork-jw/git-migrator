@@ -1,6 +1,6 @@
 # ADR-0331: The diff view, its redaction, and the naming preview
 
-- Status: agent-decided
+- Status: accepted (spec updated)
 - Date: 2026-10-09
 - Task: T-062
 - Affects: API-020, API-011, AUTH-022, LIF-030, LIF-031, LIF-063, FAC-WEB-002, FAC-SEC-001, ADP-014

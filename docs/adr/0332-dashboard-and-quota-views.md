@@ -1,6 +1,6 @@
 # ADR-0332: Dashboard and quota views
 
-- Status: agent-decided
+- Status: accepted (spec updated)
 - Date: 2026-10-09
 - Task: T-062
 - Affects: API-020, UI-020, JOB-047, JOB-020, JOB-040

@@ -1,6 +1,6 @@
 # ADR-0415: Run, task and Expected Difference endpoints
 
-- Status: agent-decided
+- Status: accepted (spec updated)
 - Date: 2026-10-09
 - Task: T-074
 - Affects: API-020, API-021, LIF-005, LIF-006, LIF-020, LIF-021, LIF-040, LIF-043, LIF-062, LIF-075, DOM-010, UI-021, AUTH-022

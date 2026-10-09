@@ -1,6 +1,6 @@
 # ADR-0362: Overlay writes go through validated `/api/v1/overlays` endpoints, not RPC
 
-- Status: agent-decided
+- Status: accepted (spec updated)
 - Date: 2026-10-09
 - Task: T-091
 - Affects: UI-032, LIF-048, DOM-001, DOM-003, API-010, API-012, AUTH-020, AUTH-022, ADR-0121

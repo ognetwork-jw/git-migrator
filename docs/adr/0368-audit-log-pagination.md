@@ -1,6 +1,6 @@
 # ADR-0368: Audit log paging and date bounds
 
-- Status: agent-decided
+- Status: accepted (spec updated)
 - Date: 2026-10-09
 - Task: T-091
 - Affects: UI-035, AUTH-022, UI-001

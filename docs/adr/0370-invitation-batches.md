@@ -1,6 +1,6 @@
 # ADR-0370: Invitation batches: lifecycle, the AUTH-061 guarantee, endpoints and staleness
 
-- Status: agent-decided
+- Status: accepted (spec updated)
 - Date: 2026-10-09
 - Task: T-085
 - Affects: AUTH-060, AUTH-061, AUTH-050, API-020, UI-029, JOB-060, LIF-020, LIF-021

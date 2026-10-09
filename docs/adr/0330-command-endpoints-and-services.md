@@ -1,6 +1,6 @@
 # ADR-0330: Command endpoints and their services (batch 1)
 
-- Status: agent-decided
+- Status: accepted (spec updated)
 - Date: 2026-10-09
 - Task: T-062
 - Affects: API-010, API-011, API-020, API-021, AUTH-021, AUTH-022, JOB-011, JOB-030, JOB-060, LIF-020

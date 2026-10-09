@@ -1,6 +1,6 @@
 # ADR-0341: Run Step state machine, severity and retries
 
-- Status: agent-decided
+- Status: accepted (spec updated)
 - Date: 2026-10-09
 - Task: T-070
 - Affects: LIF-040, LIF-042, LIF-046, ADP-060, JOB-015, JOB-044

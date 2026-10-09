@@ -1,6 +1,6 @@
 # ADR-0367: The capability matrix page pivots the matrix, lists non-exact fields per pair, and reads the lossy policies from Route.policies
 
-- Status: agent-decided
+- Status: accepted (spec updated)
 - Date: 2026-10-09
 - Task: T-091
 - Affects: UI-033, API-020, FAC-005, ADP-040

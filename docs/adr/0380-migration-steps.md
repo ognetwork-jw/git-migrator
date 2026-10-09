@@ -1,6 +1,6 @@
 # ADR-0380: Migration Steps (LIF-040 steps 1 to 12)
 
-- Status: agent-decided
+- Status: accepted (spec updated)
 - Date: 2026-10-09
 - Task: T-071
 - Affects: LIF-031, LIF-040, LIF-041, LIF-042, LIF-043, LIF-044, LIF-045, LIF-047, LIF-048, LIF-049, JOB-015, JOB-041, ADP-011, ADP-012, ADP-060, FAC-DKY-002, FAC-BRR-002

@@ -1,6 +1,6 @@
 # ADR-0360: Configuration and admin pages read and write through the ZenStack RPC mount
 
-- Status: agent-decided
+- Status: accepted (spec updated)
 - Date: 2026-10-09
 - Task: T-091
 - Affects: UI-030, UI-031, UI-032, UI-034, UI-035, API-012, AUTH-021, AUTH-022

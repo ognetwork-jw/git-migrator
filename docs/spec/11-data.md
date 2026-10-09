@@ -32,6 +32,8 @@
   - `quota_event (bucket_key, at)`.
   - `audit_event (at desc)`, `audit_event (subject_type, subject_id)`.
   - `expected_difference (route_id, migration_id, facet_key) WHERE revoked_at IS NULL`.
+  - `expected_difference (migration_id, facet_key, path)` for active `framework_mutation` rows: unique partial index (LIF-045).
+  - `invitation (target_endpoint_id, source_identity_id)` and `invitation (target_endpoint_id, email_normalised)` WHERE the status is outstanding: unique partial indexes (AUTH-061).
 
 ## Retention (DATA-020)
 
@@ -41,7 +43,7 @@
 | `QuotaEvent` | 2 × longest window |
 | `FacetSnapshot` | Keep the latest 5 per (repository or endpoint, facet, side), plus every Snapshot referenced by an Analysis that is referenced by a Run or is a Migration's latest. Pruned hourly by `maintenance.prune` (JOB-046). |
 | `Analysis`, `PlanItem` | Keep the latest 10 per Migration, plus any referenced by a Run |
-| `Run`, `RunStep`, `RunLog`, `Mutation`, `AuditEvent`, `ParityResult` (latest per facet), everything else | Indefinitely |
+| `Run`, `RunStep`, `RunLog`, `Mutation`, `AuditEvent`, `ParityResult` (latest per facet: one row per Migration and Facet, updated in place, LIF-060), everything else | Indefinitely |
 
 ## Migrations process (DATA-030)
 

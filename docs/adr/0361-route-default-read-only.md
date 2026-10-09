@@ -1,6 +1,6 @@
 # ADR-0361: The Route default naming pipeline is shown, not edited, on the naming page
 
-- Status: agent-decided
+- Status: accepted (spec updated)
 - Date: 2026-10-09
 - Task: T-091
 - Affects: UI-030, LIF-030, API-012

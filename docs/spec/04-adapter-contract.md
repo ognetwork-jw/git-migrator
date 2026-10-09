@@ -56,6 +56,13 @@ export interface EndpointConnection {
 
 export interface CreateRepositorySpec { name: string; visibility: 'private' | 'public'; description: string }
 
+export interface RepositoryRecord {
+  providerId: string; namespace: NamespaceRef; slug: string; name: string;
+  fullPath: string; isPrivate: boolean; sizeBytes?: number; defaultBranch?: string | null;
+  providerUpdatedAt?: Date;
+  createdAt?: Date;               // when the provider created it (second resolution); part of the proof that a target is the framework's own (LIF-031)
+}
+
 export interface ChangeRequestWriter {
   upsert(ref: RepositoryRef, req: { purpose: string; branch: string; title: string; body: string;
     files: { path: string; content: string }[] }): Promise<{ url: string; state: 'open' | 'merged' | 'closed'; mutations: MutationRecord[] }>;
@@ -65,8 +72,9 @@ export interface ChangeRequestWriter {
 
 export interface InvitationWriter {
   invite(req: { email: string; teamIds: string[] }): Promise<{ providerInvitationId: string }>;
-  listPending(): Promise<{ providerInvitationId: string; email?: string; inviteeLogin?: string }[]>;
-  listFailed(): Promise<{ providerInvitationId: string; email?: string; reason: string }[]>;
+  listPending(): Promise<{ providerInvitationId: string; email?: string; inviteeLogin?: string; createdAt?: Date }[]>;
+  listFailed(): Promise<{ providerInvitationId: string; email?: string; reason: string; createdAt?: Date; failedAt?: Date }[]>;
+  cancel(providerInvitationId: string): Promise<{ cancelled: boolean }>;   // withdraw a pending invitation; one already gone is `cancelled: false`, not an error
 }
 
 export interface SourceLock {
@@ -195,6 +203,7 @@ export type Fidelity = 'exact' | 'translated' | 'lossy' | 'unsupported' | 'unrea
 
 - **ADP-031** `translate` and `compare` are pure and synchronous. They run in `core`/`facets` with no I/O, so they are exhaustively unit-tested.
 - **ADP-032** Pair overrides: the `registry` MAY register `{ source, target, facet, translate }`, which replaces the default `translate` for that pair. v1 uses overrides only where the spec says so in [05-facets](05-facets.md).
+- **ADP-032 Registry services.** The `registry` also exposes what other packages may not import directly (ARC-012): `repositoryNameLimits(type)`, the static repository-name limits of each adapter, which the naming preview uses without a connection (LIF-030); `validateOverlay(facetKey, data)`, the Overlay validation of LIF-048; and `pipelinesDelivery(source, target)`, the pipeline Change Request renderer of a target adapter (LIF-047). The `invitations.*` fields `createdAt` and `failedAt` are optional: without them the caller matches nothing by time (AUTH-061).
 
 ## Fidelity semantics (ADP-040)
 
@@ -258,6 +267,7 @@ export class AdapterError extends Error {
 export interface GitAccess {
   remoteUrl(repo: RepositoryRef): string;          // https URL without credentials
   credential(repo: RepositoryRef): Promise<{ username: string; password: string; expiresAt?: Date }>;
+  readonly quota?: BucketSpec;                      // the git bucket this credential counts in (JOB-041); absent when the provider does not meter git
 }
 ```
 

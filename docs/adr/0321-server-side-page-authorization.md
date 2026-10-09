@@ -1,6 +1,6 @@
 # ADR-0321: Server-side capability check for data pages
 
-- Status: agent-decided
+- Status: accepted (spec updated)
 - Date: 2026-10-08
 - Task: T-084
 - Affects: AUTH-020, AUTH-021, UI-010, UI-027, UI-028

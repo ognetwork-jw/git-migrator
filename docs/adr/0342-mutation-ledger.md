@@ -1,6 +1,6 @@
 # ADR-0342: Mutation ledger writes and Expected Difference derivation
 
-- Status: agent-decided
+- Status: accepted (spec updated)
 - Date: 2026-10-09
 - Task: T-070
 - Affects: LIF-045, LIF-063, LIF-002, ADP-011, ADP-012

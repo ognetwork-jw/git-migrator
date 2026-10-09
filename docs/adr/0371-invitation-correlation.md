@@ -1,6 +1,6 @@
 # ADR-0371: Acceptance correlation and expiry at inventory
 
-- Status: agent-decided
+- Status: accepted (spec updated)
 - Date: 2026-10-09
 - Task: T-085
 - Affects: AUTH-060 (step 5), AUTH-050 (step 1, step 2), JOB-030, LIF-021

@@ -1,6 +1,6 @@
 # ADR-0395: ParityResult storage and redaction
 
-- Status: agent-decided
+- Status: accepted (spec updated)
 - Date: 2026-10-09
 - Task: T-072
 - Affects: LIF-060, LIF-063, DATA-020, API-020 (`GET /migrations/{id}/diff`), AUTH-022

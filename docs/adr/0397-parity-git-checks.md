@@ -1,6 +1,6 @@
 # ADR-0397: LFS parity and post-cutover containment in the Parity Check
 
-- Status: agent-decided
+- Status: accepted (spec updated)
 - Date: 2026-10-09
 - Task: T-072
 - Affects: FAC-GIT-005, FAC-GIT-006, LIF-060, LIF-065, ADP-071, JOB-041
