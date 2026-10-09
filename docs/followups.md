@@ -297,3 +297,14 @@ These are unresolved review findings (review loops that hit the 5-round cap) and
 | 2026-10-09 | T-082 | 1 | MINOR | Log level filter does not clamp scrollTop, leaving a blank window until the next scroll | apps/web/src/run-detail/log-viewer.tsx:75-96 | open |
 | 2026-10-09 | T-082 | 1 | MINOR | Facet strip hover text gives count and kind, not the reason (UI-022): name the worst finding | apps/web/src/migration-detail/detail-view.tsx:63-75 | open |
 | 2026-10-09 | T-082 | 1 | MINOR | Facet strip severity is colour plus aria-label/title only; add a visible icon or text (UI-001 "colour is never the only signal") | apps/web/src/migration-detail/detail-view.tsx:76-81 | open |
+| T-089 | MINOR | rollback.left-in-place (and rollback.incomplete, rollback.deletion-unproven) Step failures have no guidance entry or post task listing left records (T-089 r2 spec) | open |
+| T-089 | MINOR | rollback.deletion-unproven post-task path (steps.ts:526-533) has no test; add a [LIF-077] integration case (T-089 r3 spec) | open |
+| T-089 | MINOR | repository-settings.left-in-place guidance always shows all three steps (team, grant, repository) regardless of what was left (T-089 r3 spec) | open |
+| T-089 | MINOR | packages/guidance README 'Parameter kinds' omits the new entries kind (and flag) (T-089 r4 spec) | open |
+| T-089 | MINOR | rollback left-in-place: MAX_LEFT=20 truncates the listed entries while the count reports all; add '(first 20 shown)' (T-089 r4 spec) | open |
+| T-089 | MINOR | adapter-github getRepository login-mismatch/id-match branch (renamed org) only covered by integration tests; add a unit test (T-089 r5 spec) | open |
+| T-089 | MINOR | rollback writeToTarget sends a sub-resource write's not_found (environment PUT, collaborator PUT, team-grant PUT) to moved() -> misleading target-unreadable guidance; re-check repo identity first or make those writes ignoreGone-aware (T-089 r5 adversarial) | open |
+| T-089 | MINOR | No operator path to accept a repository or branch rule that a rollback left in place (repository-settings.left-in-place); ADR-0465 | open |
+| T-089 | MINOR | Trimmed GitHub OpenAPI description lacks GET /orgs/{org}/teams/{slug}/teams and the team DELETE, so the fake's replies to them are not schema-validated | open |
+| T-089 | MINOR | One unavoidable race remains in rollback: a write between the target pre-read and the write itself (GitHub has no repo-id conditional write); ADR-0465 Round 5 | open |
+| T-083 | MINOR | Migrations created by inventory refresh send no live event, so the dashboard counts do not update live until reload (UI-020); the e2e spec reloads to read them | open |
