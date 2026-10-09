@@ -70,10 +70,10 @@ describe('[LIF-040] the Steps of a migration Run', () => {
       'facet.branch-rules.apply:independent',
       // Planned but not provided here: skipped with a reason, never dropped silently.
       'verify:advisory',
-      'source.read-only:advisory',
+      'source.read-only:independent',
       'analysis.refresh:advisory',
     ]);
-    // Step 13 and 14 join through the services (T-072, T-073) at the place the Plan puts them.
+    // Step 13 joins through the services (T-072) at the place the Plan puts it; step 14 is built in (T-073).
     const verify = { key: 'verify', severity: 'advisory', run: async () => undefined };
     const withVerify = createMigrationPlanner({
       ...services,

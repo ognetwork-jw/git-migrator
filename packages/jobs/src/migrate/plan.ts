@@ -1,8 +1,8 @@
 /**
  * The Steps of a migrate, run-anyway or resync Run (LIF-040): the Run's Analysis lists them in
  * LIF-040 order (`PlanItem` of kind `step`), and each listed key maps to its implementation here.
- * A key without an implementation (`verify`, `source.read-only` until T-072 and T-073 provide them
- * through `MigrationServices.extraSteps`) is left out. After the last planned Step the Migration is
+ * A key without an implementation (`verify`, which T-072 provides through
+ * `MigrationServices.extraSteps`) is left out. After the last planned Step the Migration is
  * analyzed again. Decisions: docs/adr/0380-migration-steps.md.
  */
 import { StepFailure } from '../run/errors.ts';
@@ -15,6 +15,11 @@ import { gitPrepareStep, preflightStep } from './prepare.ts';
 import { pushLfsStep, pushRefsStep } from './push.ts';
 import { ensureRepositoryStep, liftProtectionStep, warnIfProtectionLifted } from './repository.ts';
 import type { MigrationServices } from './services.ts';
+import {
+  hasOpenLockIntent,
+  SOURCE_READ_ONLY_STEP,
+  sourceReadOnlyStep,
+} from './source-read-only.ts';
 
 /** Step 13's neighbour: re-analyzes at the end of the Run (T-062 follow-up, ADR-0380). */
 export function refreshAnalysisStep(): StepDefinition<MigrationServices> {
@@ -22,6 +27,16 @@ export function refreshAnalysisStep(): StepDefinition<MigrationServices> {
     key: 'analysis.refresh',
     severity: 'advisory',
     async run(ctx) {
+      // A lock write whose outcome is unknown may have left a lock the ledger does not name yet:
+      // an Analysis now would translate it onto the target (LIF-045, ADR-0425).
+      if (await hasOpenLockIntent(ctx.services.db, ctx.migration.id)) {
+        await ctx.runLog(
+          'warn',
+          'The Migration is not analyzed again: a write to the source lock was not confirmed',
+          {},
+        );
+        return { status: 'skipped', reason: 'an unconfirmed source lock write' };
+      }
       await ctx.services.reanalyze(ctx.migration.id, ctx.signal);
       return { status: 'succeeded' };
     },
@@ -55,6 +70,8 @@ const FIXED: Readonly<Record<string, () => StepDefinition<MigrationServices>>> =
   'git.push-refs': pushRefsStep,
   'change-requests.open': changeRequestsStep,
   'overlays.apply': overlaysStep,
+  // Step 14 (LIF-070): its own conditions are checked when it runs.
+  [SOURCE_READ_ONLY_STEP]: () => sourceReadOnlyStep('migration'),
 };
 
 /** Keys of the Steps this task implements, in LIF-040 order. */

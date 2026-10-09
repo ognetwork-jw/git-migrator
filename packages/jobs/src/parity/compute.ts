@@ -47,12 +47,8 @@ import {
   loadIdentityMappings,
   rootNamespace,
 } from '../analysis/analysis.ts';
-import {
-  collectPrincipals,
-  groupResolver,
-  identityResolver,
-  withoutFrameworkCreated,
-} from '../analysis/context.ts';
+import { collectPrincipals, groupResolver, identityResolver } from '../analysis/context.ts';
+import { type SourceLockView, sourceLockView } from '../analysis/framework-resources.ts';
 import { databaseNow } from '../db-clock.ts';
 import type { EndpointConnector } from '../inventory/connector.ts';
 import { isRateLimited } from '../run/errors.ts';
@@ -383,14 +379,28 @@ export async function computeParity(
         slug: sourceRepository.slug,
       }
     : undefined;
+  // LIF-045: what the framework created on the source is left out of the read, by identity. While
+  // a lock write is unsettled and its state cannot be told, the Facets it writes are unverifiable
+  // rather than compared (ADR-0425).
+  const view: SourceLockView = sourceRef
+    ? await sourceLockView(db, migrationId, sourceConn.sourceLock, sourceRef, signal)
+    : { resources: [], withheld: [] };
   const sourceReads = await readSide(
     sourceConn,
     sourceType,
     sourceRef
-      ? { scope: 'repository', repository: sourceRef, namespace: sourceNsRef }
+      ? {
+          scope: 'repository',
+          repository: sourceRef,
+          namespace: sourceNsRef,
+          frameworkResources: view.resources,
+        }
       : { scope: 'endpoint', namespace: sourceNsRef },
-    needed,
+    new Set([...needed].filter((k) => !view.withheld.includes(k))),
   );
+  for (const key of view.withheld) {
+    if (needed.has(key)) sourceReads.set(key, { ok: false, reason: 'source-lock-unsettled' });
+  }
 
   // -- the target ----------------------------------------------------------------------------
   const targetNsRef: NamespaceRef = {
@@ -431,27 +441,12 @@ export async function computeParity(
     );
   }
 
-  // -- LIF-045: what the framework created on the source is not translated -------------------
-  const sourceMutations = isRepository
-    ? await db.mutation.findMany({
-        where: { migrationId, side: 'source', action: 'create', undoneAt: null },
-        select: { facetKey: true, paths: true, resourceRef: true },
-      })
-    : [];
-  const frameworkPaths = (facetKey: string): string[] =>
-    sourceMutations
-      .filter((m) => m.facetKey === facetKey)
-      .filter((m) => {
-        const ref = m.resourceRef as Json | null;
-        return ref?.adopted !== true && ref?.noop !== true;
-      })
-      .flatMap((m) => m.paths);
   const sources: Record<string, unknown> = {};
   const attachments: Record<string, string> = {};
   const sourceCaps: Record<string, FacetCapability> = {};
   for (const [key, side] of sourceReads) {
     if (!side.ok) continue;
-    sources[key] = withoutFrameworkCreated(side.read.data, frameworkPaths(key));
+    sources[key] = side.read.data;
     Object.assign(attachments, side.read.attachments ?? {});
     sourceCaps[key] = side.caps;
   }

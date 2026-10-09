@@ -102,6 +102,16 @@ describe('LIF-045 source-side filtering', () => {
     expect(out.description).toBeUndefined();
   });
 
+  it('[LIF-045] a field of an element takes the unset value null, so the document stays valid (LIF-070)', () => {
+    const out = withoutFrameworkCreated(doc, ['/rules[pattern=\\*]/restrictPushes']) as {
+      rules: { pattern: string; restrictPushes: unknown }[];
+    };
+    expect(out.rules.map((r) => [r.pattern, r.restrictPushes === null])).toEqual([
+      ['*', true],
+      ['main', false],
+    ]);
+  });
+
   it('[LIF-045] ignores a malformed path or one that addresses nothing', () => {
     expect(withoutFrameworkCreated(doc, ['not a path', '/nothing[x=1]'])).toEqual(doc);
   });

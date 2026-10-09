@@ -141,6 +141,10 @@ export const GUIDANCE: Readonly<Record<FindingCode, Guidance>> = {
   'branch-rules.protection-lifted': plain('branch-rules.protection-lifted', [
     step('branch-rules.protection-lifted', 1),
   ]),
+  'branch-rules.source-lock-unsettled': plain('branch-rules.source-lock-unsettled', [
+    step('branch-rules.source-lock-unsettled', 1),
+    step('branch-rules.source-lock-unsettled', 2),
+  ]),
   'branch-rules.unknown-kind': plain('branch-rules.unknown-kind', [
     step('branch-rules.unknown-kind', 1),
   ]),

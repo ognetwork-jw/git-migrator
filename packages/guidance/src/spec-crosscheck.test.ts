@@ -86,6 +86,8 @@ const AGENT_DECIDED_CODES: Readonly<Record<string, string>> = {
   // The run-time observation behind the policy key of the same prefix (ADR-0040, ADR-0380).
   'branch-rules.exemptions-not-applied': 'run-origin post task for a refused bypass list',
   'branch-rules.protection-lifted': 'run-origin post task after a failure that follows step 3a',
+  // LIF-070: a write of the source lock whose outcome is unknown blocks target writes (ADR-0425).
+  'branch-rules.source-lock-unsettled': 'run-origin blocker while a source lock write is unsettled',
 };
 
 /**

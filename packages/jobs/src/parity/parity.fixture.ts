@@ -91,8 +91,15 @@ export class Sim {
     const facets: Record<string, unknown> = {};
     for (const [key, reader] of docs) {
       facets[key] = {
-        async read() {
-          return { data: await reader(), unreadable: [], warnings: [], rawResponseIds: [] };
+        async read(_ctx: unknown, target?: { frameworkResources?: { publicKey?: string }[] }) {
+          const data = (await reader()) as { keys?: { publicKey: string }[] };
+          // Like an adapter: leave out the resources the framework names (LIF-045, by identity).
+          const own = new Set((target?.frameworkResources ?? []).map((f) => f.publicKey));
+          const kept =
+            own.size > 0 && Array.isArray(data?.keys)
+              ? { ...data, keys: data.keys.filter((k) => !own.has(k.publicKey)) }
+              : data;
+          return { data: kept, unreadable: [], warnings: [], rawResponseIds: [] };
         },
       };
     }

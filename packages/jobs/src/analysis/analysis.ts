@@ -54,9 +54,9 @@ import {
   namesOf,
   type ReadWarning,
   splitReadWarnings,
-  withoutFrameworkCreated,
 } from './context.ts';
 import { FAILURE_BACKOFF_BASE_MS, FAILURE_BACKOFF_CAP_MS } from './feeder.ts';
+import { type SourceLockView, sourceLockView } from './framework-resources.ts';
 import { type PersistHooks, persistAnalysis, type SnapshotInput } from './persist.ts';
 
 type Json = Record<string, unknown>;
@@ -274,11 +274,13 @@ export async function runAnalysis(
     conn: EndpointConnection,
     type: string,
     target: FacetTarget,
+    withheld: readonly string[] = [],
   ): Promise<FacetReading[]> => {
     const ctx = driverContext(conn);
     const out: FacetReading[] = [];
     for (const def of facetDefs) {
       checkpoint();
+      if (withheld.includes(def.key)) continue;
       const base = adapterCaps(registry, type, def.key);
       const real = conn.facets[def.key as keyof typeof conn.facets];
       if (!base?.read || !real) continue;
@@ -303,31 +305,32 @@ export async function runAnalysis(
         slug: sourceRepository.slug,
       }
     : undefined;
+  // LIF-045: what the framework created on the source is left out of the read, by identity. While
+  // a lock write is unsettled and its state cannot be told, the Facets it writes are not
+  // translated at all (ADR-0425).
+  const view: SourceLockView = sourceRef
+    ? await sourceLockView(db, migrationId, sourceConn.sourceLock, sourceRef, options.shutdown)
+    : { resources: [], withheld: [] };
+  if (view.withheld.length > 0) {
+    log.warn(
+      { migrationId, facets: view.withheld },
+      'a source lock write is unsettled and the source cannot be told apart; these Facets are not translated',
+    );
+  }
   const sourceTarget: FacetTarget = sourceRef
-    ? { scope: 'repository', repository: sourceRef, namespace: sourceNsRef }
+    ? {
+        scope: 'repository',
+        repository: sourceRef,
+        namespace: sourceNsRef,
+        frameworkResources: view.resources,
+      }
     : { scope: 'endpoint', namespace: sourceNsRef };
-  const sourceReads = await readSide(sourceConn, sourceType, sourceTarget);
-
-  // LIF-045: what the framework created on the source is not translated.
-  const sourceMutations = isRepository
-    ? await db.mutation.findMany({
-        where: { migrationId, side: 'source', action: 'create', undoneAt: null },
-        select: { facetKey: true, paths: true, resourceRef: true },
-      })
-    : [];
-  const frameworkPaths = (facetKey: string): string[] =>
-    sourceMutations
-      .filter((m) => m.facetKey === facetKey)
-      .filter((m) => {
-        const ref = m.resourceRef as Json | null;
-        return ref?.adopted !== true && ref?.noop !== true;
-      })
-      .flatMap((m) => m.paths);
+  const sourceReads = await readSide(sourceConn, sourceType, sourceTarget, view.withheld);
 
   const sources: Record<string, unknown> = {};
   const attachments: Record<string, string> = {};
   for (const r of sourceReads) {
-    sources[r.key] = withoutFrameworkCreated(r.read.data, frameworkPaths(r.key));
+    sources[r.key] = r.read.data;
     Object.assign(attachments, r.read.attachments ?? {});
   }
   const sourceCaps = Object.fromEntries(sourceReads.map((r) => [r.key, r.caps]));

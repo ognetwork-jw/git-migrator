@@ -13,6 +13,7 @@ import {
 } from '@git-migrator/core';
 import type { Db } from '@git-migrator/db';
 import type { Logger } from '@git-migrator/observability';
+import { hasOpenLockIntent } from '../analysis/framework-resources.ts';
 import type { RunRouting } from '../queues.ts';
 import { parsePendingMarker } from '../run-leases.ts';
 import { endRunIn } from './finish.ts';
@@ -174,6 +175,15 @@ export async function createRun(db: Db, input: CreateRunInput): Promise<CreatedR
         throw new RunGuardError(
           'run.readiness_required',
           `A ${input.kind} Run needs readiness ${allowed.map((r) => r ?? 'unset').join(' or ')}, not ${readiness ?? 'unset'}`,
+        );
+      }
+      // LIF-045, ADR-0425: while a write of the source lock is unsettled, the source may hold a lock
+      // the ledger does not name, and a Run that writes the target could copy it there. Checked
+      // here as well as through the run-origin blocker, which an operator could dismiss.
+      if (allowed && (await hasOpenLockIntent(tx, input.migrationId))) {
+        throw new RunGuardError(
+          'run.readiness_required',
+          `A ${input.kind} Run cannot start while a write of the source lock is unsettled: run source_read_only or undo_source_read_only first`,
         );
       }
       const state: LifecycleState = {

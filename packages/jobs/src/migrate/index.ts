@@ -7,15 +7,19 @@ import type { RunKind } from '@git-migrator/core';
 import type { RunStepRegistry } from '../run/types.ts';
 import { createMigrationPlanner } from './plan.ts';
 import type { MigrationServices } from './services.ts';
+import { createSourceLockPlanner } from './source-read-only.ts';
 
 export const MIGRATION_RUN_KINDS: readonly RunKind[] = ['migrate', 'run_anyway', 'resync'];
 
-/** Registers the Steps of the three repository migration kinds (LIF-040, LIF-043). */
+/** Registers the Steps of the three repository migration kinds (LIF-040, LIF-043) and the two source lock kinds (LIF-070). */
 export function registerMigrationSteps(
   registry: RunStepRegistry<MigrationServices>,
   services: MigrationServices,
 ): void {
   for (const kind of MIGRATION_RUN_KINDS) registry.register(kind, createMigrationPlanner(services));
+  // LIF-070: the two Run kinds that only lock or unlock the source.
+  registry.register('source_read_only', createSourceLockPlanner('source_read_only'));
+  registry.register('undo_source_read_only', createSourceLockPlanner('undo_source_read_only'));
 }
 
 export { changeRequestsStep, partialMutationsOf } from './change-requests.ts';
@@ -42,3 +46,12 @@ export {
   type MigrationServices,
   type Side,
 } from './services.ts';
+export {
+  createSourceLockPlanner,
+  SOURCE_LOCK_RUN_KINDS,
+  SOURCE_READ_ONLY_STEP,
+  sourceReadOnlyStep,
+  targetWebUrl,
+  UNDO_SOURCE_READ_ONLY_STEP,
+  undoSourceReadOnlyStep,
+} from './source-read-only.ts';

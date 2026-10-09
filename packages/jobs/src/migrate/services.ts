@@ -94,8 +94,8 @@ export interface MigrationServices {
   /** Test seam: the git service factory. */
   readonly createGit?: (options: GitServiceOptions) => GitService;
   /**
-   * Steps of later tasks that belong to the same Run kinds by key: `verify` (T-072) and
-   * `source.read-only` (T-073). The planner uses the definition whose key the Plan lists.
+   * Steps of later tasks that belong to the same Run kinds by key: `verify` (T-072). The planner
+   * uses the definition whose key the Plan lists. (`source.read-only` is built in, T-073.)
    */
   readonly extraSteps?: ReadonlyMap<string, StepDefinition<MigrationServices>>;
   readonly now?: () => Date;

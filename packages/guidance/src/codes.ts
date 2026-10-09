@@ -136,6 +136,13 @@ export const FINDING_SPECS = [
     ref: 'LIF-040',
   },
   {
+    code: 'branch-rules.source-lock-unsettled',
+    facet: 'branch-rules',
+    severity: 'blocker',
+    verifiable: false,
+    ref: 'LIF-070',
+  },
+  {
     code: 'branch-rules.unknown-kind',
     facet: 'branch-rules',
     severity: 'warning',

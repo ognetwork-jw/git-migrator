@@ -276,9 +276,9 @@ export async function startWorker(options: StartWorkerOptions): Promise<WorkerHa
       log,
       lfs: createMirrorLfsSource({ scratchRoot: scratchRoot(env), log }),
     };
-    // The Steps of the repository migration kinds (LIF-040 steps 1 to 12). `verify` and
-    // `source.read-only` join through `extraSteps` (T-072, T-073); other Run kinds register their
-    // own planners here.
+    // The Steps of the repository migration kinds (LIF-040 steps 1 to 12). `verify` joins
+    // through `extraSteps` (T-072); `source.read-only` and the two source lock kinds are built in
+    // (T-073). Other Run kinds register their own planners here.
     const mirrors = new MirrorRegistry();
     const migrationServices: MigrationServices = {
       db: db.privileged,

@@ -118,7 +118,7 @@ describe('[LIF-060] the Parity Check', () => {
     );
   });
 
-  it('[LIF-045] a resource the framework created on the source is removed before translation', async () => {
+  it('[LIF-045] a resource the framework created on the source is left out of the read by identity', async () => {
     const withLock = {
       keys: [
         ...KEYS.keys,
@@ -148,7 +148,7 @@ describe('[LIF-060] the Parity Check', () => {
         side: 'source',
         facetKey: 'deploy-keys',
         action: 'create',
-        resourceRef: {},
+        resourceRef: { publicKey: 'ssh-ed25519 AAAAFrameworkOnly' },
         paths: ['/keys[publicKey=ssh-ed25519 AAAAFrameworkOnly]'],
       },
     });

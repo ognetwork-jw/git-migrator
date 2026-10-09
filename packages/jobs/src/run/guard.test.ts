@@ -450,8 +450,11 @@ describe('[LIF-043] Run options', () => {
   });
 
   it('[LIF-043] refuses unknown options and adoptNonEmpty on kinds that push no refs', () => {
-    const check = (kind: 'migrate' | 'verify', options: unknown, confirm?: string) =>
-      checkRunOptions({ kind, options, confirm, targetFullName: 'acme/x' });
+    const check = (
+      kind: 'migrate' | 'verify' | 'source_read_only',
+      options: unknown,
+      confirm?: string,
+    ) => checkRunOptions({ kind, options, confirm, targetFullName: 'acme/x' });
     expect(check('migrate', { surprise: true })).toMatchObject({
       ok: false,
       code: 'run.options_invalid',
@@ -469,6 +472,15 @@ describe('[LIF-043] Run options', () => {
       options: { skipSourceReadOnly: true },
     });
     expect(check('migrate', undefined)).toEqual({ ok: true, options: {} });
+    // LIF-070: the opt-out belongs to the Runs that lock the source as their step 14.
+    expect(check('verify', { skipSourceReadOnly: true })).toMatchObject({
+      ok: false,
+      code: 'run.options_invalid',
+    });
+    expect(check('source_read_only', { skipSourceReadOnly: false })).toMatchObject({
+      ok: false,
+      code: 'run.options_invalid',
+    });
     expect(
       checkRunOptions({
         kind: 'migrate',

@@ -104,6 +104,7 @@ export {
   chooseDefaultBranch,
   connectSide,
   createMigrationPlanner,
+  createSourceLockPlanner,
   effectiveMaxPushBytes,
   IMPLEMENTED_STEP_KEYS,
   MIGRATION_RUN_KINDS,
@@ -113,6 +114,12 @@ export {
   MirrorRegistry,
   registerMigrationSteps,
   type Side,
+  SOURCE_LOCK_RUN_KINDS,
+  SOURCE_READ_ONLY_STEP,
+  sourceReadOnlyStep,
+  targetWebUrl,
+  UNDO_SOURCE_READ_ONLY_STEP,
+  undoSourceReadOnlyStep,
 } from './migrate/index.ts';
 export {
   computeParity,

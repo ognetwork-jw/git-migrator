@@ -55,6 +55,14 @@ export function checkRunOptions(input: {
       message: 'a rollback needs confirm set to the target full name',
     };
   }
+  // LIF-070: the opt-out belongs to the Runs that would lock the source as their step 14.
+  if (options.skipSourceReadOnly !== undefined && !GIT_KINDS.includes(input.kind)) {
+    return {
+      ok: false,
+      code: 'run.options_invalid',
+      message: `skipSourceReadOnly applies only to ${GIT_KINDS.join(', ')} Runs`,
+    };
+  }
   if (options.adoptNonEmpty === true) {
     if (!GIT_KINDS.includes(input.kind)) {
       return {

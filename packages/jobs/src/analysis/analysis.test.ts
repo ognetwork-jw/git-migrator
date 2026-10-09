@@ -45,11 +45,25 @@ function stubConnection(side: 'source' | 'target') {
   if (side === 'source') {
     for (const key of Object.keys(reads)) {
       facets[key] = {
-        async read(ctx: { http: { request(r: unknown): Promise<unknown> } }) {
+        async read(
+          ctx: { http: { request(r: unknown): Promise<unknown> } },
+          target?: { frameworkResources?: { publicKey?: string }[] },
+        ) {
           const r = reads[key] as StubRead;
+          // Like an adapter: leave out the resources the framework names (LIF-045, by identity).
+          const own = new Set((target?.frameworkResources ?? []).map((f) => f.publicKey));
+          const data =
+            own.size > 0 && Array.isArray((r.data as { keys?: unknown[] }).keys)
+              ? {
+                  ...(r.data as object),
+                  keys: (r.data as { keys: { publicKey: string }[] }).keys.filter(
+                    (k) => !own.has(k.publicKey),
+                  ),
+                }
+              : r.data;
           for (let i = 0; i < (r.calls ?? 0); i++) await ctx.http.request({ path: '/x' });
           return {
-            data: r.data,
+            data,
             unreadable: r.unreadable ?? [],
             warnings: r.warnings ?? [],
             rawResponseIds: [],
@@ -1257,7 +1271,7 @@ describe('endpoint Migration (LIF-080)', () => {
 });
 
 describe('framework-created resources on the source (LIF-045)', () => {
-  it('[LIF-045] a resource an active source-side Mutation created is not translated; an undone or adopted one is', async () => {
+  it('[LIF-045] the resources an active source-side Mutation names (created or adopted) are left out of the read by identity; an undone one is not', async () => {
     const w = await seedWorld();
     const m = await seedMigration(w);
     const db = t.db.privileged;
@@ -1290,7 +1304,7 @@ describe('framework-created resources on the source (LIF-045)', () => {
           runId: run.id,
           side: 'source',
           facetKey: 'deploy-keys',
-          resourceRef: {},
+          resourceRef: { publicKey },
           paths: [`/keys[publicKey=${publicKey}]`],
           action: 'create',
           ...over,
@@ -1298,7 +1312,9 @@ describe('framework-created resources on the source (LIF-045)', () => {
       });
     await mutation('ssh-ed25519 KOWN');
     await mutation('ssh-ed25519 KUNDONE', { undoneAt: new Date() });
-    await mutation('ssh-ed25519 KADOPTED', { resourceRef: { adopted: true } });
+    await mutation('ssh-ed25519 KADOPTED', {
+      resourceRef: { publicKey: 'ssh-ed25519 KADOPTED', adopted: true },
+    });
     await analyze(m.id);
     const row = await migrationRow(m.id);
     const analysis = await db.analysis.findUniqueOrThrow({
@@ -1309,12 +1325,7 @@ describe('framework-created resources on the source (LIF-045)', () => {
         facets: Record<string, { desired: { keys: { publicKey: string }[] } }>;
       }
     ).facets['deploy-keys']?.desired.keys.map((k) => k.publicKey);
-    expect(desired).toEqual(['ssh-ed25519 KADOPTED', 'ssh-ed25519 KKEEP', 'ssh-ed25519 KUNDONE']);
-    // The Snapshot is the read as it was.
-    const snapshot = await db.facetSnapshot.findFirstOrThrow({
-      where: { id: { in: analysis.sourceSnapshotIds } },
-    });
-    expect(JSON.stringify(snapshot.data)).toContain('ssh-ed25519 KOWN');
+    expect(desired).toEqual(['ssh-ed25519 KKEEP', 'ssh-ed25519 KUNDONE']);
   });
 });
 
