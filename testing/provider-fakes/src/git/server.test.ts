@@ -235,6 +235,27 @@ describe('fake git server', () => {
     await git(['push', '-q', 'origin', 'HEAD:refs/heads/main'], dir);
   });
 
+  it('[TST-013] a small push over the limit is refused and never applied, however often it is tried', async () => {
+    await createBareRepo(server.repoDir('target', 'acme/small'));
+    const dir = await newClone(server.repoUrl('target', 'acme/small'), 'clone-small');
+    await commitFile(dir, 'a.txt', Buffer.from('a'));
+    server.setLimits('target', { maxPushBytes: 1 });
+    try {
+      // The pack is a few hundred bytes: it reaches the server in one chunk, which used to race the
+      // kill of the CGI against a receive-pack that had already been fed the pack.
+      for (let attempt = 0; attempt < 15; attempt++) {
+        const push = await git(['push', 'origin', 'HEAD:refs/heads/main'], dir, { check: false });
+        expect(push.code).not.toBe(0);
+        expect(push.stderr).toContain('HTTP 413');
+        const refs = await git(['for-each-ref'], server.repoDir('target', 'acme/small'));
+        expect(refs.stdout.trim()).toBe('');
+      }
+    } finally {
+      server.setLimits('target', { maxPushBytes: 64 * MIB });
+    }
+    await git(['push', '-q', 'origin', 'HEAD:refs/heads/main'], dir);
+  });
+
   it('[TST-013] stores LFS objects on push and serves them on clone', async () => {
     await createBareRepo(server.repoDir('target', 'acme/lfs'));
     const dir = await newClone(server.repoUrl('target', 'acme/lfs'), 'clone-lfs');

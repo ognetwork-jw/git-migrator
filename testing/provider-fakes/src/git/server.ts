@@ -502,23 +502,38 @@ function pumpCgi(
     stdin.on('error', () => {});
     let exceeded = false;
     let received = 0;
-    req.pipe(stdin);
-    req.on('data', (chunk: Buffer) => {
-      received += chunk.length;
-      if (pushLimit !== null && !exceeded && received > pushLimit) {
-        exceeded = true;
-        req.unpipe(stdin);
-        stdin.destroy();
-        child.kill();
-        req.resume();
-      }
-    });
-    req.on('end', () => {
-      if (!exceeded) return;
-      res.writeHead(413, { 'content-type': 'text/plain' });
-      res.end(`fatal: pack exceeds maximum allowed size (${pushLimit} bytes)\n`);
-      resolve();
-    });
+    if (pushLimit === null) {
+      req.pipe(stdin);
+      req.on('end', () => undefined);
+    } else {
+      // A push is held back until its size is known. Streaming it to git while counting leaves a
+      // race: git's receive-pack (a grandchild that a kill of the CGI does not reach) can apply a
+      // pack that is over the limit before the kill lands, and the push then half-succeeds.
+      const held: Buffer[] = [];
+      req.on('data', (chunk: Buffer) => {
+        received += chunk.length;
+        if (exceeded) return;
+        if (received > pushLimit) {
+          exceeded = true;
+          held.length = 0;
+          stdin.destroy();
+          child.kill();
+          return;
+        }
+        held.push(chunk);
+      });
+      req.on('end', () => {
+        if (exceeded) {
+          res.writeHead(413, { 'content-type': 'text/plain' });
+          res.end(`fatal: pack exceeds maximum allowed size (${pushLimit} bytes)\n`);
+          resolve();
+          return;
+        }
+        // Chunk by chunk, so the pack is never copied into one more buffer.
+        for (const chunk of held) stdin.write(chunk);
+        stdin.end();
+      });
+    }
     req.on('aborted', () => child.kill());
     let stderr = '';
     child.stderr?.on('data', (d: Buffer) => {
