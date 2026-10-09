@@ -30,3 +30,7 @@ The Docker image build is not reproduced locally.
 
 - Wait for Actions to return. This stalls all integration, because every remaining task depends on merges.
 - Stop and hand off. Not needed: this blocks only one gate, and that gate has a local equivalent.
+
+## Addendum (same day)
+
+`helm` and `kubeconform` are not installed in the orchestration container, so `pnpm helm:check` cannot run there. It is required only when the merged diff touches chart or deploy files (`deploy/`, `charts/`, Helm values or templates); otherwise it is waived and the waiver is noted in the merge report. A diff that touches those files waits for Actions or for a machine with the tools.
