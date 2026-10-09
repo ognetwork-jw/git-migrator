@@ -17,6 +17,7 @@ export const PROBLEMS = {
   origin_not_allowed: { status: 403, title: 'Request origin not allowed' },
   not_found: { status: 404, title: 'Not found' },
   conflict: { status: 409, title: 'Conflict' },
+  revoke_first: { status: 409, title: 'Revoke the pending invitation first' },
   last_admin: { status: 409, title: 'The last administrator cannot be removed' },
   payload_too_large: { status: 413, title: 'Request body too large' },
   unsupported_media_type: { status: 415, title: 'Unsupported media type' },

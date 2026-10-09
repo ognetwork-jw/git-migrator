@@ -1,4 +1,5 @@
 import { type Db, type DbHandle, publishEventIn } from '@git-migrator/db';
+import { invitationTargetLockKey } from '@git-migrator/jobs';
 import { ProblemError } from '../problem.ts';
 import { type CsvErrorCode, parseMappingCsv } from './csv.ts';
 import { exclusionPatterns } from './expected-differences.ts';
@@ -28,6 +29,7 @@ type Tx = Pick<
   Db,
   | 'identity'
   | 'identityMapping'
+  | 'invitation'
   | 'group'
   | 'groupMapping'
   | 'route'
@@ -307,6 +309,33 @@ export interface Decision {
   readonly now?: Date;
 }
 
+/**
+ * Confirming can change the person's invitation entries (accept them, or hold an in-flight one as
+ * `unknown`), so it takes the invitation locks of their target organizations first: the lock order
+ * of ADR-0370 is target Endpoint locks, then the Route lock. The Route's target and the entries'
+ * targets are immutable or fixed at creation, so reading them before locking is safe.
+ */
+async function lockInvitationTargets(tx: Tx, routeId: string, mappingId: string): Promise<void> {
+  const [route, mapping] = await Promise.all([
+    tx.route.findUnique({ where: { id: routeId }, select: { targetEndpointId: true } }),
+    tx.identityMapping.findUnique({ where: { id: mappingId }, select: { sourceIdentityId: true } }),
+  ]);
+  if (!route || !mapping) return;
+  const entries = await tx.invitation.findMany({
+    where: { routeId, sourceIdentityId: mapping.sourceIdentityId },
+    select: { targetEndpointId: true },
+    distinct: ['targetEndpointId'],
+  });
+  const targets = [...new Set([route.targetEndpointId, ...entries.map((e) => e.targetEndpointId)])];
+  const lockMs = String(MAPPING_TIMEOUTS.lockMs);
+  const statementMs = String(MAPPING_TIMEOUTS.statementMs);
+  await tx.$executeRaw`SELECT set_config('lock_timeout', ${lockMs}, true), set_config('statement_timeout', ${statementMs}, true)`;
+  for (const target of targets.sort()) {
+    const key = invitationTargetLockKey(target);
+    await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${key})::bigint)`;
+  }
+}
+
 /** Confirms a mapping: the suggested target, or `targetIdentityId` chosen by the operator. */
 export async function confirmIdentityMapping(
   db: Writer,
@@ -317,6 +346,7 @@ export async function confirmIdentityMapping(
 ): Promise<IdentityMappingView> {
   return db.privileged.$transaction(async (tx) => {
     const now = by.now ?? new Date();
+    await lockInvitationTargets(tx, routeId, mappingId);
     await lockRoute(tx, routeId);
     const route = await loadRoute(tx, routeId);
     const mapping = await loadMapping(tx, route, mappingId);
@@ -346,6 +376,16 @@ export async function confirmIdentityMapping(
     const unchangedTarget = mapping.targetIdentityId === targetId;
     // Nothing to change: no write, no audit event, no staleness, no event.
     if (mapping.status === 'confirmed' && unchangedTarget) return viewOf(tx, mappingId);
+    if (mapping.status === 'pending_invite') {
+      // Lock order (ADR-0370): batch rows, then invitation rows, then the mapping row.
+      await tx.$queryRaw`SELECT b.id FROM app.invitation_batch b
+        WHERE b.id IN (SELECT i.batch_id FROM app.invitation i
+                        WHERE i.route_id = ${routeId} AND i.source_identity_id = ${mapping.sourceIdentityId})
+        ORDER BY b.id FOR NO KEY UPDATE`;
+      await tx.$queryRaw`SELECT id FROM app.invitation
+        WHERE route_id = ${routeId} AND source_identity_id = ${mapping.sourceIdentityId}
+        ORDER BY id FOR UPDATE`;
+    }
     await tx.identityMapping.update({
       where: { id: mappingId },
       data: {
@@ -359,6 +399,29 @@ export async function confirmIdentityMapping(
       },
     });
     await revokeExclusions(tx, [mappingId], now);
+    if (mapping.status === 'pending_invite') {
+      // An operator linked the invitee (AUTH-060 step 5.2): the invitation was accepted.
+      await tx.invitation.updateMany({
+        where: {
+          sourceIdentityId: mapping.sourceIdentityId,
+          status: { in: ['sent', 'unknown'] },
+          batch: { routeId },
+        },
+        data: { status: 'accepted' },
+      });
+      // An entry whose send started but was never recorded may still reach (or have reached) the
+      // provider: it is not freed but becomes `unknown`, holding the address until an operator
+      // resolves it (AUTH-061). The send job only works on `selected` entries, so it stops there.
+      await tx.invitation.updateMany({
+        where: {
+          sourceIdentityId: mapping.sourceIdentityId,
+          status: 'selected',
+          sendStartedAt: { not: null },
+          batch: { routeId },
+        },
+        data: { status: 'unknown', error: 'mapping_confirmed' },
+      });
+    }
     await audit(tx, by.actorId, 'identity-mapping.confirm', 'identity_mapping', mappingId, {
       status: { from: mapping.status, to: 'confirmed' },
       targetIdentityId: { from: mapping.targetIdentityId, to: targetId },
@@ -385,6 +448,12 @@ export async function excludeIdentityMapping(
     await lockRoute(tx, routeId);
     const route = await loadRoute(tx, routeId);
     const mapping = await loadMapping(tx, route, mappingId);
+    if (mapping.status === 'pending_invite') {
+      // An invitation is out: revoke it in its batch first (AUTH-060), as `unmap` requires.
+      throw new ProblemError('revoke_first', {
+        detail: 'an invitation is pending for this Identity; revoke it in the invitation batch',
+      });
+    }
     if (mapping.status === 'excluded') {
       const current = await tx.expectedDifference.findFirst({
         where: { identityMappingId: mappingId, reason: 'identity_excluded', revokedAt: null },

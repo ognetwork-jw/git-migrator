@@ -37,6 +37,7 @@ export const CSV_ERROR_CODES = [
   'target_taken',
   'email_conflict',
   'already_decided',
+  'invite_pending',
 ] as const;
 export type CsvErrorCode = (typeof CSV_ERROR_CODES)[number];
 

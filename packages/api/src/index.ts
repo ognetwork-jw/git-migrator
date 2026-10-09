@@ -12,6 +12,19 @@ export {
 } from './app.ts';
 export { createEventHub, type EventHub, type EventHubOptions } from './events.ts';
 export {
+  approveBatch,
+  type BatchView,
+  createBatch,
+  deselectItem,
+  getBatch,
+  type ItemView,
+  listBatches,
+  listCandidates,
+  resolveItem,
+  selectItem,
+  selectionToken,
+} from './invitations/service.ts';
+export {
   DEFAULT_PAGE_LIMIT,
   MAX_PAGE_LIMIT,
   type PageQuery,

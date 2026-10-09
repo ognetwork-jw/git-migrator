@@ -64,3 +64,17 @@ Publish with `publishEvent(pool, event)` or, inside a ZenStack transaction, `pub
 - Answer: `{accepted: [id], skipped: [{id, reason}]}`. Reasons: `not_found`, `not_repository`, `source_missing`, `route_retired`, `not_ready`, `not_analyzed`, `analysis_stale`, `run_active`, `not_permitted`, `already_in_wave`, `not_in_wave`, `queue_unavailable`.
 - After one failed enqueue the remaining items are skipped as `queue_unavailable` without being tried. A Run created before that failure is cancelled and audited (`run.create`, then `run.cancel`).
 - Wave changes run in one transaction: the Wave is locked against deletion, each Migration is locked and re-read, and the audit rows carry the `previousWaveId` read under the lock.
+
+## Invitation batches (AUTH-060, AUTH-061, T-085)
+
+`src/invitations/` holds the invitation batch endpoints (decisions in ADR-0370). Nothing here calls the provider: the seat read, the sending and the revoking are `invitations.batch` job steps.
+
+| Endpoint | |
+|---|---|
+| `GET /routes/{id}/invitation-candidates` (`q`, cursor), `GET /invitation-batches` (`routeId`, `status`, cursor), `GET /invitation-batches/{id}` (entries page, `status`, cursor) | reads (`read`) |
+| `POST /routes/{id}/invitation-batches` `{identityIds}` or `{all}` | `manageInvitations`; a draft with the e-mail and target team slugs per person; queues the seat read |
+| `POST /invitation-batches/{id}/items/{itemId}/{select\|deselect}` | `manageInvitations`; draft batches only; deselecting needs `reason` and creates the `identity_excluded` Expected Differences (linked to the entry) |
+| `POST /invitation-batches/{id}/approve` `{expectedCount?}` | `manageInvitations`; 202 and the send step is queued; 409 for a second approval, a changed final count or an empty batch |
+| `POST /invitation-batches/{id}/items/{itemId}/revoke` | `manageInvitations`; 202, queues the revoke step for a `sent` entry |
+
+`service.ts` runs every write in one transaction under the batch row lock (`FOR NO KEY UPDATE`), publishes `invitation.updated` (`invitation:<id>`, `list:invitations`) and writes an `AuditEvent`.

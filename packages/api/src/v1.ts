@@ -13,6 +13,7 @@ import { createBatch1 } from './batch1.ts';
 import { createBulk } from './bulk.ts';
 import type { EventHub } from './events.ts';
 import { eventsHandler, eventsRoute } from './events-route.ts';
+import { createInvitations } from './invitations/app.ts';
 import {
   decideGroupMappingRoute,
   decideIdentityMappingRoute,
@@ -419,6 +420,15 @@ export function createV1(deps: V1Deps) {
       }),
     )
     .route('/', createOverlays({ db: deps.db, services: deps.services ?? {}, validationHook }))
+    .route(
+      '/',
+      createInvitations({
+        db: deps.db,
+        services: deps.services ?? {},
+        ...(deps.onFault ? { onFault: deps.onFault } : {}),
+        validationHook,
+      }),
+    )
     .route(
       '/',
       createBatch1({

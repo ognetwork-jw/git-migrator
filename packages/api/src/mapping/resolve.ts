@@ -114,6 +114,10 @@ export function resolveRows(
       const status = mappingBySource.get(draft.source.id)?.status;
       if (status === 'confirmed' || status === 'excluded') fail('already_decided');
     }
+    if ((row.action === 'map' || row.action === 'exclude') && draft.source) {
+      // An invitation is out for this person: revoke it first (AUTH-060), as `unmap` requires.
+      if (mappingBySource.get(draft.source.id)?.status === 'pending_invite') fail('invite_pending');
+    }
     if (row.action === 'invite' && draft.source && errors.length === 0) {
       const { email, emailSource } = draft.source;
       if (email !== null && emailSource !== 'csv' && lower(email) !== row.target.toLowerCase()) {
