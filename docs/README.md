@@ -9,7 +9,7 @@
 | Live e2e | [e2e-setup.md](e2e-setup.md) | Human setup for the live test |
 | Follow-ups | [followups.md](followups.md) | Unresolved review findings, deferred work |
 | Deployment | [deployment.md](deployment.md) | Azure and Helm operations |
-| API usage | `api-usage.md` (written by T-062) | Automation via RPC and `/api/v1` |
+| API usage | [api-usage.md](api-usage.md) | Automation via RPC and `/api/v1` |
 | Handoff | `handoff.md` (written by T-097) | Final state for the human |
 
 ## Commands

@@ -145,5 +145,8 @@
 | [0311](0311-analysis-route-index.md) | What the Analysis puts into the translate context (pipelines text, key usage, endpoint index) | accepted (spec updated) |
 | [0312](0312-analysis-feeder.md) | Analysis feeder: capacity, backlog, priority, endpoint Migrations | accepted (spec updated) |
 | [0313](0313-fixture-table-and-implementation.md) | Where the T-043 table and the implementation disagreed | accepted (spec updated) |
+| [0330](0330-command-endpoints-and-services.md) | Command endpoints (inventory refresh, analyze) and the services `createApiApp` receives | agent-decided |
+| [0331](0331-diff-and-naming-preview.md) | The diff view and its redaction, the naming preview | agent-decided |
+| [0332](0332-dashboard-and-quota-views.md) | Dashboard and quota views, backlog and ETA | agent-decided |
 
 New ADRs continue from 0028. Implementor decisions use `status: agent-decided` (PROC-005). T-002 uses 0065–0069.
