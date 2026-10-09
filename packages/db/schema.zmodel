@@ -122,6 +122,7 @@ model Endpoint {
     snapshots    FacetSnapshot[]
     rawResponses RawResponse[]
     identities   Identity[]
+    invitations  Invitation[]
     groups       Group[]
 
     @@map("endpoint")
@@ -154,6 +155,7 @@ model Route {
     identityMappings    IdentityMapping[]
     groupMappings       GroupMapping[]
     invitationBatches   InvitationBatch[]
+    invitations         Invitation[]
     namingRules         NamingRule[]
     webhookAllowlist    WebhookAllowlistEntry[]
     overlays            Overlay[]
@@ -638,16 +640,19 @@ model ExpectedDifference {
     note        String?
     createdById String?                  @map("created_by_id") // null when created by the system
     identityMappingId String?            @deny('update', true) @map("identity_mapping_id") // set by an identity_excluded exclusion (AUTH-050); nullable
+    invitationId String?                 @deny('update', true) @map("invitation_id") // set when the exclusion is an invitation deselection (AUTH-060 step 3)
     createdAt   DateTime                 @default(now()) @map("created_at") @db.Timestamptz(3)
     updatedAt   DateTime                 @updatedAt @map("updated_at") @db.Timestamptz(3)
     revokedAt   DateTime?                @map("revoked_at") @db.Timestamptz(3)
 
     identityMapping IdentityMapping?     @relation(fields: [identityMappingId], references: [id], onDelete: Restrict)
+    invitation  Invitation?              @relation(fields: [invitationId], references: [id], onDelete: Restrict)
     route       Route                    @relation(fields: [routeId], references: [id], onDelete: Restrict)
     migration   Migration?               @relation(fields: [migrationId], references: [id], onDelete: Restrict)
     createdBy   Actor?                   @relation('ExpectedDifferenceCreatedBy', fields: [createdById], references: [id], onDelete: Restrict)
 
     @@index([identityMappingId])
+    @@index([invitationId])
     @@map("expected_difference")
     @@schema('app')
     @@allow('read', auth() != null && auth().disabled == false)
@@ -791,6 +796,7 @@ enum InvitationStatus {
     accepted
     failed
     expired
+    unknown
 
     @@map("invitation_status")
     @@schema('app')
@@ -804,6 +810,8 @@ model InvitationBatch {
     createdById  String                @map("created_by_id")
     approvedById String?               @map("approved_by_id")
     approvedAt   DateTime?             @map("approved_at") @db.Timestamptz(3)
+    /// Earliest time the send job may try again after the provider's invitation cap or rate limit (AUTH-060 step 4).
+    nextAttemptAt DateTime?            @map("next_attempt_at") @db.Timestamptz(3)
     createdAt    DateTime              @default(now()) @map("created_at") @db.Timestamptz(3)
     updatedAt    DateTime              @updatedAt @map("updated_at") @db.Timestamptz(3)
 
@@ -827,12 +835,30 @@ model Invitation {
     status               InvitationStatus @default(selected)
     providerInvitationId String?          @map("provider_invitation_id")
     error                String?
+    /// Why the operator deselected the item (AUTH-060 step 3).
+    deselectReason       String?          @map("deselect_reason")
+    /// Set before the provider call; a retry that finds it set first looks for the invitation (AUTH-061).
+    sendStartedAt        DateTime?        @map("send_started_at") @db.Timestamptz(3)
+    sentAt               DateTime?        @map("sent_at") @db.Timestamptz(3)
+    /// The invitee's login while GitHub reports it on the pending invitation (AUTH-060 step 5.1).
+    inviteeLogin         String?          @map("invitee_login")
+    /// Set by the guard trigger from the batch (AUTH-061: one outstanding invitation per person and address).
+    routeId              String           @default("") @map("route_id")
+    /// The target organization, set by the guard trigger from the Route when the item is created and frozen (AUTH-061 is per target).
+    targetEndpointId     String           @default("") @map("target_endpoint_id")
+    /// lower(trim(email)), set by the guard trigger.
+    emailNormalised      String           @default("") @map("email_normalised")
     createdAt            DateTime         @default(now()) @map("created_at") @db.Timestamptz(3)
     updatedAt            DateTime         @updatedAt @map("updated_at") @db.Timestamptz(3)
 
     batch                InvitationBatch  @relation(fields: [batchId], references: [id], onDelete: Restrict)
     sourceIdentity       Identity         @relation(fields: [sourceIdentityId], references: [id], onDelete: Restrict)
+    route                Route            @relation(fields: [routeId], references: [id], onDelete: Restrict)
+    targetEndpoint       Endpoint         @relation(fields: [targetEndpointId], references: [id], onDelete: Restrict)
+    deselectionDifferences ExpectedDifference[]
 
+    @@unique([batchId, sourceIdentityId])
+    @@index([sourceIdentityId])
     @@map("invitation")
     @@schema('app')
     @@allow('read', auth() != null && auth().disabled == false)

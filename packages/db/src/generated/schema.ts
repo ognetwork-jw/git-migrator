@@ -308,6 +308,12 @@ export class SchemaType implements SchemaDef {
                     array: true,
                     relation: { opposite: "endpoint" }
                 },
+                invitations: {
+                    name: "invitations",
+                    type: "Invitation",
+                    array: true,
+                    relation: { opposite: "targetEndpoint" }
+                },
                 groups: {
                     name: "groups",
                     type: "Group",
@@ -452,6 +458,12 @@ export class SchemaType implements SchemaDef {
                 invitationBatches: {
                     name: "invitationBatches",
                     type: "InvitationBatch",
+                    array: true,
+                    relation: { opposite: "route" }
+                },
+                invitations: {
+                    name: "invitations",
+                    type: "Invitation",
                     array: true,
                     relation: { opposite: "route" }
                 },
@@ -2050,6 +2062,15 @@ export class SchemaType implements SchemaDef {
                         "identityMapping"
                     ] as readonly string[]
                 },
+                invitationId: {
+                    name: "invitationId",
+                    type: "String",
+                    optional: true,
+                    attributes: [{ name: "@deny", args: [{ name: "operation", value: ExpressionUtils.literal("update") }, { name: "condition", value: ExpressionUtils.literal(true) }] }, { name: "@map", args: [{ name: "name", value: ExpressionUtils.literal("invitation_id") }] }] as readonly AttributeApplication[],
+                    foreignKeyFor: [
+                        "invitation"
+                    ] as readonly string[]
+                },
                 createdAt: {
                     name: "createdAt",
                     type: "DateTime",
@@ -2075,6 +2096,13 @@ export class SchemaType implements SchemaDef {
                     attributes: [{ name: "@relation", args: [{ name: "fields", value: ExpressionUtils.array("String", [ExpressionUtils.field("identityMappingId")]) }, { name: "references", value: ExpressionUtils.array("String", [ExpressionUtils.field("id")]) }, { name: "onDelete", value: ExpressionUtils.literal("Restrict") }] }] as readonly AttributeApplication[],
                     relation: { opposite: "expectedDifferences", fields: ["identityMappingId"], references: ["id"], onDelete: "Restrict" }
                 },
+                invitation: {
+                    name: "invitation",
+                    type: "Invitation",
+                    optional: true,
+                    attributes: [{ name: "@relation", args: [{ name: "fields", value: ExpressionUtils.array("String", [ExpressionUtils.field("invitationId")]) }, { name: "references", value: ExpressionUtils.array("String", [ExpressionUtils.field("id")]) }, { name: "onDelete", value: ExpressionUtils.literal("Restrict") }] }] as readonly AttributeApplication[],
+                    relation: { opposite: "deselectionDifferences", fields: ["invitationId"], references: ["id"], onDelete: "Restrict" }
+                },
                 route: {
                     name: "route",
                     type: "Route",
@@ -2098,6 +2126,7 @@ export class SchemaType implements SchemaDef {
             },
             attributes: [
                 { name: "@@index", args: [{ name: "fields", value: ExpressionUtils.array("String", [ExpressionUtils.field("identityMappingId")]) }] },
+                { name: "@@index", args: [{ name: "fields", value: ExpressionUtils.array("String", [ExpressionUtils.field("invitationId")]) }] },
                 { name: "@@map", args: [{ name: "name", value: ExpressionUtils.literal("expected_difference") }] },
                 { name: "@@schema", args: [{ name: "map", value: ExpressionUtils.literal("app") }] },
                 { name: "@@allow", args: [{ name: "operation", value: ExpressionUtils.literal("read") }, { name: "condition", value: ExpressionUtils.binary(ExpressionUtils.binary(ExpressionUtils.call("auth"), "!=", ExpressionUtils._null()), "&&", ExpressionUtils.binary(ExpressionUtils.member(ExpressionUtils.call("auth"), ["disabled"]), "==", ExpressionUtils.literal(false))) }] }
@@ -2624,6 +2653,12 @@ export class SchemaType implements SchemaDef {
                     optional: true,
                     attributes: [{ name: "@map", args: [{ name: "name", value: ExpressionUtils.literal("approved_at") }] }, { name: "@db.Timestamptz", args: [{ name: "x", value: ExpressionUtils.literal(3) }] }] as readonly AttributeApplication[]
                 },
+                nextAttemptAt: {
+                    name: "nextAttemptAt",
+                    type: "DateTime",
+                    optional: true,
+                    attributes: [{ name: "@map", args: [{ name: "name", value: ExpressionUtils.literal("next_attempt_at") }] }, { name: "@db.Timestamptz", args: [{ name: "x", value: ExpressionUtils.literal(3) }] }] as readonly AttributeApplication[]
+                },
                 createdAt: {
                     name: "createdAt",
                     type: "DateTime",
@@ -2725,6 +2760,54 @@ export class SchemaType implements SchemaDef {
                     type: "String",
                     optional: true
                 },
+                deselectReason: {
+                    name: "deselectReason",
+                    type: "String",
+                    optional: true,
+                    attributes: [{ name: "@map", args: [{ name: "name", value: ExpressionUtils.literal("deselect_reason") }] }] as readonly AttributeApplication[]
+                },
+                sendStartedAt: {
+                    name: "sendStartedAt",
+                    type: "DateTime",
+                    optional: true,
+                    attributes: [{ name: "@map", args: [{ name: "name", value: ExpressionUtils.literal("send_started_at") }] }, { name: "@db.Timestamptz", args: [{ name: "x", value: ExpressionUtils.literal(3) }] }] as readonly AttributeApplication[]
+                },
+                sentAt: {
+                    name: "sentAt",
+                    type: "DateTime",
+                    optional: true,
+                    attributes: [{ name: "@map", args: [{ name: "name", value: ExpressionUtils.literal("sent_at") }] }, { name: "@db.Timestamptz", args: [{ name: "x", value: ExpressionUtils.literal(3) }] }] as readonly AttributeApplication[]
+                },
+                inviteeLogin: {
+                    name: "inviteeLogin",
+                    type: "String",
+                    optional: true,
+                    attributes: [{ name: "@map", args: [{ name: "name", value: ExpressionUtils.literal("invitee_login") }] }] as readonly AttributeApplication[]
+                },
+                routeId: {
+                    name: "routeId",
+                    type: "String",
+                    attributes: [{ name: "@default", args: [{ name: "value", value: ExpressionUtils.literal("") }] }, { name: "@map", args: [{ name: "name", value: ExpressionUtils.literal("route_id") }] }] as readonly AttributeApplication[],
+                    default: "" as FieldDefault,
+                    foreignKeyFor: [
+                        "route"
+                    ] as readonly string[]
+                },
+                targetEndpointId: {
+                    name: "targetEndpointId",
+                    type: "String",
+                    attributes: [{ name: "@default", args: [{ name: "value", value: ExpressionUtils.literal("") }] }, { name: "@map", args: [{ name: "name", value: ExpressionUtils.literal("target_endpoint_id") }] }] as readonly AttributeApplication[],
+                    default: "" as FieldDefault,
+                    foreignKeyFor: [
+                        "targetEndpoint"
+                    ] as readonly string[]
+                },
+                emailNormalised: {
+                    name: "emailNormalised",
+                    type: "String",
+                    attributes: [{ name: "@default", args: [{ name: "value", value: ExpressionUtils.literal("") }] }, { name: "@map", args: [{ name: "name", value: ExpressionUtils.literal("email_normalised") }] }] as readonly AttributeApplication[],
+                    default: "" as FieldDefault
+                },
                 createdAt: {
                     name: "createdAt",
                     type: "DateTime",
@@ -2748,16 +2831,37 @@ export class SchemaType implements SchemaDef {
                     type: "Identity",
                     attributes: [{ name: "@relation", args: [{ name: "fields", value: ExpressionUtils.array("String", [ExpressionUtils.field("sourceIdentityId")]) }, { name: "references", value: ExpressionUtils.array("String", [ExpressionUtils.field("id")]) }, { name: "onDelete", value: ExpressionUtils.literal("Restrict") }] }] as readonly AttributeApplication[],
                     relation: { opposite: "invitations", fields: ["sourceIdentityId"], references: ["id"], onDelete: "Restrict" }
+                },
+                route: {
+                    name: "route",
+                    type: "Route",
+                    attributes: [{ name: "@relation", args: [{ name: "fields", value: ExpressionUtils.array("String", [ExpressionUtils.field("routeId")]) }, { name: "references", value: ExpressionUtils.array("String", [ExpressionUtils.field("id")]) }, { name: "onDelete", value: ExpressionUtils.literal("Restrict") }] }] as readonly AttributeApplication[],
+                    relation: { opposite: "invitations", fields: ["routeId"], references: ["id"], onDelete: "Restrict", hasDefault: true }
+                },
+                targetEndpoint: {
+                    name: "targetEndpoint",
+                    type: "Endpoint",
+                    attributes: [{ name: "@relation", args: [{ name: "fields", value: ExpressionUtils.array("String", [ExpressionUtils.field("targetEndpointId")]) }, { name: "references", value: ExpressionUtils.array("String", [ExpressionUtils.field("id")]) }, { name: "onDelete", value: ExpressionUtils.literal("Restrict") }] }] as readonly AttributeApplication[],
+                    relation: { opposite: "invitations", fields: ["targetEndpointId"], references: ["id"], onDelete: "Restrict", hasDefault: true }
+                },
+                deselectionDifferences: {
+                    name: "deselectionDifferences",
+                    type: "ExpectedDifference",
+                    array: true,
+                    relation: { opposite: "invitation" }
                 }
             },
             attributes: [
+                { name: "@@unique", args: [{ name: "fields", value: ExpressionUtils.array("String", [ExpressionUtils.field("batchId"), ExpressionUtils.field("sourceIdentityId")]) }] },
+                { name: "@@index", args: [{ name: "fields", value: ExpressionUtils.array("String", [ExpressionUtils.field("sourceIdentityId")]) }] },
                 { name: "@@map", args: [{ name: "name", value: ExpressionUtils.literal("invitation") }] },
                 { name: "@@schema", args: [{ name: "map", value: ExpressionUtils.literal("app") }] },
                 { name: "@@allow", args: [{ name: "operation", value: ExpressionUtils.literal("read") }, { name: "condition", value: ExpressionUtils.binary(ExpressionUtils.binary(ExpressionUtils.call("auth"), "!=", ExpressionUtils._null()), "&&", ExpressionUtils.binary(ExpressionUtils.member(ExpressionUtils.call("auth"), ["disabled"]), "==", ExpressionUtils.literal(false))) }] }
             ] as readonly AttributeApplication[],
             idFields: ["id"],
             uniqueFields: {
-                id: { type: "String" }
+                id: { type: "String" },
+                batchId_sourceIdentityId: { batchId: { type: "String" }, sourceIdentityId: { type: "String" } }
             }
         },
         Wave: {
@@ -3436,7 +3540,8 @@ export class SchemaType implements SchemaDef {
                 sent: "sent",
                 accepted: "accepted",
                 failed: "failed",
-                expired: "expired"
+                expired: "expired",
+                unknown: "unknown"
             },
             attributes: [
                 { name: "@@map", args: [{ name: "name", value: ExpressionUtils.literal("invitation_status") }] },
