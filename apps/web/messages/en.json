@@ -134,7 +134,7 @@
   "auth": {
     "signin": {
       "title": "Sign in to git-migrator",
-      "subtitle": "Use your organization account to continue.",
+      "subtitle": "Use your work account to continue.",
       "entra": "Sign in with Microsoft",
       "starting": "Redirecting to Microsoft",
       "testHeading": "Test sign-in",
@@ -736,8 +736,8 @@
     "total": "{count, plural, one {# repository} other {# repositories}}",
     "filter": {
       "route": "Route",
-      "namespace": "Source project",
-      "allNamespaces": "All projects",
+      "namespace": "Source Namespace",
+      "allNamespaces": "All Namespaces",
       "status": "Status",
       "unmigrated": "Unmigrated",
       "allStatuses": "All statuses",
@@ -919,7 +919,7 @@
     "back": "Back to all batches",
     "batchTitle": "Invitation batch",
     "batchLabel": "Batch of {when}",
-    "safety": "Nobody is invited unless an operator approves a batch. Approving sends the selected invitations to the target organization, and they cannot be taken back in bulk.",
+    "safety": "Nobody is invited unless an operator approves a batch. Approving sends the selected invitations to the target Namespace, and they cannot be taken back in bulk.",
     "counts": "{selected} selected, {sent} sent, {accepted} accepted, {failed} failed or expired, {deselected} left out",
     "approvedBy": "{when} by {who}",
     "notApproved": "Not approved",
@@ -1008,18 +1008,18 @@
     "approve": {
       "open": "Approve batch",
       "title": "Approve and send invitations",
-      "body": "{count, plural, one {# invitation will be sent to the target organization.} other {# invitations will be sent to the target organization.}} This cannot be undone in bulk, and the entries can no longer change.",
+      "body": "{count, plural, one {# invitation will be sent to the target Namespace.} other {# invitations will be sent to the target Namespace.}} This cannot be undone in bulk, and the entries can no longer change.",
       "submit": "{count, plural, one {Approve and send #} other {Approve and send #}}",
       "cancel": "Cancel"
     },
     "revoke": {
       "title": "Revoke the invitation",
       "body": "The invitation to {name} is withdrawn and they become a candidate again.",
-      "unlocated": "No invitation is recorded for this entry. It is looked up by e-mail address; if it cannot be found in the target organization, the person and the address are released and can be invited again.",
+      "unlocated": "No invitation is recorded for this entry. It is looked up by e-mail address; if it cannot be found in the target Namespace, the person and the address are released and can be invited again.",
       "submit": "Revoke",
       "cancel": "Keep"
     },
-    "unknownHelp": "An entry with an unknown outcome may or may not have been invited. The person and the address stay held until you check the target organization and say which it was."
+    "unknownHelp": "An entry with an unknown outcome may or may not have been invited. The person and the address stay held until you check the target Namespace and say which it was."
   },
   "endpoints": {
     "title": "Endpoints",

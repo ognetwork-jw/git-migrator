@@ -252,7 +252,7 @@ describe('[UI-021] repositories list', () => {
       expect(calls.some((c) => c.url.pathname === '/api/model/namespace/findMany')).toBe(true);
       expect(calls.some((c) => c.url.pathname === '/api/model/wave/findMany')).toBe(true);
     });
-    for (const name of ['Status', 'Readiness', 'Size class', 'Wave', 'Source project', 'Route']) {
+    for (const name of ['Status', 'Readiness', 'Size class', 'Wave', 'Source Namespace', 'Route']) {
       expect(screen.getByRole('combobox', { name })).toBeTruthy();
     }
   });

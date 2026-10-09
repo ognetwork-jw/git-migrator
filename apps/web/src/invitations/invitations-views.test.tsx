@@ -232,7 +232,7 @@ describe('[UI-029] invitation batch detail', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Approve batch' }));
     const dialog = await screen.findByRole('dialog');
     expect(
-      within(dialog).getByText(/2 invitations will be sent to the target organization/),
+      within(dialog).getByText(/2 invitations will be sent to the target Namespace/),
     ).toBeTruthy();
     expect(posts()).toHaveLength(0);
     fireEvent.click(within(dialog).getByRole('button', { name: 'Approve and send 2' }));
