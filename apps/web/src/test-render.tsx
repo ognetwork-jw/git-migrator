@@ -2,7 +2,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { render } from '@testing-library/react';
 import { NextIntlClientProvider } from 'next-intl';
 import type { ReactElement } from 'react';
-import messages from '../messages/en.json' with { type: 'json' };
+import { messages } from './messages.ts';
 
 /** Renders with the real English catalog and a fresh query client (for component tests). */
 export function renderWithApp(ui: ReactElement, client = new QueryClient()) {
@@ -20,6 +20,14 @@ export function renderWithApp(ui: ReactElement, client = new QueryClient()) {
 
 /** jsdom has no `matchMedia`; antd and the theme hook ask for it. */
 export function installMatchMedia(dark = false) {
+  // jsdom has no ResizeObserver either; antd's Table, Tabs and Select observe sizes.
+  if (typeof globalThis.ResizeObserver === 'undefined') {
+    globalThis.ResizeObserver = class {
+      observe() {}
+      unobserve() {}
+      disconnect() {}
+    };
+  }
   const listeners = new Set<() => void>();
   let matches = dark;
   Object.defineProperty(window, 'matchMedia', {

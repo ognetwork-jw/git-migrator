@@ -725,7 +725,9 @@
     "resync": "Resync",
     "verify": "Verify",
     "rollback": "Rollback",
-    "analyze": "Analyze"
+    "analyze": "Analyze",
+    "source_read_only": "Make source read-only",
+    "undo_source_read_only": "Undo source read-only"
   },
   "repositories": {
     "title": "Repositories",
@@ -1018,5 +1020,409 @@
       "cancel": "Keep"
     },
     "unknownHelp": "An entry with an unknown outcome may or may not have been invited. The person and the address stay held until you check the target organization and say which it was."
+  },
+  "copy": {
+    "button": "Copy",
+    "label": "Copy {what}",
+    "copied": "Copied",
+    "failed": "Copy failed. Select the text and copy it by hand."
+  },
+  "guidanceView": {
+    "missing": "There is no guidance for the finding {code}.",
+    "severity": {
+      "blocker": "Blocker",
+      "pre": "Before the run",
+      "post": "After the run",
+      "warning": "Warning"
+    },
+    "verifiable": "Checked by parity",
+    "copyWhat": "the command of step {step}",
+    "openLink": "Open the documentation",
+    "incomplete": "Some values are not known yet and show as placeholders. The commands that need them are left out."
+  },
+  "migrationDetail": {
+    "title": "Repository",
+    "loading": "Loading the repository",
+    "notFound": "This repository does not exist.",
+    "back": "Back to the repositories",
+    "stale": "The analysis is out of date because an input changed. Analyze again to refresh the findings.",
+    "tab": {
+      "overview": "Overview",
+      "facets": "Facets",
+      "tasks": "Tasks",
+      "tasksOpen": "Tasks ({count})",
+      "runs": "Runs",
+      "audit": "Audit"
+    },
+    "findingKind": {
+      "blocker": "Blockers",
+      "pre_task": "Tasks before the run",
+      "post_task": "Tasks after the run",
+      "warning": "Warnings"
+    },
+    "strip": {
+      "label": "Facets",
+      "clean": "{facet}: no findings. Open the Facet.",
+      "hint": "{facet}: {count, plural, one {# finding} other {# findings}}, worst is {kind}. Open the Facet."
+    },
+    "header": {
+      "source": "Source",
+      "target": "Target",
+      "planned": "Planned",
+      "none": "None",
+      "status": "Status",
+      "readiness": "Readiness",
+      "counts": "{blockers, plural, one {# blocker} other {# blockers}}, {pre} pre, {post} post",
+      "wave": "Wave",
+      "noWave": "No Wave",
+      "analyzed": "Last analyzed",
+      "never": "Never",
+      "verified": "Verified",
+      "completion": "Completed by hand",
+      "completionValue": "{when}: {reason}"
+    },
+    "actions": {
+      "label": "Repository actions",
+      "locked": "A Run is queued or running, so other actions wait for it.",
+      "openRun": "Open the Run",
+      "started": "The Run was queued.",
+      "analysisQueued": "The analysis was queued.",
+      "skipReadOnly": "Leave the source writable after the migration",
+      "button": {
+        "analyze": "Analyze",
+        "migrate": "Migrate",
+        "run_anyway": "Run anyway",
+        "force_adopt": "Force adopt target",
+        "resync": "Resync",
+        "verify": "Verify",
+        "rollback": "Roll back",
+        "source_read_only": "Make source read-only",
+        "undo_source_read_only": "Undo source read-only",
+        "mark_complete": "Mark complete",
+        "revoke_complete": "Revoke completion"
+      },
+      "confirm": {
+        "migrate": {
+          "title": "Migrate this repository?",
+          "ok": "Migrate",
+          "body": "This starts a migration Run to {target}. The repository is ready: it has no blockers and no open tasks that must be done first."
+        },
+        "run_anyway": {
+          "title": "Run this repository anyway?",
+          "ok": "Run anyway",
+          "body": "This starts a migration Run to {target} without waiting for the open tasks to be done. The Run can leave work for you to finish by hand.",
+          "warning": "{count, plural, =0 {No tasks are open.} one {# open task will not be done by the Run.} other {# open tasks will not be done by the Run.}}"
+        },
+        "resync": {
+          "title": "Resync this repository?",
+          "ok": "Resync",
+          "body": "This runs the migration again to bring {target} up to date with the source."
+        },
+        "verify": {
+          "title": "Verify this repository?",
+          "ok": "Verify",
+          "body": "This compares the source and {target} again and updates the parity result. It changes nothing on either side."
+        },
+        "source_read_only": {
+          "title": "Make the source read-only?",
+          "ok": "Make read-only",
+          "body": "This stops further pushes to the source repository. You can undo it later. {target} is not changed."
+        },
+        "force_adopt": {
+          "title": "Force adopt the target?",
+          "ok": "Force adopt and migrate",
+          "body": "The target {target} already exists and has content that this migration did not create. A forced adoption makes it match the source: every source branch and tag is force-pushed, and branches and tags that are not on the source are deleted.",
+          "warning": "Content on the target that is not on the source is lost. This cannot be undone by a rollback."
+        },
+        "rollback": {
+          "title": "Roll back this migration?",
+          "ok": "Roll back",
+          "bodyCreated": "This deletes the target repository {target}, which this migration created, and everything in it. Deleting it needs the right to delete repositories on the target.",
+          "bodyAdopted": "This undoes what the migration changed on the target in reverse order: it deletes the settings, hooks, keys, grants and variables it created and closes its change requests. The repository and its git history stay as they are.",
+          "warning": "A rollback cannot be undone. The repository returns to the rolled back status.",
+          "undoFirstTitle": "Undo source read-only first",
+          "undoFirstOk": "Undo source read-only",
+          "undoFirstBody": "The source was made read-only. It must be writable again before the migration can be rolled back. This starts a Run that undoes it; when it has finished, choose Roll back again."
+        },
+        "undo_source_read_only": {
+          "title": "Undo source read-only?",
+          "ok": "Undo read-only",
+          "body": "This makes the source repository writable again, so pushes to it are possible once more."
+        },
+        "mark_complete": {
+          "title": "Mark this repository complete?",
+          "ok": "Mark complete",
+          "body": "Use this when the repository was finished by hand. The status becomes manually completed; you can revoke it later."
+        },
+        "revoke_complete": {
+          "title": "Revoke the manual completion?",
+          "ok": "Revoke",
+          "body": "The computed status returns: verified if parity is equal and no task is open, otherwise the outcome of the last Run."
+        }
+      }
+    },
+    "dialog": {
+      "cancel": "Cancel",
+      "typeName": "To confirm, type the full name of the target:",
+      "reason": "Reason"
+    },
+    "overview": {
+      "notAnalyzed": "This repository has not been analyzed yet. Analyze it to see its findings.",
+      "noFindings": "The latest analysis found nothing that needs your attention.",
+      "count": " ({count})",
+      "runOrigin": "Found by a Run"
+    },
+    "facets": {
+      "loading": "Loading the Facets",
+      "empty": "There is nothing to compare yet. Analyze the repository first.",
+      "unreadable": "Not readable: {fields}.",
+      "side": {
+        "source": "Source",
+        "desired": "Desired",
+        "target": "Target"
+      },
+      "fetched": "Read {when}",
+      "tree": {
+        "none": "Not available.",
+        "items": "{count, plural, one {# item} other {# items}}",
+        "keys": "{count, plural, one {# key} other {# keys}}",
+        "more": "Show {count} more"
+      },
+      "mark": {
+        "changed": "changed",
+        "only_here": "only here"
+      },
+      "fidelityTitle": "Field fidelity",
+      "noDecisions": "Every field translates exactly.",
+      "column": {
+        "path": "Path",
+        "fidelity": "Fidelity",
+        "accepted": "Accepted",
+        "policy": "Policy",
+        "actions": "Actions",
+        "reason": "Reason",
+        "scope": "Scope",
+        "note": "Note"
+      },
+      "fidelity": {
+        "exact": "Exact",
+        "translated": "Translated",
+        "lossy": "Lossy",
+        "unsupported": "Unsupported",
+        "unreadable": "Unreadable"
+      },
+      "accepted": {
+        "no": "Not accepted",
+        "policy": "By policy",
+        "migration": "For this repository"
+      },
+      "parityTitle": "Parity",
+      "noParity": "No parity check has run for this Facet yet.",
+      "parity": {
+        "equal": "Equal",
+        "different": "Different",
+        "unverifiable": "Unverifiable"
+      },
+      "checked": "Checked {when}",
+      "noDiffs": "No differences.",
+      "expectedTitle": "Expected differences",
+      "noExpected": "No expected differences.",
+      "reason": {
+        "framework_mutation": "Made by git-migrator",
+        "overlay": "Overlay",
+        "lossy_accepted": "Lossy, accepted",
+        "identity_excluded": "Identity excluded",
+        "manual_accepted": "Accepted by hand",
+        "unreadable_defaulted": "Unreadable, defaulted"
+      },
+      "scope": {
+        "route": "Every repository on the Route",
+        "migration": "This repository"
+      },
+      "accept": {
+        "button": "Accept",
+        "title": "Accept this difference?",
+        "ok": "Accept",
+        "body": "Parity will treat {path} as expected from now on. You can revoke it later.",
+        "note": "Why is this difference acceptable?"
+      },
+      "revoke": {
+        "button": "Revoke",
+        "label": "Revoke the expected difference at {path}",
+        "system": "Managed by the system"
+      }
+    },
+    "tasks": {
+      "loading": "Loading the tasks",
+      "empty": "There are no tasks for this repository.",
+      "summary": "{open} of {total} tasks are open.",
+      "note": "Note",
+      "saveNote": "Save note",
+      "completed": "{when} by {who}",
+      "system": "the system",
+      "action": {
+        "done": "Mark done",
+        "reopen": "Reopen",
+        "dismiss": "Dismiss"
+      },
+      "dismiss": {
+        "title": "Dismiss this task?",
+        "ok": "Dismiss",
+        "body": "A dismissed task no longer holds the repository back. You can reopen it later.",
+        "note": "Note (some tasks need one)"
+      },
+      "status": {
+        "open": "Open",
+        "done": "Done",
+        "dismissed": "Dismissed"
+      },
+      "phase": {
+        "pre": "Before the run",
+        "post": "After the run"
+      },
+      "verifiable": "Checked by parity"
+    },
+    "runs": {
+      "empty": "No Run has been started for this repository.",
+      "column": {
+        "kind": "Kind",
+        "status": "Status",
+        "started": "Started",
+        "finished": "Finished",
+        "by": "Started by"
+      },
+      "notFinished": "Not finished"
+    },
+    "audit": {
+      "intro": "Changes made by people and services to this repository, its Runs, tasks and expected differences.",
+      "empty": "No audit events for this repository.",
+      "column": {
+        "when": "When",
+        "actor": "Actor",
+        "action": "Action",
+        "data": "Details"
+      },
+      "system": "System",
+      "showMore": "Show all",
+      "showLess": "Show less"
+    },
+    "error": {
+      "run": {
+        "conflict": "This repository cannot start a Run right now, for example because its Route is retired. Reload the page.",
+        "validation_failed": "The Run was not accepted for this repository. Reload the page and try again.",
+        "not_found": "This repository no longer exists.",
+        "run_active": "This repository already has a queued or running Run. Wait for it to finish or cancel it first.",
+        "run_not_permitted": "This repository's current status does not allow this Run. Reload the page to see its status.",
+        "readiness_required": "This repository's readiness does not allow this Run. Reload the page to see why.",
+        "confirmation_required": "The name you typed is not the exact target name. Type it exactly as shown."
+      },
+      "cancel": {
+        "conflict": "The Run has already finished, so there is nothing to cancel.",
+        "not_found": "This Run no longer exists."
+      },
+      "analyze": {
+        "not_found": "This repository no longer exists.",
+        "conflict": "An analysis cannot be queued for this repository right now."
+      },
+      "complete": {
+        "conflict": "The completion state does not allow this change. A running or source-missing repository cannot be completed by hand, and only a completed one can be revoked. Reload the page.",
+        "validation_failed": "Enter a reason of 1 to 500 characters.",
+        "not_found": "This repository no longer exists."
+      },
+      "task": {
+        "conflict": "The task is no longer in a state that allows this change. Reload the page.",
+        "validation_failed": "This change needs a note, or this kind of task cannot be marked done by hand. Resolve it on the target and let parity complete it.",
+        "not_found": "This task no longer exists."
+      },
+      "difference": {
+        "conflict": "This difference is already accepted, is owned by the system or by a done task, or was already revoked. Reload the page.",
+        "validation_failed": "The difference was not accepted. Check the path and enter a note.",
+        "not_found": "This difference no longer exists."
+      },
+      "wave": {
+        "not_found": "The Wave or the repository no longer exists. Reload the page.",
+        "forbidden": "Your role does not allow changing the Wave."
+      },
+      "note": {
+        "not_found": "This task no longer exists. Reload the page.",
+        "forbidden": "Your role does not allow editing the note."
+      }
+    }
+  },
+  "runDetail": {
+    "title": "Run",
+    "loading": "Loading the Run",
+    "notFound": "This Run does not exist.",
+    "back": "Back to {name}",
+    "kind": "Kind",
+    "status": "Status",
+    "started": "Started",
+    "finished": "Finished",
+    "duration": "Duration",
+    "by": "Started by",
+    "system": "The system",
+    "notStarted": "Not started",
+    "notFinished": "Not finished",
+    "cancel": "Cancel the Run",
+    "cancelRequested": "Cancellation was requested. The Run stops after its current step.",
+    "cancelOutcome": {
+      "cancelled": "The Run was cancelled.",
+      "requested": "Cancellation was requested. The Run stops after its current step."
+    },
+    "error": "The Run failed: {reason}",
+    "steps": {
+      "title": "Steps",
+      "empty": "No steps yet.",
+      "notStarted": "Not started",
+      "attempts": "{count} attempts",
+      "duration": {
+        "seconds": "{count, plural, one {# second} other {# seconds}}",
+        "minutes": "{count, plural, one {# minute} other {# minutes}}",
+        "hours": "{count, plural, one {# hour} other {# hours}}",
+        "days": "{count, plural, one {# day} other {# days}}"
+      }
+    },
+    "stepStatus": {
+      "pending": "Pending",
+      "running": "Running",
+      "succeeded": "Succeeded",
+      "failed": "Failed",
+      "skipped": "Skipped"
+    },
+    "log": {
+      "title": "Log",
+      "level": "Show log lines of level",
+      "levels": {
+        "all": "All levels",
+        "info": "Info and above",
+        "warn": "Warnings and above",
+        "error": "Errors only"
+      },
+      "follow": "Follow the end",
+      "count": "{shown} of {total} lines",
+      "truncated": "Older lines are not shown.",
+      "empty": "No log lines."
+    },
+    "mutations": {
+      "title": "Changes made",
+      "empty": "This Run has not changed anything yet.",
+      "column": {
+        "side": "Side",
+        "facet": "Facet",
+        "action": "Action",
+        "paths": "Fields",
+        "undone": "Undone"
+      },
+      "side": {
+        "source": "Source",
+        "target": "Target"
+      },
+      "action": {
+        "create": "Created",
+        "update": "Updated",
+        "delete": "Deleted"
+      },
+      "notUndone": "Not undone"
+    }
   }
 }
