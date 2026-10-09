@@ -410,6 +410,7 @@ export async function runAnalysis(
     }),
   ]);
 
+  const liveTeams = await liveTargetTeams(targetConn, groupRows);
   const routeIndex: Json = {};
   let staleMigrationIds: string[] = [];
   const snapshotsExtra: { deployKeys?: string[] } = {};
@@ -430,12 +431,12 @@ export async function runAnalysis(
       workspaceSecrets: await endpointNames(db, route.sourceEndpointId, 'org-secrets'),
     };
   } else {
-    Object.assign(routeIndex, await endpointRouteIndex(db, route));
+    Object.assign(routeIndex, await endpointRouteIndex(db, route, liveTeams));
   }
 
   const env = {
     identities: identityResolver(identityRows),
-    groups: groupResolver(groupRows),
+    groups: groupResolver(liveGroupRows(groupRows, liveTeams)),
     policies,
     route: jsonSafe({
       defaults: route.defaults,
@@ -648,6 +649,44 @@ export async function loadIdentityMappings(
   }));
 }
 
+/**
+ * The live teams of the target organization by provider id, or `null` when no confirmed mapping
+ * names a team (nothing to check, so no provider call). ADR-0435.
+ */
+export async function liveTargetTeams(
+  conn: Pick<EndpointConnection, 'inventory'>,
+  rows: readonly MappingRow[],
+): Promise<ReadonlyMap<string, string> | null> {
+  if (!rows.some((r) => r.status === 'confirmed' && r.targetProviderId)) return null;
+  const live = new Map<string, string>();
+  let cursor: string | undefined;
+  do {
+    const page = await conn.inventory.listGroups(cursor);
+    for (const g of page.items) live.set(g.providerId, g.slug);
+    cursor = page.nextCursor;
+  } while (cursor !== undefined);
+  return live;
+}
+
+/**
+ * ADR-0435: a `confirmed` mapping stays tied to its team by `Group.providerId`, which survives a
+ * rename. A team whose provider id is no longer among the live teams was deleted: the mapping
+ * counts as unmapped again, so the Plan recreates the team (FAC-ACL-004 raises
+ * `access-control.team-missing` in repository Analyses too) and the endpoint Run repoints the
+ * mapping. A team live under another slug keeps its mapping and carries the live slug.
+ */
+export function liveGroupRows(
+  rows: readonly MappingRow[],
+  live: ReadonlyMap<string, string> | null,
+): MappingRow[] {
+  if (live === null) return [...rows];
+  return rows.map((r) => {
+    if (r.status !== 'confirmed' || !r.targetProviderId) return r;
+    const slug = live.get(r.targetProviderId);
+    return slug === undefined ? { ...r, status: 'unmapped' } : { ...r, targetSlug: slug };
+  });
+}
+
 export async function loadGroupMappings(
   db: Db,
   routeId: string,
@@ -659,13 +698,14 @@ export async function loadGroupMappings(
     where: { routeId, sourceGroup: { endpointId: sourceEndpointId } },
     include: {
       sourceGroup: { select: { providerId: true } },
-      targetGroup: { select: { providerId: true } },
+      targetGroup: { select: { providerId: true, slug: true } },
     },
   });
   return rows.map((r) => ({
     status: r.status,
     sourceProviderId: r.sourceGroup.providerId,
     targetProviderId: r.targetGroup?.providerId ?? null,
+    targetSlug: r.targetGroup?.slug ?? null,
   }));
 }
 
@@ -737,6 +777,7 @@ export async function endpointNames(
 export async function endpointRouteIndex(
   db: Db,
   route: { id: string; sourceEndpointId: string; targetEndpointId: string },
+  liveTeams: ReadonlyMap<string, string> | null = null,
 ): Promise<Json> {
   const members = await db.identity.findMany({
     where: { endpointId: route.targetEndpointId, isMember: true },
@@ -745,10 +786,26 @@ export async function endpointRouteIndex(
   });
   const groups = await db.groupMapping.findMany({
     where: { routeId: route.id },
-    include: { sourceGroup: { select: { providerId: true } } },
+    include: {
+      sourceGroup: { select: { providerId: true } },
+      targetGroup: { select: { slug: true, providerId: true } },
+    },
   });
   const plannedSlugs = Object.fromEntries(
     groups.map((g) => [g.sourceGroup.providerId, g.plannedSlug]),
+  );
+  // The slug of the confirmed target team: a mapped group's principal id is the provider's team id
+  // (ADR-0435), but the Teams Facet is keyed by slug.
+  const targetSlugs = Object.fromEntries(
+    groups.flatMap((g) =>
+      g.status === 'confirmed' && g.targetGroup
+        ? liveTeams === null
+          ? [[g.sourceGroup.providerId, g.targetGroup.slug]]
+          : liveTeams.has(g.targetGroup.providerId)
+            ? [[g.sourceGroup.providerId, liveTeams.get(g.targetGroup.providerId)]]
+            : []
+        : [],
+    ),
   );
   const withEmail = await db.identity.findMany({
     where: { endpointId: route.sourceEndpointId, email: { not: null } },
@@ -769,6 +826,7 @@ export async function endpointRouteIndex(
   return {
     targetOrgMembers: members.map((m) => m.providerId),
     plannedSlugs,
+    targetSlugs,
     invitationCandidates,
   };
 }

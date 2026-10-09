@@ -113,15 +113,27 @@ function plannedSlugs(
   return configured as Record<string, string>;
 }
 
+/** `ctx.routeIndex.targetSlugs`: slug of the confirmed target team by source group slug (ADR-0435). */
+function targetSlugs(routeIndex: TranslateContext['routeIndex']): Readonly<Record<string, string>> {
+  const configured = routeIndex.targetSlugs;
+  if (typeof configured !== 'object' || configured === null || Array.isArray(configured)) return {};
+  return configured as Record<string, string>;
+}
+
 /**
- * The target slug of a source team: the created team's id when the group is mapped, else the
+ * The target slug of a source team: the slug of its confirmed target team when the group is mapped
+ * (`routeIndex.targetSlugs`; the resolver's principal id is the provider's team id, which is not
+ * necessarily a slug, ADR-0435), else the
  * GroupMapping `plannedSlug`, else the Route's team naming pipeline over the group (LIF-030).
  * `null` when the pipeline cannot produce a slug.
  */
 export function plannedSlug(team: Team, ctx: TranslateContext): string | null {
   const resolved = ctx.groups.resolve({ kind: 'group', id: team.slug });
   if (resolved.status === 'mapped' && resolved.principal.kind === 'group') {
-    return resolved.principal.id;
+    const confirmed = Object.hasOwn(targetSlugs(ctx.routeIndex), team.slug)
+      ? targetSlugs(ctx.routeIndex)[team.slug]
+      : undefined;
+    return confirmed ?? resolved.principal.id;
   }
   const planned = Object.hasOwn(plannedSlugs(ctx.routeIndex), team.slug)
     ? plannedSlugs(ctx.routeIndex)[team.slug]

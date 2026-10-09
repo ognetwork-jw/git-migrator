@@ -65,6 +65,11 @@ function stubConnection(side: 'source' | 'target') {
     http: { request: async () => ({ status: 200, body: {} }) },
     limits: { repositoryName: NAMING_LIMITS, hiddenRefPrefixes: [] },
     inventory: {
+      async listGroups() {
+        return {
+          items: liveTeams.map((x) => ({ ...x, name: x.slug, memberProviderIds: [] })),
+        };
+      },
       async getRepository() {
         return null;
       },
@@ -81,6 +86,11 @@ function stubConnection(side: 'source' | 'target') {
     },
   };
 }
+
+/** The teams the stub target lists (ADR-0435: a mapping is live by provider id). */
+let liveTeams: { providerId: string; slug: string }[] = [
+  { providerId: '777', slug: 'platform-team' },
+];
 
 const connector: EndpointConnector = {
   async connect(endpointId) {
@@ -1020,6 +1030,70 @@ describe('robustness (ADR-0310, ADR-0312)', () => {
     await analyze(m.id);
     expect((await tasksOf(m.id))[0]).toMatchObject({ status: 'open', note: null });
     expect((await migrationRow(m.id)).readiness).toBe('needs_attention');
+  });
+
+  const teamRule = {
+    ...ADVISORY_RULE,
+    enforcement: 'enforced',
+    changeRequest: null,
+    restrictPushes: [{ principal: { kind: 'group', id: 'Platform-Team' } }],
+  };
+  const confirmedTeam = async (db: typeof t.db.privileged, w: World) => {
+    const source = await db.group.create({
+      data: {
+        endpointId: w.sourceEndpointId,
+        providerId: 'platform-team',
+        slug: 'platform-team',
+        name: 'P',
+        memberIds: [],
+      },
+    });
+    const target = await db.group.create({
+      data: {
+        endpointId: w.targetEndpointId,
+        providerId: '777',
+        slug: 'platform-team',
+        name: 'P',
+        memberIds: [],
+      },
+    });
+    await db.groupMapping.create({
+      data: {
+        routeId: w.routeId,
+        sourceGroupId: source.id,
+        targetGroupId: target.id,
+        plannedSlug: 'platform-team',
+        status: 'confirmed',
+      },
+    });
+  };
+  const translationAfter = async (live: { providerId: string; slug: string }[]) => {
+    const w = await seedWorld();
+    const m = await seedMigration(w);
+    const db = t.db.privileged;
+    await confirmedTeam(db, w);
+    liveTeams = live;
+    setReads({ 'branch-rules': { data: { rules: [teamRule] } } });
+    try {
+      await analyze(m.id);
+    } finally {
+      liveTeams = [{ providerId: '777', slug: 'platform-team' }];
+    }
+    const row = await migrationRow(m.id);
+    const analysis = await db.analysis.findUniqueOrThrow({
+      where: { id: row.latestAnalysisId as string },
+    });
+    return JSON.stringify(analysis.translation);
+  };
+
+  it('[FAC-ACL-004] [LIF-080] a confirmed team renamed on the target still resolves by its provider id', async () => {
+    expect(await translationAfter([{ providerId: '777', slug: 'renamed-team' }])).toContain(
+      '"777"',
+    );
+  });
+
+  it('[FAC-ACL-004] [LIF-080] a confirmed team deleted on the target no longer resolves in a repository Analysis', async () => {
+    expect(await translationAfter([])).not.toContain('"777"');
   });
 
   it('[FAC-006] a group mapping is found whatever the case of the group id', async () => {

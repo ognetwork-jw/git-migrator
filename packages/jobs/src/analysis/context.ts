@@ -37,6 +37,8 @@ export interface MappingRow {
   readonly status: string;
   readonly sourceProviderId: string;
   readonly targetProviderId: string | null;
+  /** Groups only: the slug of the target team, to tell a team that was renamed or deleted. */
+  readonly targetSlug?: string | null;
 }
 
 /** FAC-006 for identities: only a confirmed mapping with a target resolves to a principal. */

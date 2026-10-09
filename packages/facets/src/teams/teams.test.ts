@@ -99,6 +99,17 @@ describe('teams facet', () => {
       expect(teamsOf(t)[0]?.slug).toBe('engineering');
     });
 
+    it('[LIF-080] a mapped group is written under the confirmed team slug, not the provider team id', () => {
+      const t = translate(
+        { teams: [team('devs', 'Devs')] },
+        {
+          table: { 'group:devs': mapped(group('40001')) },
+          routeIndex: { targetSlugs: { devs: 'platform-team' } },
+        },
+      );
+      expect(teamsOf(t)[0]?.slug).toBe('platform-team');
+    });
+
     it('[LIF-030] a planned slug from the group mappings wins over the pipeline', () => {
       const t = translate(
         { teams: [team('devs', 'Devs')] },
