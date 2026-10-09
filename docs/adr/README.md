@@ -150,5 +150,9 @@
 | [0332](0332-dashboard-and-quota-views.md) | Dashboard and quota views, backlog and ETA | agent-decided |
 | [0320](0320-identity-mapping-api-csv-and-exclusions.md) | Identity and Group mapping endpoints, CSV rules, exclusions, staleness and events | agent-decided |
 | [0321](0321-server-side-page-authorization.md) | Server-side capability check for data pages | agent-decided |
+| [0340](0340-run-executor-framework.md) | Run executor: registration API, queued start, lease fence, lock order, delay and hand-off, cancel, ending a Run, inline Analysis failures | agent-decided |
+| [0341](0341-run-step-state-machine.md) | Step statuses, severity per Step, retries across resumes, rate limits are not attempts | agent-decided |
+| [0342](0342-mutation-ledger.md) | Ledger writes, origin of a record, Expected Difference derivation, undo order, adopted and no-op records | agent-decided |
+| [0343](0343-run-guard-and-findings.md) | Run guard (DOM-010, LIF-005), run-origin findings, queued and orphaned Runs | agent-decided |
 
 New ADRs continue from 0028. Implementor decisions use `status: agent-decided` (PROC-005). T-002 uses 0065–0069.

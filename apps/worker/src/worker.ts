@@ -1,10 +1,14 @@
+import { hostname } from 'node:os';
 import { type Config, loadConfigOrExit } from '@git-migrator/config';
 import { createDb } from '@git-migrator/db';
 import {
+  type AnalysisDeps,
   analysisHandlers,
+  analyzeForRun,
   createAnalysisGitClient,
   createEndpointConnector,
   createProviderEnvironment,
+  createRunAnalysisPort,
   feederHandlers,
   HEALTH_PORT,
   type HealthServer,
@@ -16,7 +20,9 @@ import {
   noGitClient,
   type QueueName,
   queuesForRole,
+  RunStepRegistry,
   resetQueueCounts,
+  runHandlers,
   SchedulerManager,
   ScratchCleaner,
   scratchRoot,
@@ -237,8 +243,21 @@ export async function startWorker(options: StartWorkerOptions): Promise<WorkerHa
     // ls-remote for the `git-refs` read. Its one unit per Analysis in the git bucket is not
     // pre-acquired yet (ADR-0310): the host cannot name an adapter's git bucket.
     const git = createAnalysisGitClient({ scratchDir: scratchRoot(env), logger: log });
+    const analysisDeps: AnalysisDeps = {
+      db: db.privileged,
+      appPool: db.pool,
+      connector,
+      registry,
+      config,
+      git,
+      log,
+    };
+    // The Steps of each Run kind are registered here by the migration tasks (T-071 and later); until
+    // then a Run of a kind without Steps fails with `run.kind_unsupported` (LIF-040).
+    const runSteps = new RunStepRegistry();
     const handlers = {
       ...maintenanceHandlers({
+        db: db.privileged,
         appPool: db.pool,
         quota,
         runtime: jobs,
@@ -255,14 +274,17 @@ export async function startWorker(options: StartWorkerOptions): Promise<WorkerHa
         config,
         log,
       }),
-      ...analysisHandlers({
+      ...analysisHandlers(analysisDeps),
+      ...runHandlers({
         db: db.privileged,
-        appPool: db.pool,
-        connector,
-        registry,
-        config,
-        git,
+        pool: db.pool,
         log,
+        registry: runSteps,
+        runs: jobs,
+        services: {},
+        workerId: `${hostname()}-${process.pid}`,
+        analysis: createRunAnalysisPort(analysisDeps, analyzeForRun),
+        metrics: recorders,
       }),
       ...feederHandlers({ db: db.privileged, runtime: jobs, quota, log }),
       ...(options.handlers ?? {}),
