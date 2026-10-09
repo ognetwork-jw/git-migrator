@@ -26,7 +26,7 @@ Status: the API is mounted (T-021) and the UI shell exists (T-080). `pnpm dev` r
 - `messages/en.json` holds every user-facing string. `problem.<code>` has the text of each API problem code; `auth.error.<code>` the sign-in error page texts.
 - UI code takes display name and email from the Actor (`GET /api/v1/me`), never from `session.user`, which holds a synthetic address (ADR-0171). It must not import `@git-migrator/*/testing` from non-test files.
 
-Declared internal dependencies (ARC-012, checked by `pnpm lint`): @git-migrator/api, @git-migrator/auth, @git-migrator/config, @git-migrator/observability, @git-migrator/db.
+Declared internal dependencies (ARC-012, checked by `pnpm lint`): @git-migrator/api, @git-migrator/auth, @git-migrator/config, @git-migrator/observability, @git-migrator/db, @git-migrator/facets (T-091, ADR-0366).
 
 ## Live updates (JOB-060)
 
@@ -35,3 +35,15 @@ Declared internal dependencies (ARC-012, checked by `pnpm lint`): @git-migrator/
 ## Mapping pages (UI-027, UI-028, T-084)
 
 `/people/identities` (`src/mapping/identity-mapping-view.tsx`, with the CSV import Drawer in `csv-import-drawer.tsx`) and `/people/teams` (`group-mapping-view.tsx`). Data comes only from `/api/v1` through `src/mapping/api.ts` and `src/api/http.ts` (`ApiError` carries the problem `code`). The pages are gated on the server by `authorizePage` (`src/server/authorize.ts`, ADR-0321): it resolves the Actor through the API in process with the caller's cookie and redirects to `/signin` or `/denied` before rendering. Later data pages call it the same way. Strings are under `mapping.*` in `messages/en.json`; CSV error codes render from `mapping.csv.error.<code>`.
+
+## Configuration and admin pages (UI-030 to UI-035, T-091)
+
+- `/config/naming` (`src/config/naming-view.tsx`, pure logic in `naming-draft.ts`): namespace and repository rules, the pipeline or literal-override editor, and the save gate. Save waits for a preview of the exact body and, when the preview lists collisions, for the operator's confirmation (ADR-0363). The Route default is shown read-only (ADR-0361).
+- `/config/webhook-allowlist` (`webhook-view.tsx`): CRUD and a pattern tester that runs `matchesPattern` from `@git-migrator/facets/webhooks-match` in the browser (ADR-0366). `rules-draft.ts` holds the pattern and overlay validation.
+- `/config/overlays` (`overlays-view.tsx`): a JSON object per Facet, checked in the browser against the Facet schema in deep-partial strict form and written through the validated `/api/v1/overlays` endpoints, not RPC (ADR-0362).
+- `/config/capabilities` (`capabilities-view.tsx`): the static matrix pivoted per adapter pair, the non-exact fields of a chosen pair, and each Route's accepted lossy policies (ADR-0367).
+- `/admin/actors` (`src/admin/actors-view.tsx`): Actors, service Actor creation, disable and enable, and API keys. A key is shown once in a dialog and kept nowhere after it closes (ADR-0365). Role changes are not offered (ADR-0369).
+- `/admin/audit` (`src/admin/audit-view.tsx`): the audit log with filters and cursor paging (ADR-0368).
+- Data: `src/model/rpc.ts` is the thin client for the ZenStack RPC mount (`/api/model`, ADR-0360). Writes that the API owns (actors, keys, the matrix) go through `/api/v1` and `src/api/http.ts`. The page modules `src/config/api.ts` and `src/admin/api.ts` name each call.
+- Each page is gated on the server by `authorizePage` (ADR-0321) and the sidebar capability (`src/shell/navigation.ts`).
+- Tests use mocked fetch (`src/test-api.ts`); no request leaves the test (TST-006).
