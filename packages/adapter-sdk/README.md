@@ -6,7 +6,7 @@ Internal dependencies (ARC-012, checked by `pnpm lint`): `@git-migrator/core`, `
 
 ## Contracts (`types.ts`)
 
-`ProviderAdapter`, `EndpointConnection`, `FacetDriver` / `FacetRead` / `FacetTarget` (`FacetRead.attachments` carries content that `data` holds only by hash, in memory only, ADR-0311), `ProviderCapabilities`, `MutationRecord`, `ProviderLimits`, `GitAccess`, the writers (`ChangeRequestWriter`, `InvitationWriter`, `SourceLock`), inventory records and refs, `AdapterContext`, `DriverContext`, and `GitClient` (implemented by `packages/git`). Facet keys come from `canonical`, field capabilities from `core`.
+`ProviderAdapter`, `EndpointConnection`, `FacetDriver` (`read`, `apply`, and the optional `undo(ctx, target, record)` that reverts one record the driver yielded, idempotently, or returns `{left: {kind, name}}` with a kind of `UNDO_LEFT_KINDS` when the resource is no longer provably the one the record names: rollback of an adopted target, ADR-0467) / `FacetRead` / `FacetTarget` (`FacetRead.attachments` carries content that `data` holds only by hash, in memory only, ADR-0311), `ProviderCapabilities`, `MutationRecord`, `ProviderLimits`, `GitAccess`, the writers (`ChangeRequestWriter`, `InvitationWriter`, `SourceLock`), inventory records and refs, `AdapterContext`, `DriverContext`, and `GitClient` (implemented by `packages/git`). Facet keys come from `canonical`, field capabilities from `core`.
 
 ## `AdapterError` (`errors.ts`)
 
