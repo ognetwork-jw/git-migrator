@@ -154,6 +154,7 @@
 | [0341](0341-run-step-state-machine.md) | Step statuses, severity per Step, retries across resumes, rate limits are not attempts | agent-decided |
 | [0342](0342-mutation-ledger.md) | Ledger writes, origin of a record, Expected Difference derivation, undo order, adopted and no-op records | agent-decided |
 | [0343](0343-run-guard-and-findings.md) | Run guard (DOM-010, LIF-005), run-origin findings, queued and orphaned Runs | agent-decided |
+| [0350](0350-dashboard-and-repositories-ui.md) | Dashboard and repositories list: Model API reads, Facet badges, selection, shared live connection | agent-decided |
 | [0360](0360-config-pages-rpc-client.md) | Configuration and admin pages read and write through the ZenStack RPC mount | agent-decided |
 | [0361](0361-route-default-read-only.md) | The Route default naming pipeline is shown, not edited, on the naming page | agent-decided |
 | [0362](0362-overlay-document-validation.md) | Overlay writes go through validated `/api/v1/overlays` endpoints, not RPC | agent-decided |

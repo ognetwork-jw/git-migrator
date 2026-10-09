@@ -40,6 +40,27 @@ const call = (
   });
 
 describe('[API-012] the ZenStack RPC handler runs on the policy facade', () => {
+  it('[UI-021] a text search with % or _ is literal, not a wildcard (repositories list)', async () => {
+    const search = async (text: string) => {
+      const q = JSON.stringify({
+        where: {
+          sourceRepository: {
+            OR: [
+              { name: { contains: text, mode: 'insensitive' } },
+              { fullPath: { contains: text, mode: 'insensitive' } },
+            ],
+          },
+        },
+      });
+      const res = await call(viewer, 'GET', '/migration/count', undefined, { q });
+      return (res.body as { data: number }).data;
+    };
+    expect(await search('auto')).toBeGreaterThan(0);
+    expect(await search('%')).toBe(0);
+    expect(await search('_')).toBe(0);
+    expect(await search('a_to')).toBe(0);
+  });
+
   it('[API-012] a viewer reads through GET /wave/findMany', async () => {
     const res = await call(viewer, 'GET', '/wave/findMany');
     expect(res.status).toBe(200);

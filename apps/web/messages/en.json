@@ -53,7 +53,68 @@
   },
   "dashboard": {
     "title": "Dashboard",
-    "placeholder": "The dashboard shows status, readiness, Waves, quota and recent Runs. It arrives with the next UI release."
+    "placeholder": "The dashboard shows status, readiness, Waves, quota and recent Runs. It arrives with the next UI release.",
+    "noRoutes": "There are no Routes yet. Counts appear once a Route is configured and its endpoints have been inventoried.",
+    "loading": "Loading the dashboard",
+    "updated": "Updated {when}",
+    "refreshInventory": "Refresh inventory",
+    "refreshQueued": "Inventory refresh queued.",
+    "route": "Route {id}",
+    "repositories": "Repositories",
+    "total": "Total",
+    "byStatus": "By status",
+    "byReadiness": "By readiness",
+    "openList": "Open the list",
+    "endpointMigration": {
+      "title": "Endpoint migration",
+      "none": "No endpoint migration yet.",
+      "status": "Status",
+      "readiness": "Readiness"
+    },
+    "waves": {
+      "title": "Waves",
+      "empty": "No Waves yet.",
+      "truncated": "Only the first {count} Waves are shown.",
+      "target": "Target {date}",
+      "total": "{count, plural, one {# repository} other {# repositories}}",
+      "progress": "{done} of {total} done"
+    },
+    "quota": {
+      "title": "Quota",
+      "empty": "No quota buckets are in use yet.",
+      "error": "Quota could not be loaded.",
+      "bucket": "{endpoint} / {account} / {group}",
+      "used": "{used} of {limit} used",
+      "remaining": "{count} left",
+      "resetAt": "Resets {when}",
+      "blockedUntil": "Blocked until {when}",
+      "nearLimit": "Near limit",
+      "backlog": "{count, plural, one {# analysis queued} other {# analyses queued}}",
+      "eta": "About {duration} to drain the queue",
+      "etaNone": "No background capacity, so no estimate",
+      "etaZero": "Nothing queued",
+      "backlogTotal": "{count, plural, one {# analysis queued in all} other {# analyses queued in all}}",
+      "backlogTruncated": "The queue is longer than what is split per Endpoint, so per-bucket backlogs and estimates are partial.",
+      "gauge": "Quota used in {bucket}"
+    },
+    "runs": {
+      "title": "Recent Runs",
+      "empty": "No Runs yet.",
+      "column": {
+        "kind": "Kind",
+        "status": "Status",
+        "created": "Created",
+        "finished": "Finished",
+        "migration": "Repository"
+      },
+      "open": "Open"
+    },
+    "duration": {
+      "seconds": "{count} s",
+      "minutes": "{count} min",
+      "hours": "{count} h",
+      "days": "{count} d"
+    }
   },
   "comingSoon": {
     "title": "{page}",
@@ -624,5 +685,125 @@
         "data": "Change"
       }
     }
+  },
+  "migrationStatus": {
+    "discovered": "Discovered",
+    "analyzed": "Analyzed",
+    "running": "Running",
+    "migrated": "Migrated",
+    "failed": "Failed",
+    "partial": "Partial",
+    "verified": "Verified",
+    "manually_completed": "Manually completed",
+    "drifted": "Drifted",
+    "rolled_back": "Rolled back",
+    "source_missing": "Source missing"
+  },
+  "readiness": {
+    "ready": "Ready",
+    "needs_attention": "Needs attention",
+    "blocked": "Blocked",
+    "unanalyzed": "Not analyzed"
+  },
+  "runStatus": {
+    "queued": "Queued",
+    "running": "Running",
+    "succeeded": "Succeeded",
+    "partial": "Partial",
+    "failed": "Failed",
+    "cancelled": "Cancelled"
+  },
+  "runKind": {
+    "migrate": "Migrate",
+    "run_anyway": "Run anyway",
+    "resync": "Resync",
+    "verify": "Verify",
+    "rollback": "Rollback",
+    "analyze": "Analyze"
+  },
+  "repositories": {
+    "title": "Repositories",
+    "noRoutes": "There are no Routes yet. Repositories appear once a Route is configured and its endpoints have been inventoried.",
+    "empty": "No repositories match these filters.",
+    "total": "{count, plural, one {# repository} other {# repositories}}",
+    "filter": {
+      "route": "Route",
+      "namespace": "Source project",
+      "allNamespaces": "All projects",
+      "status": "Status",
+      "unmigrated": "Unmigrated",
+      "allStatuses": "All statuses",
+      "readiness": "Readiness",
+      "allReadiness": "Any readiness",
+      "sizeClass": "Size class",
+      "allSizes": "Any size",
+      "wave": "Wave",
+      "allWaves": "Any Wave",
+      "blockerCode": "Blocker code",
+      "blockerCodePlaceholder": "For example naming.collision",
+      "hasOpenTasks": "Has open tasks",
+      "search": "Search name and path",
+      "searchPlaceholder": "Search by name or path",
+      "reset": "Reset filters"
+    },
+    "sizeClass": {
+      "standard": "Standard",
+      "large": "Large"
+    },
+    "column": {
+      "source": "Source path",
+      "target": "Planned target name",
+      "status": "Status",
+      "readiness": "Readiness",
+      "facets": "Facets",
+      "size": "Size",
+      "wave": "Wave",
+      "analyzed": "Last analyzed",
+      "lastRun": "Last run",
+      "actions": "Actions"
+    },
+    "counts": {
+      "blockers": "{count, plural, one {# blocker} other {# blockers}}",
+      "pre": "{count} pre",
+      "post": "{count} post",
+      "label": "Blockers {blockers}, pre tasks {pre}, post tasks {post}"
+    },
+    "facet": {
+      "blocker": "blocker",
+      "pre_task": "pre task",
+      "post_task": "post task",
+      "warning": "warning",
+      "hint": "{facet}: {count} {kind}",
+      "clean": "{facet}: no findings"
+    },
+    "noWave": "No Wave",
+    "never": "Never",
+    "notAnalyzed": "Not analyzed",
+    "lastRun": "{kind}, {status}, {when}",
+    "action": {
+      "analyze": "Analyze",
+      "queued": "Request accepted.",
+      "error": {
+        "conflict": "This repository's source is missing from the last inventory, so it cannot be analyzed. Refresh the inventory or check the source.",
+        "validation_failed": "The request was not accepted for this repository. Reload and try again.",
+        "not_found": "This repository no longer exists. Reload the list."
+      }
+    },
+    "selection": {
+      "count": "{count} selected",
+      "clear": "Clear selection",
+      "label": "Select {name}",
+      "selectPage": "Select all on this page",
+      "hidden": "{count} selected ({hidden} hidden by filters)"
+    },
+    "size": {
+      "unknown": "Unknown",
+      "bytes": "{value} B",
+      "kib": "{value} KiB",
+      "mib": "{value} MiB",
+      "gib": "{value} GiB",
+      "tib": "{value} TiB"
+    },
+    "routeNotFound": "Route {id} was not found. Showing {shown} instead."
   }
 }
