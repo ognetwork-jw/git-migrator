@@ -1537,11 +1537,16 @@ describe('glob-under-glob inclusion and apply order (ADR-0113)', () => {
   });
 
   it('[FAC-BRR-003] property: every rule comes before the rules that cover it, whatever the input order', () => {
-    let seed = 52;
+    // mulberry32: an LCG's low bits have a tiny period, which made every pattern a plain name.
+    let state = 52;
     const random = (n: number) => {
-      seed = (seed * 1103515245 + 12345) % 2147483648;
-      return seed % n;
+      state = (state + 0x6d2b79f5) >>> 0;
+      let t = state;
+      t = Math.imul(t ^ (t >>> 15), t | 1);
+      t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+      return Math.floor((((t ^ (t >>> 14)) >>> 0) / 4294967296) * n);
     };
+    let coveredPairs = 0;
     const pieces = ['a', 'b', '*', 'a*', '*a', '*b*', '**', 'a]'];
     const pattern = () =>
       Array.from({ length: 1 + random(3) }, () => pieces[random(pieces.length)]).join('/');
@@ -1554,7 +1559,8 @@ describe('glob-under-glob inclusion and apply order (ADR-0113)', () => {
       expect(branchRuleApplyOrder([...rules].reverse()).map((x) => x.pattern)).toEqual(order);
       for (const wide of patterns) {
         for (const narrow of patterns) {
-          if (covers(wide, narrow)) {
+          if (wide !== narrow && covers(wide, narrow)) {
+            coveredPairs += 1;
             expect(order.indexOf(narrow), `${narrow} before ${wide}`).toBeLessThan(
               order.indexOf(wide),
             );
@@ -1562,5 +1568,7 @@ describe('glob-under-glob inclusion and apply order (ADR-0113)', () => {
         }
       }
     }
+    // Guards against a vacuous run: the generator must produce real wildcard-over-name pairs.
+    expect(coveredPairs).toBeGreaterThanOrEqual(100);
   });
 });
