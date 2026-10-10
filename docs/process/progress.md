@@ -63,7 +63,7 @@ The orchestrator maintains this table (see [workflow](workflow.md)). Integration
 | T-093 | merged | task/T-093-devenv-ci | [#18](https://github.com/ognetwork-jw/git-migrator/pull/18) | 2 | merged to ai-main 8dba617 (r2 ACCEPTABLE; CI green incl. devenv test); ADR-0135/0137 folded into DEV-010/DEV-030 |
 | T-095 | merged | task/T-095-live-e2e | [#59](https://github.com/ognetwork-jw/git-migrator/pull/59) | 2 | merged to ai-main 1bc2e4e; live path never run against real accounts (no accounts in the build environment); dry mode runs in CI; ADR-0491/0492 |
 | T-096 | merged | task/T-096-integration-scenarios | [#60](https://github.com/ognetwork-jw/git-migrator/pull/60) | 2 | merged to ai-main a139a5a; all 12 TST-020 additional scenarios mapped in testing/integration/README.md |
-| T-097 | in_progress | | | | final whole-repository review (PROC-030) dispatched |
+| T-097 | merged | task/T-097a-web-image, task/T-097b-safety, task/T-097c-spec-docs, task/T-097d-open-majors | [#61](https://github.com/ognetwork-jw/git-migrator/pull/61) [#62](https://github.com/ognetwork-jw/git-migrator/pull/62) [#63](https://github.com/ognetwork-jw/git-migrator/pull/63) [#64](https://github.com/ognetwork-jw/git-migrator/pull/64) | 5 | final whole-repository review (PROC-030); r1 found 1 BLOCKER (image served no UI) and 9 MAJOR plus the open T-004 redaction BLOCKERs; fixed on four branches (T-097b took 5 rounds); ai-main 4b4a6e9; docs/handoff.md written |
 
 > 2026-10-09 12:53 UTC: GitHub Actions jobs fail instantly with no runner (runner_id 0, no logs) on every PR. Merges use the local gate of ADR-0455 until Actions runs jobs again; re-run CI on the ai-main head then.
 
