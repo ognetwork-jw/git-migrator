@@ -38,6 +38,8 @@ export interface MigrationDetail {
   readonly runBlockers: unknown;
   readonly waveId: string | null;
   readonly targetCreatedByFramework: boolean;
+  /** Legacy target writes whose place no evidence shows: every Run asks for a typed confirmation (ADR-0504). */
+  readonly targetPlacementUnknown?: boolean;
   readonly sourceReadOnlyApplied: boolean;
   readonly analysisStaleAt: string | null;
   readonly verifiedAt: string | null;
@@ -181,6 +183,7 @@ export const fetchMigration = async (id: string): Promise<MigrationDetail | null
         runBlockers: true,
         waveId: true,
         targetCreatedByFramework: true,
+        targetPlacementUnknown: true,
         sourceReadOnlyApplied: true,
         analysisStaleAt: true,
         verifiedAt: true,

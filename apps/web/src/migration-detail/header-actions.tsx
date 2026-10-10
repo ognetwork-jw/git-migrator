@@ -40,6 +40,19 @@ const PLAIN_RUN: Partial<Record<HeaderAction, DetailRunKind>> = {
   source_read_only: 'source_read_only',
 };
 
+/** Run kinds that work on the target: a legacy Migration of unknown place confirms them (ADR-0504). */
+const TARGET_KINDS: readonly DetailRunKind[] = ['migrate', 'run_anyway', 'resync', 'verify'];
+
+/**
+ * What the operator types to confirm a legacy Migration's place: the target full name in the
+ * Route's Namespace, or the Namespace path for an endpoint Migration (the server's
+ * `legacyConfirmationName`, ADR-0504).
+ */
+export function legacyConfirmationName(m: MigrationDetail): string {
+  const path = m.route.targetNamespacePath;
+  return m.scope === 'repository' && m.plannedTargetName ? `${path}/${m.plannedTargetName}` : path;
+}
+
 /** Run kinds whose option `skipSourceReadOnly` applies (LIF-070). */
 const GIT_KINDS: readonly string[] = ['migrate', 'run_anyway', 'resync'];
 
@@ -192,6 +205,12 @@ export function HeaderActions({
   const asked = dialog;
   const plainKind = asked ? PLAIN_RUN[asked] : undefined;
   const undoFirst = migration.sourceReadOnlyApplied;
+  // Legacy target writes of unknown place: every Run on the target, and the rollback, is confirmed
+  // by typing the name that names the Route's place (ADR-0504).
+  const legacy = migration.targetPlacementUnknown === true;
+  const legacyName = legacy ? legacyConfirmationName(migration) : null;
+  const legacyKind =
+    legacy && plainKind && TARGET_KINDS.includes(plainKind) ? plainKind : undefined;
 
   return (
     <div className="flex flex-col gap-2">
@@ -218,8 +237,24 @@ export function HeaderActions({
       ) : null}
       {analysis.isError ? <ActionError error={analysis.error} scope="analyze" /> : null}
 
+      <TypedNameDialog
+        open={legacyKind !== undefined}
+        name={legacyName}
+        texts={{
+          title: t('confirm.legacy.title'),
+          ok: legacyKind ? t(`confirm.${legacyKind}.ok`) : '',
+          body: t('confirm.legacy.body', { name: legacyName ?? '' }),
+        }}
+        warning={t('confirm.legacy.warning')}
+        loading={run.isPending}
+        error={run.error}
+        errorScope="run"
+        onConfirm={(typed) => legacyKind && run.mutate({ kind: legacyKind, confirm: typed })}
+        onCancel={dismiss}
+      />
+
       <ConfirmDialog
-        open={plainKind !== undefined}
+        open={plainKind !== undefined && legacyKind === undefined}
         title={plainKind ? t(`confirm.${plainKind}.title`) : ''}
         ok={plainKind ? t(`confirm.${plainKind}.ok`) : ''}
         danger={plainKind === 'run_anyway'}
@@ -280,15 +315,17 @@ export function HeaderActions({
 
       <TypedNameDialog
         open={asked === 'rollback'}
-        name={name}
+        name={legacy && !undoFirst ? legacyName : name}
         texts={{
           title: undoFirst ? t('confirm.rollback.undoFirstTitle') : t('confirm.rollback.title'),
           ok: undoFirst ? t('confirm.rollback.undoFirstOk') : t('confirm.rollback.ok'),
           body: undoFirst
             ? t('confirm.rollback.undoFirstBody')
-            : migration.targetCreatedByFramework
-              ? t('confirm.rollback.bodyCreated', { target: name ?? '' })
-              : t('confirm.rollback.bodyAdopted'),
+            : legacy
+              ? t('confirm.legacy.body', { name: legacyName ?? '' })
+              : migration.targetCreatedByFramework
+                ? t('confirm.rollback.bodyCreated', { target: name ?? '' })
+                : t('confirm.rollback.bodyAdopted'),
         }}
         warning={undoFirst ? undefined : t('confirm.rollback.warning')}
         loading={run.isPending}

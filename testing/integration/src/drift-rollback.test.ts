@@ -72,6 +72,9 @@ const SOURCE = 'bb-src';
 const TARGET = 'gh-dst';
 const ROUTE = 'r-auto';
 const ORG = 'acme';
+/** The Endpoint and organization the Route is retargeted to (ADR-0504). */
+const TARGET_B = 'gh-dst-b';
+const ORG_B = 'acme-b';
 const log = createLogger({ level: 'silent' });
 const shutdown = new AbortController();
 
@@ -123,6 +126,37 @@ async function migrationOf(key: string) {
   });
   return t.db.privileged.migration.findFirstOrThrow({
     where: { routeId: ROUTE, sourceRepositoryId: repo.id },
+  });
+}
+
+/**
+ * Syncs the configuration into the database, as the `migrate` entrypoint does on deploy (LIF-011).
+ * With `retarget`, the Route points at another target Endpoint and Namespace.
+ */
+async function syncRoutes(retarget?: { target: string; namespace: string }) {
+  await syncConfig(t.db.privileged, {
+    endpoints: config.endpoints.map((e) => ({
+      id: e.id,
+      providerType: e.provider,
+      displayName: e.id,
+      baseUrl: e.baseUrl,
+      configHash: hashConfig(e),
+    })),
+    routes: config.routes.map((r) => {
+      const route = retarget
+        ? { ...r, target: retarget.target, targetNamespace: retarget.namespace }
+        : r;
+      return {
+        id: route.id,
+        sourceEndpointId: route.source,
+        targetEndpointId: route.target,
+        targetNamespacePath: route.targetNamespace,
+        policies: route.policies,
+        defaults: route.defaults,
+        sourcePostAction: route.sourcePostAction,
+        configHash: hashConfig(route),
+      };
+    }),
   });
 }
 
@@ -229,6 +263,8 @@ beforeAll(async () => {
   scratch = mkdtempSync(join(tmpdir(), 'gm-t089-'));
   work = mkdtempSync(join(tmpdir(), 'gm-t089-work-'));
   const installationId = [...gh.state.installations.keys()][0] as number;
+  // A second organization with its own installation: the Endpoint a Route is retargeted to.
+  const installationB = gh.state.addInstallation({ account: ORG_B }).id;
   const gitBase = fakes.git?.baseUrl ?? 'http://127.0.0.1:1';
   config = resolveConfig({
     text: `
@@ -248,6 +284,12 @@ endpoints:
     gitBaseUrl: ${gitBase}/target
     options: { org: ${ORG}, appId: ${gh.state.ownApp.id}, installationId: ${installationId} }
     quota: { overrides: { content-minute: 100000, content-hour: 100000, core: 100000 } }
+  - id: ${TARGET_B}
+    provider: github
+    baseUrl: http://127.0.0.1:${gh.port}
+    gitBaseUrl: ${gitBase}/target
+    options: { org: ${ORG_B}, appId: ${gh.state.ownApp.id}, installationId: ${installationB} }
+    quota: { overrides: { content-minute: 100000, content-hour: 100000, core: 100000 } }
 routes:
   - id: ${ROUTE}
     source: ${SOURCE}
@@ -258,25 +300,7 @@ routes:
 `,
     env: {},
   });
-  await syncConfig(t.db.privileged, {
-    endpoints: config.endpoints.map((e) => ({
-      id: e.id,
-      providerType: e.provider,
-      displayName: e.id,
-      baseUrl: e.baseUrl,
-      configHash: hashConfig(e),
-    })),
-    routes: config.routes.map((r) => ({
-      id: r.id,
-      sourceEndpointId: r.source,
-      targetEndpointId: r.target,
-      targetNamespacePath: r.targetNamespace,
-      policies: r.policies,
-      defaults: r.defaults,
-      sourcePostAction: r.sourcePostAction,
-      configHash: hashConfig(r),
-    })),
-  });
+  await syncRoutes();
   const quota = new QuotaService({ pool: t.db.pool });
   const environment = createProviderEnvironment({
     quota,
@@ -311,7 +335,7 @@ routes:
   const inner: EndpointConnector = {
     async connect(endpointId, options) {
       const connection = await real.connect(endpointId, options);
-      if (endpointId === TARGET) {
+      if (endpointId === TARGET || endpointId === TARGET_B) {
         return {
           ...connection,
           limits: { ...connection.limits, ...WORLD_LIMITS },
@@ -1400,6 +1424,30 @@ describe('what rollback cannot revert is reported, not hidden (LIF-077)', () => 
     if (!adopted) throw new Error('no adopted target');
     fakes.github?.state.deleteRepository(adopted);
 
+    // The record names no Endpoint and no repository row does: the rollback says so, and does not
+    // ask the target's Endpoint, which could answer "not found" for a repository elsewhere.
+    const unknown = await perform(id, 'rollback', { confirm: confirmOf(repo.target) });
+    expect(unknown.result).toEqual({ outcome: 'finished', status: 'failed' });
+    const unknownStep = await t.db.privileged.runStep.findFirstOrThrow({
+      where: { runId: unknown.runId, stepKey: 'rollback.target' },
+    });
+    expect(unknownStep.error).toMatchObject({ code: 'rollback.endpoint-unknown' });
+    expect(
+      (await t.db.privileged.mutation.findUniqueOrThrow({ where: { id: created.id } })).undoneAt,
+    ).toBeNull();
+
+    // Records written since ADR-0504 name the Endpoint the repository was created on.
+    await t.db.privileged.mutation.update({
+      where: { id: created.id },
+      data: {
+        resourceRef: {
+          kind: 'repository',
+          id: earlier.providerId,
+          name: earlier.slug,
+          endpointId: TARGET,
+        },
+      },
+    });
     const { runId, result } = await perform(id, 'rollback', { confirm: confirmOf(repo.target) });
     expect(result).toEqual({ outcome: 'finished', status: 'failed' });
     const step = await t.db.privileged.runStep.findFirstOrThrow({
@@ -1552,5 +1600,187 @@ describe('what rollback cannot revert is reported, not hidden (LIF-077)', () => 
     const after = await migration(id);
     expect(after.targetRepositoryId).toBe(migrated.targetRepositoryId);
     expect(after.status).toBe('partial');
+  }, 600_000);
+});
+
+// ---------------------------------------------------------------------------------------------------
+// A Route retargeted after its target was made (LIF-011, LIF-077, ADR-0504). Last in the file: the
+// Route is moved to another Endpoint and moved back afterwards.
+// ---------------------------------------------------------------------------------------------------
+
+describe('rollback after the Route was retargeted (LIF-011, LIF-077, ADR-0504)', () => {
+  const inventoryOf = (endpointId: string) =>
+    runInventory(
+      {
+        db: t.db.privileged,
+        appPool: t.db.pool,
+        connector: services.connector,
+        registry: services.registry as never,
+        config,
+        log,
+      },
+      endpointId,
+      { shutdown: shutdown.signal },
+    );
+  /** The Route moves to the other organization's Endpoint, which inventory resolves. */
+  async function retarget(): Promise<void> {
+    await syncRoutes({ target: TARGET_B, namespace: ORG_B });
+    await inventoryOf(TARGET_B);
+    const route = await t.db.privileged.route.findUniqueOrThrow({ where: { id: ROUTE } });
+    expect(route.targetEndpointId).toBe(TARGET_B);
+    expect(route.targetNamespaceId).not.toBeNull();
+  }
+  async function restore(): Promise<void> {
+    await syncRoutes();
+    await inventoryOf(TARGET);
+  }
+  const refusedOnTarget = async (id: string, kind: Kind, target: string) =>
+    expect(
+      createRun(t.db.privileged, { migrationId: id, kind, triggeredById: actorId }),
+      kind,
+    ).rejects.toMatchObject({
+      code: 'run.not_permitted',
+      message: expect.stringContaining(`${ORG}/${target} is not in the Route's target Namespace`),
+    });
+
+  it('[LIF-011] [LIF-077] the old target is not split: Runs on the target are refused, the Analysis blocks, and a rollback removes the target where it is', async () => {
+    const repo = await addSourceRepo();
+    const id = repo.migration.id;
+    expect(
+      (await perform(id, 'migrate', { options: { skipSourceReadOnly: true } })).result,
+    ).toMatchObject({ status: 'succeeded' });
+    expect(targetRepo(repo.target)).toBeDefined();
+    await retarget();
+    try {
+      for (const kind of ['resync', 'verify'] as const)
+        await refusedOnTarget(id, kind, repo.target);
+      // A scheduled drift check would read the new organization and find nothing there: it is
+      // skipped with the reason instead of reporting every Facet unverifiable (ADR-0504).
+      expect((await migration(id)).status).toBe('verified');
+      expect(await runParity(parityDeps, id, DRIFT(false))).toEqual({
+        skipped: 'target-outside-route',
+      });
+      await analyze(id);
+      const blocked = await migration(id);
+      expect(blocked.readiness).toBe('blocked');
+      expect(blocked.blockerCodes).toContain('repository-settings.target-outside-route');
+      // Nothing was made in the new organization.
+      expect(fakes.github?.state.findRepo(ORG_B, repo.target)).toBeUndefined();
+
+      const { result } = await perform(id, 'rollback', { confirm: confirmOf(repo.target) });
+      expect(result).toEqual({ outcome: 'finished', status: 'succeeded' });
+      expect(fakes.github?.state.findRepo(ORG, repo.target)).toBeUndefined();
+      const after = await migration(id);
+      expect(after.status).toBe('rolled_back');
+      expect(after.targetRepositoryId).toBeNull();
+    } finally {
+      await restore();
+    }
+  }, 600_000);
+
+  it('[LIF-011] a Run admitted before the retarget stops at its first Step, before it touches the new place', async () => {
+    const repo = await addSourceRepo();
+    const id = repo.migration.id;
+    expect(
+      (await perform(id, 'migrate', { options: { skipSourceReadOnly: true } })).result,
+    ).toMatchObject({ status: 'succeeded' });
+    // Admitted while the Route still pointed at the first organization, and past its pre-run
+    // Analysis (as a Run handed off between Steps is), so only the Step check can stop it.
+    const created = await createRun(t.db.privileged, {
+      migrationId: id,
+      kind: 'resync',
+      triggeredById: actorId,
+      options: { skipSourceReadOnly: true },
+    });
+    const { latestAnalysisId } = await migration(id);
+    await t.db.privileged.run.update({
+      where: { id: created.runId },
+      data: { analysisId: latestAnalysisId },
+    });
+    await retarget();
+    try {
+      const result = await execute(created.runId);
+      expect(result).toEqual({ outcome: 'finished', status: 'failed' });
+      const failed = await t.db.privileged.runStep.findMany({
+        where: { runId: created.runId, status: 'failed' },
+      });
+      expect(failed.map((s) => (s.error as { code?: string } | null)?.code)).toContain(
+        'repository-settings.target-outside-route',
+      );
+      expect(fakes.github?.state.findRepo(ORG_B, repo.target)).toBeUndefined();
+      const { result: undone } = await perform(id, 'rollback', {
+        confirm: confirmOf(repo.target),
+      });
+      expect(undone).toEqual({ outcome: 'finished', status: 'succeeded' });
+    } finally {
+      await restore();
+    }
+  }, 600_000);
+
+  it('[LIF-077] create A/x, retarget, a resync creates B/x, roll back: B/x is deleted, and A/x is reported left in place with its creation still recorded', async () => {
+    const repo = await addSourceRepo();
+    const id = repo.migration.id;
+    expect(
+      (await perform(id, 'migrate', { options: { skipSourceReadOnly: true } })).result,
+    ).toMatchObject({ status: 'succeeded' });
+    const a = targetRepo(repo.target);
+    const createdA = await t.db.privileged.mutation.findFirstOrThrow({
+      where: { migrationId: id, side: 'target', action: 'create', state: 'recorded' },
+    });
+    expect(createdA.resourceRef).toMatchObject({ kind: 'repository', id: a.nodeId });
+    await retarget();
+    try {
+      await refusedOnTarget(id, 'resync', repo.target);
+      // What a build without the guard did (the split this test is about): the resync looked the
+      // old target up in the new organization, found nothing, and went on as if the Migration had
+      // no target. Such a build pinned no place either. Clearing the link and the pin reproduces
+      // exactly that, through the real Steps.
+      await t.db.privileged.migration.update({
+        where: { id },
+        data: {
+          targetRepositoryId: null,
+          targetPlacedEndpointId: null,
+          targetPlacedNamespaceId: null,
+        },
+      });
+      expect(
+        (await perform(id, 'resync', { options: { skipSourceReadOnly: true } })).result,
+      ).toMatchObject({ status: 'succeeded' });
+      const b = fakes.github?.state.findRepo(ORG_B, repo.target);
+      expect(b).toBeDefined();
+      expect((await migration(id)).targetCreatedByFramework).toBe(true);
+
+      const { runId, result } = await perform(id, 'rollback', {
+        confirm: `${ORG_B}/${repo.target}`,
+      });
+      expect(result).toEqual({ outcome: 'finished', status: 'failed' });
+      const step = await t.db.privileged.runStep.findFirstOrThrow({
+        where: { runId, stepKey: 'rollback.target' },
+      });
+      expect(step.error).toMatchObject({
+        code: 'rollback.left-in-place',
+        details: { left: [{ kind: 'repository-earlier', name: repo.target }] },
+      });
+      // B/x, the Migration's target, is gone; A/x still exists, and its creation is not undone.
+      expect(fakes.github?.state.findRepo(ORG_B, repo.target)).toBeUndefined();
+      expect(targetRepo(repo.target).nodeId).toBe(a.nodeId);
+      expect(
+        (await t.db.privileged.mutation.findUniqueOrThrow({ where: { id: createdA.id } })).undoneAt,
+      ).toBeNull();
+      const tasks = await t.db.privileged.manualTask.findMany({
+        where: { migrationId: id, code: 'repository-settings.left-in-place', status: 'open' },
+      });
+      expect(tasks.map((task) => task.params)).toEqual([
+        { details: [{ kind: 'repository-earlier', name: repo.target }] },
+      ]);
+
+      // Once A/x is deleted by hand, a rollback completes.
+      fakes.github?.state.deleteRepository(targetRepo(repo.target));
+      const again = await perform(id, 'rollback', { confirm: `${ORG_B}/${repo.target}` });
+      expect(again.result).toEqual({ outcome: 'finished', status: 'succeeded' });
+      expect((await migration(id)).status).toBe('rolled_back');
+    } finally {
+      await restore();
+    }
   }, 600_000);
 });

@@ -128,6 +128,7 @@ export const LIST_SELECT = {
   readinessCounts: true,
   plannedTargetName: true,
   blockerCodes: true,
+  targetPlacementUnknown: true,
   waveId: true,
   sourceRepository: {
     select: { id: true, name: true, fullPath: true, sizeBytes: true, sizeClass: true },

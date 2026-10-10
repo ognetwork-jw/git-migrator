@@ -19,6 +19,15 @@ import { hasUndoableMutations } from '../rollback/ledger.ts';
 import { parsePendingMarker } from '../run-leases.ts';
 import { endRunIn } from './finish.ts';
 import { checkRunOptions } from './options.ts';
+import {
+  loadPlacement,
+  type Placement,
+  placementOutside,
+  placementUnknownMessage,
+  ROUTE_TARGET_KINDS,
+  TARGET_PLACEMENT_UNKNOWN,
+  targetOutsideRouteMessage,
+} from './placement.ts';
 import { lockMigration, lockRun, publishMigration, publishRun, toJson } from './store.ts';
 import type { Tx } from './types.ts';
 
@@ -84,12 +93,15 @@ export function effectiveReadiness(input: {
   readonly blockerCodes: readonly string[];
   readonly readinessCounts: unknown;
   readonly options: { readonly adoptNonEmpty?: boolean | undefined };
+  /** Blockers the Run's own confirmation answers (ADR-0504). */
+  readonly waived?: readonly string[];
 }): Readiness | null {
-  if (input.readiness !== 'blocked' || input.options.adoptNonEmpty !== true) return input.readiness;
-  if (
-    input.blockerCodes.length === 0 ||
-    !input.blockerCodes.every((c) => ADOPTABLE_BLOCKERS.includes(c))
-  ) {
+  const waived = [
+    ...(input.options.adoptNonEmpty === true ? ADOPTABLE_BLOCKERS : []),
+    ...(input.waived ?? []),
+  ];
+  if (input.readiness !== 'blocked' || waived.length === 0) return input.readiness;
+  if (input.blockerCodes.length === 0 || !input.blockerCodes.every((c) => waived.includes(c))) {
     return input.readiness;
   }
   const counts = input.readinessCounts as { preTasks?: unknown } | null;
@@ -160,6 +172,61 @@ export async function teamsInUse(
   return (rows[0]?.n ?? 0) > 0;
 }
 
+/**
+ * The Endpoints a rollback will touch that are not configured (missing or retired): where the
+ * framework wrote the target, and where each repository it created and has not undone lives (its
+ * create record names the Endpoint; older records are found through the `Repository` row).
+ */
+async function unreachableRollbackEndpoints(
+  tx: Pick<Db, '$queryRaw' | 'repository' | 'endpoint'>,
+  migration: { readonly id: string; readonly route: { readonly sourceEndpointId: string } },
+  placement: Placement | undefined,
+): Promise<string[]> {
+  const needed = new Set<string>(placement ? [placement.endpointId] : []);
+  const created = await tx.$queryRaw<{ endpoint_id: string | null; provider_id: string | null }[]>`
+    SELECT resource_ref->>'endpointId' AS endpoint_id, resource_ref->>'id' AS provider_id
+    FROM app.mutation
+    WHERE migration_id = ${migration.id} AND side = 'target' AND action = 'create'
+      AND state = 'recorded' AND undone_at IS NULL AND resource_ref->>'kind' = 'repository'`;
+  for (const row of created) {
+    if (row.endpoint_id) {
+      needed.add(row.endpoint_id);
+    } else if (row.provider_id) {
+      const repos = await tx.repository.findMany({
+        where: {
+          providerId: row.provider_id,
+          endpointId: { not: migration.route.sourceEndpointId },
+        },
+        select: { endpointId: true },
+      });
+      for (const r of repos) needed.add(r.endpointId);
+    }
+  }
+  if (needed.size === 0) return [];
+  const active = await tx.endpoint.findMany({
+    where: { id: { in: [...needed] }, status: 'active' },
+    select: { id: true },
+  });
+  const ok = new Set(active.map((e) => e.id));
+  return [...needed].filter((id) => !ok.has(id)).sort();
+}
+
+/**
+ * What the operator types to confirm a legacy Migration's place (ADR-0504): the target full name in
+ * the Route's Namespace, which names the place, or the Namespace path when there is no target name.
+ * The web UI derives the same name (`legacyConfirmationName` in apps/web).
+ */
+export function legacyConfirmationName(migration: {
+  readonly scope: string;
+  readonly plannedTargetName: string | null;
+  readonly route: { readonly targetNamespacePath: string };
+}): string {
+  const path = migration.route.targetNamespacePath;
+  return migration.scope === 'repository' && migration.plannedTargetName
+    ? `${path}/${migration.plannedTargetName}`
+    : path;
+}
+
 export interface CreateRunInput {
   readonly migrationId: string;
   readonly kind: RunKind;
@@ -211,6 +278,12 @@ export async function createRun(db: Db, input: CreateRunInput): Promise<CreatedR
       if (migration.route.retiredAt) {
         throw new RunGuardError('run.route_retired', 'The Route of this Migration is retired');
       }
+      // A Route retargeted after the framework wrote the target: the Run would work on the new
+      // place and leave the old one behind (ADR-0504). Only rollback and the source lock Runs go.
+      const placement = await loadPlacement(tx, input.migrationId);
+      if (ROUTE_TARGET_KINDS.includes(input.kind) && placementOutside(placement, migration.route)) {
+        throw new RunGuardError('run.not_permitted', targetOutsideRouteMessage(placement.label));
+      }
       const active = await tx.run.count({
         where: { migrationId: input.migrationId, status: { in: ['queued', 'running'] } },
       });
@@ -220,12 +293,46 @@ export async function createRun(db: Db, input: CreateRunInput): Promise<CreatedR
       if (input.kind === 'rollback') {
         const why = await rollbackRefusal(tx, migration);
         if (why !== undefined) throw new RunGuardError('run.not_permitted', why);
+        // A rollback works where the framework wrote, even after the Route moved on: every
+        // Endpoint it will touch must be configured, or nothing is reverted (ADR-0504).
+        const unreachable = await unreachableRollbackEndpoints(tx, migration, placement);
+        if (unreachable.length > 0) {
+          throw new RunGuardError(
+            'run.not_permitted',
+            `The rollback needs Endpoint ${unreachable.join(', ')}, which is no longer configured: configure it again to roll the Migration back`,
+          );
+        }
       }
-      const targetFullName =
-        migration.targetRepository?.fullPath ??
-        (migration.plannedTargetName
-          ? `${migration.route.targetNamespacePath}/${migration.plannedTargetName}`
-          : null);
+      // Target writes from before places were recorded, with no evidence of where they went: every
+      // Run that works on the target, and the rollback, waits until the operator confirms that the
+      // Route still points there. They type the target full name in the Route's Namespace, as for
+      // a rollback (LIF-077, LIF-043), or the Namespace path when there is no target name (an
+      // endpoint Migration). Otherwise a migrate could write the new place and a rollback revert,
+      // and mark undone, records in the wrong place (ADR-0504).
+      const legacyUnknown = placement === undefined && migration.targetPlacementUnknown;
+      const legacyConfirmed =
+        legacyUnknown && (input.kind === 'rollback' || ROUTE_TARGET_KINDS.includes(input.kind));
+      if (legacyConfirmed) {
+        const name = legacyConfirmationName(migration);
+        if (input.confirm?.trim().toLowerCase() !== name.toLowerCase()) {
+          throw new RunGuardError('run.confirmation_required', placementUnknownMessage(name));
+        }
+        if (!migration.route.targetNamespaceId) {
+          throw new RunGuardError(
+            'run.not_permitted',
+            `The Route's target Namespace ${migration.route.targetNamespacePath} is not resolved yet: refresh the inventory of its target Endpoint, then confirm again`,
+          );
+        }
+      }
+      // A target written in a place the Route no longer points at is named where it is (ADR-0504).
+      const namespacePath = placementOutside(placement, migration.route)
+        ? placement.namespace.slug
+        : migration.route.targetNamespacePath;
+      // A legacy Migration's typed name is the one confirmed above, also for a force-adopt.
+      const targetFullName = legacyConfirmed
+        ? legacyConfirmationName(migration)
+        : (migration.targetRepository?.fullPath ??
+          (migration.plannedTargetName ? `${namespacePath}/${migration.plannedTargetName}` : null));
       const checked = checkRunOptions({
         kind: input.kind,
         options: input.options,
@@ -239,6 +346,8 @@ export async function createRun(db: Db, input: CreateRunInput): Promise<CreatedR
         blockerCodes: migration.blockerCodes,
         readinessCounts: migration.readinessCounts,
         options: checked.options,
+        // The confirmation is what the unknown-place blocker asks for, so it does not refuse it.
+        ...(legacyConfirmed ? { waived: [TARGET_PLACEMENT_UNKNOWN] } : {}),
       });
       if (allowed && !allowed.includes(readiness)) {
         throw new RunGuardError(
@@ -269,6 +378,16 @@ export async function createRun(db: Db, input: CreateRunInput): Promise<CreatedR
         data: {
           status: next.state.status,
           statusBeforeRun: next.state.statusBeforeRun,
+          // Confirmed: the legacy writes are in the Route's place, pinned now, so a Route retargeted
+          // while the Run waits changes nothing. A rollback reverts there and clears the pin and
+          // the flag when it completes; a failed one keeps both.
+          ...(legacyConfirmed
+            ? {
+                targetPlacedEndpointId: migration.route.targetEndpointId,
+                targetPlacedNamespaceId: migration.route.targetNamespaceId,
+                ...(input.kind === 'rollback' ? {} : { targetPlacementUnknown: false }),
+              }
+            : {}),
         },
       });
       const run = await tx.run.create({

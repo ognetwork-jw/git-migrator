@@ -43,6 +43,13 @@ import { UnrecoverableError } from 'bullmq';
 import type pg from 'pg';
 import { databaseNow } from '../db-clock.ts';
 import type { EndpointConnector } from '../inventory/connector.ts';
+import {
+  loadPlacement,
+  placementOutside,
+  placementUnknown,
+  TARGET_OUTSIDE_ROUTE,
+  TARGET_PLACEMENT_UNKNOWN,
+} from '../run/placement.ts';
 import type { JobHandlers } from '../runtime.ts';
 import {
   collectPrincipals,
@@ -346,15 +353,37 @@ export async function runAnalysis(
     slug: targetNamespace.slug,
   };
 
+  // The Route was retargeted after the framework wrote the target (ADR-0504): a blocker says what
+  // to do, and the old target is not looked up in the new Namespace by its old id.
+  const placement = await loadPlacement(db, migrationId);
+  const outside = placementOutside(placement, route);
+  if (outside) {
+    extraFindings.push({
+      kind: 'blocker',
+      facetKey: 'repository-settings',
+      code: TARGET_OUTSIDE_ROUTE,
+      params: { namespace: placement.namespace.slug },
+    });
+  } else if (placement === undefined && (await placementUnknown(db, migrationId))) {
+    // Legacy target writes of unknown place: the operator confirms the Namespace first.
+    extraFindings.push({
+      kind: 'blocker',
+      facetKey: 'repository-settings',
+      code: TARGET_PLACEMENT_UNKNOWN,
+      params: { namespace: route.targetNamespacePath },
+    });
+  }
+
   if (isRepository && sourceRepository) {
+    const placed = migration.targetRepository;
     const naming = await planNaming({
       deps,
       routeId: route.id,
       routeDefaults: route.defaults,
       migrationId,
       targetEndpointId: route.targetEndpointId,
-      targetRepositoryId: migration.targetRepositoryId,
-      targetRepository: migration.targetRepository,
+      targetRepositoryId: outside ? null : migration.targetRepositoryId,
+      targetRepository: outside ? null : placed,
       targetNsRef,
       targetConn,
       checkpoint,

@@ -24,6 +24,8 @@ export interface RepositoryRow {
   } | null;
   readonly plannedTargetName: string | null;
   readonly blockerCodes: readonly string[];
+  /** Target writes of unknown place: Runs start from the detail page, which confirms it (ADR-0504). */
+  readonly targetPlacementUnknown?: boolean;
   readonly waveId: string | null;
   readonly sourceRepository: {
     readonly id: string;
@@ -113,11 +115,14 @@ export const analyzeMigration = (id: string) =>
 /** The Run kinds the list starts (LIF-005): Migrate needs ready, Run anyway ready or needs attention. */
 export type RowRunKind = 'migrate' | 'run_anyway';
 
-/** Row action (UI-021): `POST /migrations/{id}/runs`. The server re-checks readiness (LIF-005). */
-export const startMigrationRun = (id: string, kind: RowRunKind) =>
+/**
+ * Row action (UI-021): `POST /migrations/{id}/runs`. The server re-checks readiness (LIF-005).
+ * `confirm`: the typed name a Run that needs a confirmation sends (LIF-043, ADR-0504).
+ */
+export const startMigrationRun = (id: string, kind: RowRunKind, confirm?: string) =>
   apiRequest<{ runId: string }>(`/api/v1/migrations/${enc(id)}/runs`, {
     method: 'POST',
-    json: { kind },
+    json: confirm === undefined ? { kind } : { kind, confirm },
   });
 
 /** How many of `ids` the filters still show, so the view can say how many selected rows they hide. */

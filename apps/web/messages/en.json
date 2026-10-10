@@ -1224,6 +1224,11 @@
           "undoFirstOk": "Undo source read-only",
           "undoFirstBody": "The source was made read-only. It must be writable again before the migration can be rolled back. This starts a Run that undoes it; when it has finished, choose Roll back again."
         },
+        "legacy": {
+          "title": "Confirm where this migration's earlier changes are",
+          "body": "This migration changed the target before the framework recorded where its changes were made, and the Route's target may have changed since. Continue only if the Route still points at that place: type {name} to confirm it.",
+          "warning": "If the earlier changes are elsewhere, cancel. Restore the Route's target to that place, roll the migration back, then change the Route."
+        },
         "undo_source_read_only": {
           "title": "Undo source read-only?",
           "ok": "Undo read-only",
@@ -1394,7 +1399,8 @@
         "run_active": "This repository already has a queued or running Run. Wait for it to finish or cancel it first.",
         "run_not_permitted": "This repository's current status does not allow this Run. Reload the page to see its status.",
         "readiness_required": "This repository's readiness does not allow this Run. Reload the page to see why.",
-        "confirmation_required": "The name you typed is not the exact target name. Type it exactly as shown."
+        "confirmation_required": "The name you typed is not the exact target name. Type it exactly as shown.",
+        "confirmation_required_named": "This Run needs {name} typed exactly as confirmation."
       },
       "cancel": {
         "conflict": "The Run has already finished, so there is nothing to cancel.",

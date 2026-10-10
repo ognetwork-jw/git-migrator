@@ -29,11 +29,14 @@ const snapshotOf = (record: RepositoryRecord) => ({
   defaultBranch: record.defaultBranch ?? null,
 });
 
-/** The ledger record of a repository this Run created (rollback deletes it, LIF-077). */
-const createdRecord = (record: RepositoryRecord): MutationLike => ({
+/**
+ * The ledger record of a repository this Run created (rollback deletes it, LIF-077). It names the
+ * Endpoint, so a rollback after the Route moved to another Endpoint finds it (ADR-0504).
+ */
+const createdRecord = (record: RepositoryRecord, endpointId: string): MutationLike => ({
   facetKey: null,
   action: 'create',
-  resourceRef: { kind: REPOSITORY_KIND, id: record.providerId, name: record.name },
+  resourceRef: { kind: REPOSITORY_KIND, id: record.providerId, name: record.name, endpointId },
   paths: [],
   before: null,
   after: snapshotOf(record),
@@ -243,7 +246,12 @@ async function ensure(ctx: MigrationContext, world: RunWorld): Promise<StepResul
               slug: found.slug,
             }),
           ));
-        if (found && ours) await ctx.ledger.confirm(intent.id, 'applied', createdRecord(found));
+        if (found && ours)
+          await ctx.ledger.confirm(
+            intent.id,
+            'applied',
+            createdRecord(found, world.targetEndpointId),
+          );
         else await ctx.ledger.confirm(intent.id, 'not_applied');
       } else {
         await ctx.ledger.confirm(intent.id, 'applied');
@@ -286,7 +294,7 @@ async function ensure(ctx: MigrationContext, world: RunWorld): Promise<StepResul
     const intentId = await ctx.ledger.intend(write, {
       facetKey: null,
       action: 'create',
-      resourceRef: { kind: REPOSITORY_KIND, name: spec.name },
+      resourceRef: { kind: REPOSITORY_KIND, name: spec.name, endpointId: world.targetEndpointId },
       paths: [],
       before: null,
       after: { name: spec.name, isPrivate: spec.visibility === 'private' },
@@ -304,7 +312,7 @@ async function ensure(ctx: MigrationContext, world: RunWorld): Promise<StepResul
       // A timeout or a crash may have created it: the intent stays open for the retry to settle.
       throw error;
     }
-    await ctx.ledger.confirm(intentId, 'applied', createdRecord(created));
+    await ctx.ledger.confirm(intentId, 'applied', createdRecord(created, world.targetEndpointId));
     await claimOrBlock(ctx, world, created, true);
     return { status: 'succeeded' };
   }
@@ -375,7 +383,9 @@ async function adopt(
     );
   } else if (!createdBefore && !recorded) {
     // Proven by an unsettled intent: record the creation, so the ledger says what rollback will do.
-    await ctx.ledger.record({ side: 'target', origin: 'desired' }, [createdRecord(existing)]);
+    await ctx.ledger.record({ side: 'target', origin: 'desired' }, [
+      createdRecord(existing, world.targetEndpointId),
+    ]);
   }
   return { status: 'succeeded' };
 }

@@ -305,7 +305,12 @@ export function RepositoriesView({
               key: 'actions',
               render: (_: unknown, row: RepositoryRow) => {
                 // Only a Migration that can take the Run offers it; the server decides again.
-                const idle = row.status !== 'running' && row.status !== 'source_missing';
+                // A legacy Migration of unknown place starts its Runs from its own page, which asks
+                // for the typed confirmation (ADR-0504).
+                const idle =
+                  row.status !== 'running' &&
+                  row.status !== 'source_missing' &&
+                  row.targetPlacementUnknown !== true;
                 return (
                   <Space size="small" wrap>
                     <Button

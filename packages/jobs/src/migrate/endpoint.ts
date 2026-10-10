@@ -19,6 +19,7 @@ import {
 } from '@git-migrator/db';
 import { StepFailure } from '../run/errors.ts';
 import { addRunTask } from '../run/findings.ts';
+import { checkPlacement } from '../run/placement.ts';
 import type { StepDefinition, StepResult } from '../run/types.ts';
 import { applyWithLedger, recoverOpenIntents } from './facets.ts';
 import { connectSide, type MigrationContext, type MigrationServices } from './services.ts';
@@ -48,6 +49,9 @@ export async function loadEndpointWorld(ctx: MigrationContext): Promise<Endpoint
     include: { route: { include: { targetEndpoint: true } } },
   });
   const route = migration.route;
+  // As for repository Steps: a Route retargeted since the Run was admitted stops it here, and the
+  // first write pins the target Namespace (ADR-0504).
+  await checkPlacement(db, migration.id, ctx.run.kind, route);
   if (!route.targetNamespaceId) {
     throw new StepFailure('run.target_namespace_missing', 'The target namespace is not resolved');
   }

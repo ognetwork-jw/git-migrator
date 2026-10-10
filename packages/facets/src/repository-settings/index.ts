@@ -133,6 +133,9 @@ export const repositorySettingsDefinition: FacetDefinition<RepositorySettings> =
     'repository-settings.org-forking-disabled': { kind: 'post', completion: 'manual' },
     'repository-settings.deletion-forbidden': { kind: 'post', completion: 'manual' },
     'repository-settings.target-unreadable': { kind: 'post', completion: 'manual' },
+    // The Analysis raises it when the Route was retargeted after the target was made (ADR-0504).
+    'repository-settings.target-outside-route': { kind: 'blocker' },
+    'repository-settings.target-placement-unknown': { kind: 'blocker' },
   },
   policyKeys: [PUBLIC_FORK_POLICY, DESCRIPTION_TRUNCATED],
 };

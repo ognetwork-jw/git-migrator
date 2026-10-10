@@ -5,8 +5,11 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Alert, Button, Card, Collapse, Empty, Space, Table, Tabs, Tag, Typography } from 'antd';
 import Link from 'next/link';
 import { useTranslations } from 'next-intl';
+import { useState } from 'react';
 import { formatDateTime } from '../format.ts';
 import { ErrorAlert } from '../mapping/shared.tsx';
+import { TypedNameDialog } from '../migration-detail/dialogs.tsx';
+import { PLACEMENT_UNKNOWN_BLOCKER } from '../migration-detail/rules.ts';
 import { FacetStrip } from '../repositories/facet-strip.tsx';
 import { MigrationStatusTag, ReadinessTag } from '../repositories/tags.tsx';
 import { useActor } from '../shell/actor-context.tsx';
@@ -55,6 +58,26 @@ export function runKindFor(
   if (status === 'running' || stale || readiness === null) return undefined;
   if (readiness === 'ready') return 'migrate';
   return readiness === 'needs_attention' ? 'run_anyway' : undefined;
+}
+
+/**
+ * The readiness the page offers a Run by. A legacy Migration of unknown place is blocked only by
+ * the placement blocker its typed confirmation answers, so its open pre tasks decide (ADR-0504).
+ */
+export function offeredEndpointReadiness(m: {
+  readonly readiness: string | null;
+  readonly blockerCodes: readonly string[];
+  readonly readinessCounts: { readonly preTasks?: number } | null;
+  readonly targetPlacementUnknown?: boolean;
+}): string | null {
+  if (m.targetPlacementUnknown !== true || m.readiness !== 'blocked') return m.readiness;
+  if (
+    m.blockerCodes.length === 0 ||
+    !m.blockerCodes.every((c) => c === PLACEMENT_UNKNOWN_BLOCKER)
+  ) {
+    return m.readiness;
+  }
+  return (m.readinessCounts?.preTasks ?? 0) > 0 ? 'needs_attention' : 'ready';
 }
 
 /** The Facet badge strip of the UI-022 layout: one badge per Facet in the Plan, by worst finding. */
@@ -221,6 +244,8 @@ function RunsTab({ migrationId }: { readonly migrationId: string }) {
 /** UI-026: findings, Facet diffs and Runs of a Route's endpoint migration, laid out like UI-022. */
 export function EndpointMigrationView({ routeId }: { readonly routeId: string }) {
   const t = useTranslations('endpoints.migration');
+  const confirmTexts = useTranslations('migrationDetail.actions.confirm.legacy');
+  const [confirming, setConfirming] = useState<EndpointRunKind | undefined>(undefined);
   const actor = useActor();
   const operate = can(actor, 'operate');
   const queryClient = useQueryClient();
@@ -237,9 +262,12 @@ export function EndpointMigrationView({ routeId }: { readonly routeId: string })
     onSuccess: refresh,
   });
   const start = useMutation({
-    mutationFn: (input: { id: string; kind: EndpointRunKind }) =>
-      startMigrationRun(input.id, input.kind),
-    onSuccess: refresh,
+    mutationFn: (input: { id: string; kind: EndpointRunKind; confirm?: string }) =>
+      startMigrationRun(input.id, input.kind, input.confirm),
+    onSuccess: () => {
+      setConfirming(undefined);
+      return refresh();
+    },
   });
 
   if (migration.isError) return <ErrorAlert error={migration.error} />;
@@ -249,7 +277,11 @@ export function EndpointMigrationView({ routeId }: { readonly routeId: string })
   const data = migration.data;
   if (!data) return null;
   const stale = data.analysisStaleAt !== null && new Date(data.analysisStaleAt) <= new Date();
-  const kind = runKindFor(data.status, data.readiness, stale);
+  const kind = runKindFor(data.status, offeredEndpointReadiness(data), stale);
+  // Target writes of unknown place: the Run waits for the Route's Namespace path (ADR-0504).
+  const legacyName = data.targetPlacementUnknown === true ? data.route.targetNamespacePath : null;
+  const runLabel = (k: EndpointRunKind | undefined) =>
+    k === 'run_anyway' ? t('action.runAnyway') : t('action.migrate');
 
   return (
     <div className="flex flex-col gap-4">
@@ -280,15 +312,21 @@ export function EndpointMigrationView({ routeId }: { readonly routeId: string })
                 type="primary"
                 loading={start.isPending}
                 disabled={kind === undefined}
-                onClick={() => kind && start.mutate({ id: data.id, kind })}
+                onClick={() => {
+                  if (kind === undefined) return;
+                  if (legacyName !== null) {
+                    start.reset();
+                    setConfirming(kind);
+                  } else start.mutate({ id: data.id, kind });
+                }}
               >
-                {kind === 'run_anyway' ? t('action.runAnyway') : t('action.migrate')}
+                {runLabel(kind)}
               </Button>
             </Space>
           ) : null}
         </div>
         {analyze.isError ? <ErrorAlert error={analyze.error} /> : null}
-        {start.isError ? <ErrorAlert error={start.error} /> : null}
+        {start.isError && confirming === undefined ? <ErrorAlert error={start.error} /> : null}
         {analyze.isSuccess ? (
           <Alert type="info" showIcon className="mt-3" title={t('analyzeQueued')} />
         ) : null}
@@ -302,6 +340,23 @@ export function EndpointMigrationView({ routeId }: { readonly routeId: string })
           {t('hint')}
         </Typography.Paragraph>
       </Card>
+      <TypedNameDialog
+        open={confirming !== undefined}
+        name={legacyName}
+        texts={{
+          title: confirmTexts('title'),
+          ok: runLabel(confirming),
+          body: confirmTexts('body', { name: legacyName ?? '' }),
+        }}
+        warning={confirmTexts('warning')}
+        loading={start.isPending}
+        error={start.error}
+        errorScope="run"
+        onConfirm={(typed) =>
+          confirming && start.mutate({ id: data.id, kind: confirming, confirm: typed })
+        }
+        onCancel={() => setConfirming(undefined)}
+      />
       <Tabs
         items={[
           {

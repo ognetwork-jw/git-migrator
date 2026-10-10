@@ -132,7 +132,17 @@ export const GUIDANCE: Readonly<Record<FindingCode, Guidance>> = {
     step('repository-settings.deletion-unproven', 1),
     step('repository-settings.deletion-unproven', 2),
   ]),
-
+  'repository-settings.target-outside-route': plain('repository-settings.target-outside-route', [
+    step('repository-settings.target-outside-route', 1),
+    step('repository-settings.target-outside-route', 2),
+  ]),
+  'repository-settings.target-placement-unknown': plain(
+    'repository-settings.target-placement-unknown',
+    [
+      step('repository-settings.target-placement-unknown', 1),
+      step('repository-settings.target-placement-unknown', 2),
+    ],
+  ),
   // merge-settings
   'merge-settings.accept-lossy': acceptLossy('merge-settings.accept-lossy'),
 

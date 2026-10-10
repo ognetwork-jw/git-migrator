@@ -371,6 +371,17 @@ describe('[UI-021] repositories list', () => {
     expect(names('acme/plat/repo-4')).toEqual(['Analyze']);
   });
 
+  it('[LIF-077] [UI-021] a legacy row of unknown place offers no quick Run: its page confirms it', async () => {
+    source = [row(1, { readiness: 'ready', targetPlacementUnknown: true })];
+    mockApi();
+    renderView();
+    await screen.findByText('acme/plat/repo-1');
+    const names = within(rowOf('acme/plat/repo-1'))
+      .getAllByRole('button')
+      .map((b) => b.textContent);
+    expect(names).toEqual(['Analyze']);
+  });
+
   it('[UI-021] [LIF-005] Migrate asks for confirmation, then posts a migrate Run', async () => {
     source = [row(1, { readiness: 'ready' })];
     mockApi((url, init) =>

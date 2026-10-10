@@ -117,6 +117,7 @@ model Endpoint {
 
     sourceRoutes Route[]         @relation('RouteSource')
     targetRoutes Route[]         @relation('RouteTarget')
+    placedMigrations Migration[] @relation('MigrationPlacedEndpoint')
     namespaces   Namespace[]
     repositories Repository[]
     snapshots    FacetSnapshot[]
@@ -183,6 +184,7 @@ model Namespace {
     children       Namespace[]  @relation('NamespaceTree')
     repositories   Repository[]
     targetOfRoutes Route[]      @relation('RouteTargetNamespace')
+    placedMigrations Migration[] @relation('MigrationPlacedNamespace')
 
     @@unique([endpointId, providerId])
     @@map("namespace")
@@ -284,6 +286,9 @@ model Migration {
     routeId                  String               @deny('update', true) @map("route_id")
     sourceRepositoryId       String?              @map("source_repository_id") @deny('update', true) // null for endpoint scope
     targetRepositoryId       String?              @map("target_repository_id") @deny('update', true) // set once target exists / adopted
+    targetPlacedEndpointId  String?              @map("target_placed_endpoint_id") @deny('update', true) // where the framework wrote the target: set by the first target-writing Step, cleared by a completed rollback (ADR-0504)
+    targetPlacedNamespaceId String?              @map("target_placed_namespace_id") @deny('update', true)
+    targetPlacementUnknown  Boolean              @default(false) @map("target_placement_unknown") @deny('update', true) // legacy target writes whose place no evidence shows; rollback needs the operator to confirm it (ADR-0504)
     plannedTargetName        String?              @map("planned_target_name") @deny('update', true)
     status                   MigrationStatus      @default(discovered) @deny('update', true)
     statusBeforeRun          MigrationStatus?     @map("status_before_run") @deny('update', true) // LIF-002 saved statuses
@@ -314,6 +319,8 @@ model Migration {
     route                    Route                @relation(fields: [routeId], references: [id], onDelete: Restrict)
     sourceRepository         Repository?          @relation('MigrationSourceRepository', fields: [sourceRepositoryId], references: [id], onDelete: Restrict)
     targetRepository         Repository?          @relation('MigrationTargetRepository', fields: [targetRepositoryId], references: [id], onDelete: Restrict)
+    targetPlacedEndpoint     Endpoint?            @relation('MigrationPlacedEndpoint', fields: [targetPlacedEndpointId], references: [id], onDelete: Restrict)
+    targetPlacedNamespace    Namespace?           @relation('MigrationPlacedNamespace', fields: [targetPlacedNamespaceId], references: [id], onDelete: Restrict)
     latestAnalysis           Analysis?            @relation('MigrationLatestAnalysis', fields: [latestAnalysisId], references: [id], onDelete: SetNull)
     wave                     Wave?                @relation(fields: [waveId], references: [id], onDelete: SetNull)
 

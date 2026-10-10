@@ -6,6 +6,7 @@
  * `EndpointConnector` and the adapters' drivers, so quota and raw capture apply (ADP-060).
  * Decisions: docs/adr/0396-parity-engine-and-verified-status.md, 0397-parity-git-checks.md.
  */
+
 import {
   type EndpointConnection,
   type FacetRead,
@@ -53,6 +54,7 @@ import { type SourceLockView, sourceLockView } from '../analysis/framework-resou
 import { databaseNow } from '../db-clock.ts';
 import type { EndpointConnector } from '../inventory/connector.ts';
 import { isRateLimited } from '../run/errors.ts';
+import { loadPlacement, placementOutside, placementUnknown } from '../run/placement.ts';
 import { applyContainment, checkLfsObjects } from './git.ts';
 import { redactAtPath } from './redact.ts';
 
@@ -166,7 +168,15 @@ export interface FacetParity {
   readonly evidence?: { readonly target: unknown; readonly diffs: readonly FieldDiff[] };
 }
 
-export type ParitySkip = 'migration-missing' | 'route-retired' | 'no-source' | 'source-missing';
+export type ParitySkip =
+  | 'migration-missing'
+  | 'route-retired'
+  | 'no-source'
+  | 'source-missing'
+  /** The Route was retargeted after the framework wrote the target (ADR-0504). */
+  | 'target-outside-route'
+  /** Legacy target writes whose place is not confirmed (ADR-0504). */
+  | 'target-placement-unknown';
 
 export type ParityComputation =
   | { readonly skipped: ParitySkip }
@@ -335,6 +345,15 @@ export async function computeParity(
   if (!migration) return { skipped: 'migration-missing' };
   const route = migration.route;
   if (route.retiredAt) return { skipped: 'route-retired' };
+  // Reading the Route's new place would report every Facet as missing on the target; the check is
+  // skipped with the reason instead, and the Analysis blocker says what to do (ADR-0504).
+  const placement = await loadPlacement(db, migrationId);
+  if (placementOutside(placement, route)) return { skipped: 'target-outside-route' };
+  // Legacy target writes of unknown place: the Route's place may not be where they are, so nothing
+  // is read or completed until the operator confirms it (ADR-0504).
+  if (placement === undefined && (await placementUnknown(db, migrationId))) {
+    return { skipped: 'target-placement-unknown' };
+  }
   const isRepository = migration.scope === 'repository';
   const sourceRepository = migration.sourceRepository;
   if (isRepository) {

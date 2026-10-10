@@ -144,7 +144,7 @@ export function TypedNameDialog({
       ) : null}
       {error ? (
         <div className="mt-3">
-          <ActionError error={error} scope={errorScope} />
+          <ActionError error={error} scope={errorScope} name={name} />
         </div>
       ) : null}
     </Modal>

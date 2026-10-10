@@ -40,6 +40,25 @@ export function targetFullName(m: MigrationDetail): string | null {
   return m.plannedTargetName ? `${m.route.targetNamespacePath}/${m.plannedTargetName}` : null;
 }
 
+/** The blocker of a legacy Migration whose target writes have no recorded place (ADR-0504). */
+export const PLACEMENT_UNKNOWN_BLOCKER = 'repository-settings.target-placement-unknown';
+
+/**
+ * The readiness the header offers Runs by. A legacy Migration of unknown place is blocked only by
+ * `PLACEMENT_UNKNOWN_BLOCKER`, which its typed confirmation answers, so the server judges it by its
+ * open pre tasks (the guard's `effectiveReadiness` with that blocker waived, ADR-0504).
+ */
+export function offeredReadiness(m: MigrationDetail): MigrationDetail['readiness'] {
+  if (m.targetPlacementUnknown !== true || m.readiness !== 'blocked') return m.readiness;
+  if (
+    m.blockerCodes.length === 0 ||
+    !m.blockerCodes.every((c) => c === PLACEMENT_UNKNOWN_BLOCKER)
+  ) {
+    return m.readiness;
+  }
+  return (m.readinessCounts?.preTasks ?? 0) > 0 ? 'needs_attention' : 'ready';
+}
+
 export interface ActionState {
   readonly action: HeaderAction;
   /** Why the action cannot be used now (shown as a hint), or undefined when it can. */
@@ -60,14 +79,15 @@ export function availableActions(
   const lock = (action: HeaderAction): ActionState =>
     active ? { action, disabled: m.status === 'running' ? 'running' : 'active_run' } : { action };
   const blocked = m.status === 'source_missing';
+  const readiness = offeredReadiness(m);
 
   out.push(lock('analyze'));
   if (!blocked && isIn(MIGRATABLE, m.status)) {
-    if (m.readiness === 'ready') out.push(lock('migrate'));
-    if (m.readiness === 'needs_attention') out.push(lock('run_anyway'));
+    if (readiness === 'ready') out.push(lock('migrate'));
+    if (readiness === 'needs_attention') out.push(lock('run_anyway'));
     if (m.blockerCodes.includes(FORCE_ADOPT_BLOCKER)) out.push(lock('force_adopt'));
   }
-  if (!blocked && isIn(MIGRATED, m.status) && m.readiness !== 'blocked') out.push(lock('resync'));
+  if (!blocked && isIn(MIGRATED, m.status) && readiness !== 'blocked') out.push(lock('resync'));
   if (!blocked && m.targetRepository !== null && m.status !== 'running') out.push(lock('verify'));
   const hasMutations = runs.some((r) => r.hasMutations);
   if (!isIn(NO_ROLLBACK, m.status) && (m.targetRepository !== null || hasMutations)) {

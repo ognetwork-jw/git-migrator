@@ -116,6 +116,30 @@ describe('[LIF-061] verifiable tasks complete themselves', () => {
     expect(result.skipped === undefined && result.completedTasks).toEqual([task.id]);
   });
 
+  it('[LIF-060] [LIF-061] a legacy Migration whose target writes have no known place is not checked, and its tasks are not completed (ADR-0504)', async () => {
+    const w = await seedParityWorld(db());
+    const task = await addTask(w.migrationId);
+    await db().migration.update({
+      where: { id: w.migrationId },
+      data: { targetRepositoryId: null, targetPlacementUnknown: true },
+    });
+    const sim = equalSim();
+    const result = await runParity(parityDeps(db(), t.db.pool, sim), w.migrationId, options);
+    expect(result).toEqual({ skipped: 'target-placement-unknown' });
+    expect(sim.connects).toBe(0);
+    expect((await db().manualTask.findUniqueOrThrow({ where: { id: task.id } })).status).toBe(
+      'open',
+    );
+    // A scheduled drift check of a verified Migration is skipped for the same reason.
+    await db().migration.update({ where: { id: w.migrationId }, data: { status: 'verified' } });
+    const drift = await runParity(parityDeps(db(), t.db.pool, sim), w.migrationId, {
+      ...options,
+      drift: { readsSource: false },
+    });
+    expect(drift).toEqual({ skipped: 'target-placement-unknown' });
+    expect(sim.connects).toBe(0);
+  });
+
   it('[LIF-061] the completion keeps the reopen rule: no task is dismissed, so none can be reopened by an Analysis', async () => {
     const w = await seedParityWorld(db());
     await addTask(w.migrationId);

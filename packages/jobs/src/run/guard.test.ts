@@ -2,12 +2,14 @@ import { createTestDatabase, type TestDatabase } from '@git-migrator/db/testing'
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import { LOCK_INTENT_KIND } from '../analysis/framework-resources.ts';
 import { reapRuns } from '../reaper.ts';
+import { loadWorld as loadRollbackWorld } from '../rollback/steps.ts';
 import { seedBasics } from '../world.fixture.ts';
 import { finishRun, settleOrphanedMigrations } from './finish.ts';
 import {
   allowedReadiness,
   createRun,
   effectiveReadiness,
+  legacyConfirmationName,
   RunGuardError,
   requestRunCancel,
   teamsInUse,
@@ -15,6 +17,13 @@ import {
 import { FIXED_NOW, Harness, silentLog, step } from './harness.fixture.ts';
 import { checkRunOptions } from './options.ts';
 import { requeueOrphanedQueuedRuns } from './orphans.ts';
+import {
+  checkPlacement,
+  loadPlacement,
+  placementOutside,
+  TARGET_PLACEMENT_UNKNOWN,
+  targetOutsideRoute,
+} from './placement.ts';
 
 // These tests wait on a real database; a loaded CI box needs more than the 5 s default.
 vi.setConfig({ testTimeout: 30_000 });
@@ -747,5 +756,456 @@ describe('[LIF-043] Run options', () => {
     expect((await db().run.findUniqueOrThrow({ where: { id: created.runId } })).options).toEqual(
       {},
     );
+  });
+});
+
+describe('[LIF-011] a Route retargeted after its target was made (ADR-0504)', () => {
+  const repository = (endpointId: string, namespaceId: string, slug = 'acme', key = null) => ({
+    endpointId,
+    namespaceId,
+    namespace: { slug, key },
+  });
+  const route = (
+    targetEndpointId: string,
+    targetNamespaceId: string | null,
+    targetNamespacePath = 'acme',
+  ) => ({ targetEndpointId, targetNamespaceId, targetNamespacePath });
+
+  it('[LIF-011] a target is outside its Route when the target Endpoint or the resolved Namespace changed', () => {
+    expect(targetOutsideRoute({ repository: repository('e', 'n'), route: route('e', 'n') })).toBe(
+      false,
+    );
+    expect(targetOutsideRoute({ repository: repository('e', 'n'), route: route('f', 'n') })).toBe(
+      true,
+    );
+    expect(targetOutsideRoute({ repository: repository('e', 'n'), route: route('e', 'm') })).toBe(
+      true,
+    );
+  });
+
+  it('[LIF-011] while the new Namespace is not resolved, the configured path is compared as inventory resolves it', () => {
+    const unresolved = (path: string) => route('e', null, path);
+    expect(
+      targetOutsideRoute({ repository: repository('e', 'n', 'Acme'), route: unresolved('acme') }),
+    ).toBe(false);
+    expect(
+      targetOutsideRoute({
+        repository: { endpointId: 'e', namespaceId: 'n', namespace: { slug: 'x', key: 'ACME' } },
+        route: unresolved('acme'),
+      }),
+    ).toBe(false);
+    expect(
+      targetOutsideRoute({ repository: repository('e', 'n'), route: unresolved('acme-b') }),
+    ).toBe(true);
+  });
+
+  /** A migrated Migration whose target sits in Namespace `acme`, then the Route moves to `acme-b`. */
+  async function retargeted(change: 'namespace' | 'endpoint') {
+    const world = await readyMigration('ready', 'verified');
+    const namespace = await db().namespace.create({
+      data: {
+        endpointId: world.targetEndpointId,
+        providerId: 'org-a',
+        kind: 'organization',
+        slug: 'acme',
+        name: 'acme',
+      },
+    });
+    const target = await db().repository.create({
+      data: {
+        endpointId: world.targetEndpointId,
+        namespaceId: namespace.id,
+        providerId: 'target-a',
+        slug: 'r',
+        name: 'r',
+        fullPath: 'acme/r',
+        isPrivate: true,
+        lastInventoriedAt: new Date(),
+      },
+    });
+    await db().migration.update({
+      where: { id: world.migrationId },
+      data: { targetRepositoryId: target.id, targetCreatedByFramework: true },
+    });
+    if (change === 'namespace') {
+      await db().route.update({
+        where: { id: world.routeId },
+        data: { targetNamespacePath: 'acme-b', targetNamespaceId: null },
+      });
+    } else {
+      const other = await db().endpoint.create({
+        data: {
+          id: `${world.targetEndpointId}-other`,
+          providerType: 'type-a',
+          displayName: 'other',
+          baseUrl: 'http://other.test',
+          status: 'active',
+          configHash: 'h',
+        },
+      });
+      await db().route.update({
+        where: { id: world.routeId },
+        data: { targetEndpointId: other.id, targetNamespaceId: null },
+      });
+    }
+    return world;
+  }
+
+  it('[LIF-011] refuses every Run that works on the target in the Route Namespace, and changes nothing', async () => {
+    const world = await retargeted('namespace');
+    for (const kind of ['migrate', 'run_anyway', 'resync', 'verify'] as const) {
+      await expect(
+        createRun(db(), { migrationId: world.migrationId, kind, triggeredById: world.actorId }),
+        kind,
+      ).rejects.toMatchObject({
+        code: 'run.not_permitted',
+        httpStatus: 409,
+        message: expect.stringContaining('acme/r is not in the Route'),
+      });
+    }
+    const after = await db().migration.findUniqueOrThrow({ where: { id: world.migrationId } });
+    expect(after.status).toBe('verified');
+    expect(await db().run.count({ where: { migrationId: world.migrationId } })).toBe(0);
+  });
+
+  it('[LIF-077] a rollback is still admitted, so the target can be removed where it is', async () => {
+    const world = await retargeted('namespace');
+    const created = await createRun(db(), {
+      migrationId: world.migrationId,
+      kind: 'rollback',
+      triggeredById: world.actorId,
+      confirm: 'acme/r',
+    });
+    expect(created.routing.kind).toBe('rollback');
+  });
+
+  it('[LIF-077] a target left on the Route old target Endpoint is rolled back there, while that Endpoint is configured', async () => {
+    const world = await retargeted('endpoint');
+    const rollback = () =>
+      createRun(db(), {
+        migrationId: world.migrationId,
+        kind: 'rollback',
+        triggeredById: world.actorId,
+        confirm: 'acme/r',
+      });
+    await db().endpoint.update({
+      where: { id: world.targetEndpointId },
+      data: { status: 'retired' },
+    });
+    await expect(rollback()).rejects.toMatchObject({
+      code: 'run.not_permitted',
+      message: expect.stringContaining('no longer configured'),
+    });
+    await db().endpoint.update({
+      where: { id: world.targetEndpointId },
+      data: { status: 'active' },
+    });
+    expect((await rollback()).routing.kind).toBe('rollback');
+  });
+
+  /** A Migration with no target repository whose writes were pinned to Namespace `acme`. */
+  async function pinnedWithoutRepository() {
+    const world = await readyMigration('ready', 'verified');
+    const namespace = await db().namespace.create({
+      data: {
+        endpointId: world.targetEndpointId,
+        providerId: 'org-pinned',
+        kind: 'organization',
+        slug: 'acme',
+        name: 'acme',
+      },
+    });
+    await db().migration.update({
+      where: { id: world.migrationId },
+      data: {
+        targetPlacedEndpointId: world.targetEndpointId,
+        targetPlacedNamespaceId: namespace.id,
+      },
+    });
+    await db().route.update({
+      where: { id: world.routeId },
+      data: { targetNamespacePath: 'acme-b', targetNamespaceId: null },
+    });
+    return world;
+  }
+
+  it('[LIF-011] an open create intent written in the old Namespace (no target repository yet) refuses the Run', async () => {
+    const world = await pinnedWithoutRepository();
+    await mutation(world, { kind: 'repository', name: 'r' }, { state: 'intended' });
+    await expect(
+      createRun(db(), {
+        migrationId: world.migrationId,
+        kind: 'resync',
+        triggeredById: world.actorId,
+      }),
+    ).rejects.toMatchObject({
+      code: 'run.not_permitted',
+      message: expect.stringContaining('Namespace acme is not in the Route'),
+    });
+  });
+
+  it('[LIF-011] a recorded repository creation not undone, with no target repository linked, refuses the Run', async () => {
+    const world = await pinnedWithoutRepository();
+    await mutation(world, { kind: 'repository', id: 'repo-a', name: 'r' });
+    for (const kind of ['migrate', 'resync'] as const) {
+      await expect(
+        createRun(db(), { migrationId: world.migrationId, kind, triggeredById: world.actorId }),
+        kind,
+      ).rejects.toMatchObject({ code: 'run.not_permitted' });
+    }
+  });
+
+  it('[LIF-077] a rollback is refused before it deletes anything when a repository it created is on an Endpoint that is not configured', async () => {
+    const world = await retargeted('namespace');
+    const retired = await db().endpoint.create({
+      data: {
+        id: `${world.targetEndpointId}-gone`,
+        providerType: 'type-a',
+        displayName: 'gone',
+        baseUrl: 'http://gone.test',
+        status: 'retired',
+        configHash: 'h',
+      },
+    });
+    await mutation(world, { kind: 'repository', id: 'earlier', name: 'e', endpointId: retired.id });
+    await expect(
+      createRun(db(), {
+        migrationId: world.migrationId,
+        kind: 'rollback',
+        triggeredById: world.actorId,
+        confirm: 'acme/r',
+      }),
+    ).rejects.toMatchObject({
+      code: 'run.not_permitted',
+      message: expect.stringContaining(`Endpoint ${retired.id}, which is no longer configured`),
+    });
+  });
+});
+
+describe('[LIF-011] a pin with nothing to protect, legacy places and confirmation names (ADR-0504)', () => {
+  /** A Migration pinned to Namespace `acme`, then the Route corrected to `acme-b`. */
+  async function pinned(readiness: 'ready' | 'needs_attention' = 'ready') {
+    const world = await readyMigration(readiness, 'analyzed');
+    const namespace = await db().namespace.create({
+      data: {
+        endpointId: world.targetEndpointId,
+        providerId: 'org-stale',
+        kind: 'organization',
+        slug: 'acme',
+        name: 'acme',
+      },
+    });
+    await db().migration.update({
+      where: { id: world.migrationId },
+      data: {
+        targetPlacedEndpointId: world.targetEndpointId,
+        targetPlacedNamespaceId: namespace.id,
+        plannedTargetName: 'r',
+      },
+    });
+    await db().route.update({
+      where: { id: world.routeId },
+      data: { targetNamespacePath: 'acme-b', targetNamespaceId: null },
+    });
+    return world;
+  }
+  const route = async (routeId: string) => db().route.findUniqueOrThrow({ where: { id: routeId } });
+
+  it('[LIF-011] a pin left by a Run that failed before its first write does not refuse a Run once the Route is corrected', async () => {
+    const world = await pinned();
+    // What the Analysis reads too: no placement, so no target-outside-route blocker.
+    expect(await loadPlacement(db(), world.migrationId)).toBeUndefined();
+    expect(
+      placementOutside(await loadPlacement(db(), world.migrationId), await route(world.routeId)),
+    ).toBe(false);
+    const created = await createRun(db(), {
+      migrationId: world.migrationId,
+      kind: 'migrate',
+      triggeredById: world.actorId,
+    });
+    expect(created.routing.kind).toBe('migrate');
+  });
+
+  it('[LIF-011] the same pin counts once a target write is recorded', async () => {
+    const world = await pinned();
+    await mutation(world, { kind: 'branch-rule', pattern: 'main' });
+    expect((await loadPlacement(db(), world.migrationId))?.namespace.slug).toBe('acme');
+    await expect(
+      createRun(db(), {
+        migrationId: world.migrationId,
+        kind: 'migrate',
+        triggeredById: world.actorId,
+      }),
+    ).rejects.toMatchObject({ code: 'run.not_permitted' });
+  });
+
+  it('[LIF-077] a rollback of a ledger-only target outside the Route confirms the name in the pinned Namespace', async () => {
+    const world = await pinned();
+    await mutation(world, { kind: 'repository', name: 'r' }, { state: 'intended' });
+    const rollback = (confirm: string) =>
+      createRun(db(), {
+        migrationId: world.migrationId,
+        kind: 'rollback',
+        triggeredById: world.actorId,
+        confirm,
+      });
+    await expect(rollback('acme-b/r')).rejects.toMatchObject({
+      code: 'run.confirmation_required',
+    });
+    expect((await rollback('acme/r')).routing.kind).toBe('rollback');
+  });
+
+  it('[LIF-077] a legacy rollback confirms the target full name in the Route Namespace, and pins that place when admitted', async () => {
+    const { world, namespaceId } = await legacy();
+    await db().migration.update({
+      where: { id: world.migrationId },
+      data: { plannedTargetName: 'r' },
+    });
+    const rollback = (confirm?: string) =>
+      createRun(db(), {
+        migrationId: world.migrationId,
+        kind: 'rollback',
+        triggeredById: world.actorId,
+        ...(confirm === undefined ? {} : { confirm }),
+      });
+    for (const typed of [undefined, 'acme', 'elsewhere/r']) {
+      await expect(rollback(typed), String(typed)).rejects.toMatchObject({
+        code: 'run.confirmation_required',
+        message: expect.stringContaining('by typing acme/r'),
+      });
+    }
+    expect((await rollback('ACME/r')).routing.kind).toBe('rollback');
+    const row = await db().migration.findUniqueOrThrow({ where: { id: world.migrationId } });
+    // Pinned in the admitting transaction; the flag stays until the rollback completes.
+    expect(row).toMatchObject({
+      targetPlacedEndpointId: world.targetEndpointId,
+      targetPlacedNamespaceId: namespaceId,
+      targetPlacementUnknown: true,
+    });
+
+    // The Route is retargeted while the rollback waits: it still reverts in the confirmed place.
+    const other = await db().namespace.create({
+      data: {
+        endpointId: world.targetEndpointId,
+        providerId: 'org-new',
+        kind: 'organization',
+        slug: 'acme-b',
+        name: 'acme-b',
+      },
+    });
+    await db().route.update({
+      where: { id: world.routeId },
+      data: { targetNamespacePath: 'acme-b', targetNamespaceId: other.id },
+    });
+    const ctx = { services: { db: db() }, migration: { id: world.migrationId } } as never;
+    const rollbackWorld = await loadRollbackWorld(ctx);
+    expect(rollbackWorld.targetEndpointId).toBe(world.targetEndpointId);
+    expect(rollbackWorld.namespace).toEqual({ providerId: 'org-legacy', slug: 'acme' });
+  });
+
+  it('[LIF-011] an endpoint-scope legacy Migration confirms the Namespace path', async () => {
+    const { world } = await legacy();
+    await db().migration.update({
+      where: { id: world.migrationId },
+      data: { plannedTargetName: 'r' },
+    });
+    // The repository-scope name is refused for a repository Migration with a planned name.
+    await expect(
+      createRun(db(), {
+        migrationId: world.migrationId,
+        kind: 'verify',
+        triggeredById: world.actorId,
+        confirm: 'acme',
+      }),
+    ).rejects.toMatchObject({ code: 'run.confirmation_required' });
+    expect(
+      legacyConfirmationName({
+        scope: 'endpoint',
+        plannedTargetName: null,
+        route: { targetNamespacePath: 'acme' },
+      }),
+    ).toBe('acme');
+    expect(
+      legacyConfirmationName({
+        scope: 'repository',
+        plannedTargetName: 'r',
+        route: { targetNamespacePath: 'acme' },
+      }),
+    ).toBe('acme/r');
+  });
+
+  /** A legacy Migration (writes, no known place) whose Route target Namespace is resolved. */
+  async function legacy(readiness: 'ready' | 'blocked' = 'ready') {
+    const world = await readyMigration(readiness, 'verified');
+    await mutation(world, { kind: 'team', id: 't1', slug: 'platform' });
+    const namespace = await db().namespace.create({
+      data: {
+        endpointId: world.targetEndpointId,
+        providerId: 'org-legacy',
+        kind: 'organization',
+        slug: 'acme',
+        name: 'acme',
+      },
+    });
+    await db().route.update({
+      where: { id: world.routeId },
+      data: { targetNamespaceId: namespace.id },
+    });
+    await db().migration.update({
+      where: { id: world.migrationId },
+      data: {
+        targetPlacementUnknown: true,
+        ...(readiness === 'blocked'
+          ? {
+              blockerCodes: [TARGET_PLACEMENT_UNKNOWN],
+              readinessCounts: { blockers: 1, preTasks: 0, postTasks: 0, warnings: 0 },
+            }
+          : {}),
+      },
+    });
+    return { world, namespaceId: namespace.id };
+  }
+
+  it('[LIF-011] a legacy Migration refuses every Run on the target until the Namespace is confirmed', async () => {
+    const { world } = await legacy();
+    for (const kind of ['migrate', 'run_anyway', 'resync', 'verify'] as const) {
+      await expect(
+        createRun(db(), { migrationId: world.migrationId, kind, triggeredById: world.actorId }),
+        kind,
+      ).rejects.toMatchObject({
+        code: 'run.confirmation_required',
+        message: expect.stringContaining('did not record where'),
+      });
+    }
+    const row = await db().migration.findUniqueOrThrow({ where: { id: world.migrationId } });
+    expect(row.targetPlacementUnknown).toBe(true);
+    expect(row.targetPlacedEndpointId).toBeNull();
+  });
+
+  it('[LIF-011] the confirmation admits the Run past its own blocker, pins the Route place and clears the flag in one step', async () => {
+    const { world, namespaceId } = await legacy('blocked');
+    const created = await createRun(db(), {
+      migrationId: world.migrationId,
+      kind: 'migrate',
+      triggeredById: world.actorId,
+      confirm: 'ACME',
+    });
+    expect(created.routing.kind).toBe('migrate');
+    const row = await db().migration.findUniqueOrThrow({ where: { id: world.migrationId } });
+    expect(row).toMatchObject({
+      targetPlacementUnknown: false,
+      targetPlacedEndpointId: world.targetEndpointId,
+      targetPlacedNamespaceId: namespaceId,
+    });
+  });
+
+  it('[LIF-011] a Run queued past the guard does not pin a legacy Migration: its Step refuses', async () => {
+    const { world } = await legacy();
+    const route = await db().route.findUniqueOrThrow({ where: { id: world.routeId } });
+    await expect(checkPlacement(db(), world.migrationId, 'resync', route)).rejects.toMatchObject({
+      code: TARGET_PLACEMENT_UNKNOWN,
+    });
+    const row = await db().migration.findUniqueOrThrow({ where: { id: world.migrationId } });
+    expect(row.targetPlacedEndpointId).toBeNull();
   });
 });

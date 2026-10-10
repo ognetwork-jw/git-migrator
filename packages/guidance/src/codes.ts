@@ -104,6 +104,20 @@ export const FINDING_SPECS = [
     verifiable: false,
     ref: 'LIF-077',
   },
+  {
+    code: 'repository-settings.target-outside-route',
+    facet: 'repository-settings',
+    severity: 'blocker',
+    verifiable: false,
+    ref: 'LIF-011 (ADR-0504)',
+  },
+  {
+    code: 'repository-settings.target-placement-unknown',
+    facet: 'repository-settings',
+    severity: 'blocker',
+    verifiable: false,
+    ref: 'LIF-011 (ADR-0504)',
+  },
   // merge-settings
   {
     code: 'merge-settings.accept-lossy',

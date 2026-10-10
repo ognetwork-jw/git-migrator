@@ -12,6 +12,7 @@ import type {
 } from '@git-migrator/adapter-sdk';
 import type { FieldDecision } from '@git-migrator/core';
 import { StepFailure } from '../run/errors.ts';
+import { checkPlacement } from '../run/placement.ts';
 import type { MigrationContext } from './services.ts';
 
 type Json = Record<string, unknown>;
@@ -91,6 +92,10 @@ export async function loadRunWorld(ctx: MigrationContext): Promise<RunWorld> {
   const source = migration.sourceRepository;
   if (!source)
     throw new StepFailure('run.source_missing', 'The Migration has no source repository');
+  // The guard refuses these Runs once the Route is retargeted; a Run admitted before the change
+  // (queued, or resumed after a hand-off) is stopped here, before it touches the new place, and a
+  // Run that writes the target pins where it writes (ADR-0504).
+  await checkPlacement(db, migration.id, ctx.run.kind, route);
   if (!route.targetNamespaceId) {
     throw new StepFailure('run.target_namespace_missing', 'The target namespace is not resolved');
   }

@@ -314,6 +314,46 @@ describe('[UI-026] endpoint migration', () => {
     expect(runKindFor('discovered', null, false)).toBeUndefined();
   });
 
+  it('[LIF-077] [UI-026] a legacy endpoint migration of unknown place types the Namespace path to run', async () => {
+    migration = {
+      ...MIGRATION,
+      readiness: 'blocked',
+      blockerCodes: ['repository-settings.target-placement-unknown'],
+      readinessCounts: { blockers: 1, preTasks: 0 },
+      targetPlacementUnknown: true,
+    };
+    renderWith(<EndpointMigrationView routeId="r1" />);
+    await screen.findByText('Route Source to Target (acme)');
+    fireEvent.click(screen.getByRole('button', { name: 'Migrate' }));
+    const dialog = within(await screen.findByRole('dialog'));
+    expect(dialog.getByText(/type acme to confirm it/)).toBeTruthy();
+    const ok = dialog.getByRole('button', { name: 'Migrate' }) as HTMLButtonElement;
+    expect(ok.disabled).toBe(true);
+    expect(count('/api/v1/migrations/m-end/runs')).toBe(0);
+    fireEvent.change(dialog.getByRole('textbox'), { target: { value: 'acme' } });
+    expect(ok.disabled).toBe(false);
+    fireEvent.click(ok);
+    await waitFor(() => expect(count('/api/v1/migrations/m-end/runs')).toBe(1));
+    const post = calls.find((c) => c.url.pathname === '/api/v1/migrations/m-end/runs');
+    expect(JSON.parse(String(post?.init?.body))).toEqual({ kind: 'migrate', confirm: 'acme' });
+    expect(await screen.findByText('Run queued.')).toBeTruthy();
+  });
+
+  it('[LIF-005] [UI-026] a legacy endpoint migration with another blocker offers no Run', async () => {
+    migration = {
+      ...MIGRATION,
+      readiness: 'blocked',
+      blockerCodes: ['repository-settings.target-placement-unknown', 'teams.missing'],
+      readinessCounts: { blockers: 2, preTasks: 0 },
+      targetPlacementUnknown: true,
+    };
+    renderWith(<EndpointMigrationView routeId="r1" />);
+    await screen.findByText('Route Source to Target (acme)');
+    expect((screen.getByRole('button', { name: 'Migrate' }) as HTMLButtonElement).disabled).toBe(
+      true,
+    );
+  });
+
   it('[UI-026] a viewer sees the page without the actions', async () => {
     renderWith(<EndpointMigrationView routeId="r1" />, 'viewer');
     await screen.findByText('Route Source to Target (acme)');

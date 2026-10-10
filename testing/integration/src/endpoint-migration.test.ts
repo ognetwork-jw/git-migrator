@@ -52,6 +52,9 @@ const SOURCE = 'bb-src';
 const TARGET = 'gh-dst';
 const ROUTE = 'r-endpoint';
 const ORG = 'acme';
+/** The Endpoint and organization the Route is retargeted to (ADR-0504). */
+const TARGET_B = 'gh-dst-b';
+const ORG_B = 'acme-b';
 const log = createLogger({ level: 'silent' });
 const shutdown = new AbortController();
 
@@ -67,6 +70,37 @@ let actorId: string;
 const faults: { loseTeamRecords?: boolean; foreignTeam?: string } = {};
 
 const runs: RunEnqueuerLike = { async enqueueRun() {} };
+
+/**
+ * Syncs the configuration as the `migrate` entrypoint does (LIF-011); with `retarget`, the Route
+ * points at another target Endpoint and Namespace.
+ */
+async function syncRoutes(retarget?: { target: string; namespace: string }) {
+  await syncConfig(t.db.privileged, {
+    endpoints: config.endpoints.map((e) => ({
+      id: e.id,
+      providerType: e.provider,
+      displayName: e.id,
+      baseUrl: e.baseUrl,
+      configHash: hashConfig(e),
+    })),
+    routes: config.routes.map((r) => {
+      const route = retarget
+        ? { ...r, target: retarget.target, targetNamespace: retarget.namespace }
+        : r;
+      return {
+        id: route.id,
+        sourceEndpointId: route.source,
+        targetEndpointId: route.target,
+        targetNamespacePath: route.targetNamespace,
+        policies: route.policies,
+        defaults: route.defaults,
+        sourcePostAction: route.sourcePostAction,
+        configHash: hashConfig(route),
+      };
+    }),
+  });
+}
 
 const analyze = (migrationId: string) =>
   runAnalysis(analysisDeps, migrationId, { shutdown: shutdown.signal, pool: 'interactive' });
@@ -137,12 +171,12 @@ interface OrgState {
   invitations: unknown[];
   teams: { slug: string; members: Record<string, unknown> }[];
 }
-const orgState = (): OrgState => {
+const orgState = (login = ORG): OrgState => {
   const snap = fakes.github?.state.snapshot() as unknown as { orgs: OrgState[] };
-  return snap.orgs.find((o) => o.login === ORG) as OrgState;
+  return snap.orgs.find((o) => o.login === login) as OrgState;
 };
-const teamSlugs = (): string[] =>
-  orgState()
+const teamSlugs = (login = ORG): string[] =>
+  orgState(login)
     .teams.map((x) => x.slug)
     .sort();
 
@@ -160,6 +194,7 @@ beforeAll(async () => {
   };
   scratch = mkdtempSync(join(tmpdir(), 'gm-t086-'));
   const installationId = [...gh.state.installations.keys()][0] as number;
+  const installationB = gh.state.addInstallation({ account: ORG_B }).id;
   const gitBase = fakes.git?.baseUrl ?? 'http://127.0.0.1:1';
   config = resolveConfig({
     text: `
@@ -177,6 +212,12 @@ endpoints:
     gitBaseUrl: ${gitBase}/target
     options: { org: ${ORG}, appId: ${gh.state.ownApp.id}, installationId: ${installationId} }
     quota: { overrides: { content-minute: 100000, content-hour: 100000, core: 100000 } }
+  - id: ${TARGET_B}
+    provider: github
+    baseUrl: http://127.0.0.1:${gh.port}
+    gitBaseUrl: ${gitBase}/target
+    options: { org: ${ORG_B}, appId: ${gh.state.ownApp.id}, installationId: ${installationB} }
+    quota: { overrides: { content-minute: 100000, content-hour: 100000, core: 100000 } }
 routes:
   - id: ${ROUTE}
     source: ${SOURCE}
@@ -185,25 +226,7 @@ routes:
 `,
     env: {},
   });
-  await syncConfig(t.db.privileged, {
-    endpoints: config.endpoints.map((e) => ({
-      id: e.id,
-      providerType: e.provider,
-      displayName: e.id,
-      baseUrl: e.baseUrl,
-      configHash: hashConfig(e),
-    })),
-    routes: config.routes.map((r) => ({
-      id: r.id,
-      sourceEndpointId: r.source,
-      targetEndpointId: r.target,
-      targetNamespacePath: r.targetNamespace,
-      policies: r.policies,
-      defaults: r.defaults,
-      sourcePostAction: r.sourcePostAction,
-      configHash: hashConfig(r),
-    })),
-  });
+  await syncRoutes();
   const quota = new QuotaService({ pool: t.db.pool });
   const environment = createProviderEnvironment({
     quota,
@@ -648,4 +671,99 @@ describe('the endpoint migration against the fixture world', () => {
               OR resource_ref::text ~* '://[^/"]*@' OR resource_ref::text ~* '(token|secret|key)=')`;
     expect(Number(rows[0]?.n ?? 0)).toBe(0);
   });
+});
+
+// Last in the file: the Route is moved to another Endpoint and moved back afterwards (ADR-0504).
+describe('an endpoint Migration after its Route was retargeted (LIF-011, LIF-077, ADR-0504)', () => {
+  const inventoryOf = (endpointId: string) =>
+    runInventory(
+      {
+        db: t.db.privileged,
+        appPool: t.db.pool,
+        connector: services.connector,
+        registry: services.registry as never,
+        config,
+        log,
+      },
+      endpointId,
+      { shutdown: shutdown.signal },
+    );
+
+  it('[LIF-011] [LIF-077] Runs are refused, the Analysis blocks, and the rollback reverts the teams in the organization they were written to', async () => {
+    // A clean start whatever the tests above left: no team in the organization, the mapping open,
+    // and no team record of an earlier Run, so this Run's records are the only ones to revert.
+    const org = fakes.github?.state.orgs.get(ORG);
+    if (!org) throw new Error('no org');
+    org.teams = [];
+    await t.db.privileged.groupMapping.updateMany({
+      where: { routeId: ROUTE, plannedSlug: 'platform-team' },
+      data: { status: 'unmapped', targetGroupId: null },
+    });
+    await t.db.privileged
+      .$executeRaw`UPDATE app.mutation SET undone_at = now() WHERE facet_key = 'teams' AND undone_at IS NULL`;
+    const endpoint = await endpointMigration();
+    await analyze(endpoint.id);
+    expect((await perform(endpoint.id)).result).toMatchObject({ status: 'succeeded' });
+    expect(teamSlugs()).toContain('platform-team');
+    expect(
+      await t.db.privileged.mutation.count({
+        where: { migrationId: endpoint.id, facetKey: 'teams', undoneAt: null, action: 'create' },
+      }),
+    ).toBeGreaterThan(0);
+    const placed = await endpointMigration();
+    expect(placed.targetPlacedEndpointId).toBe(TARGET);
+    expect(placed.targetPlacedNamespaceId).not.toBeNull();
+
+    // The new organization already has a team of the same slug, with a member: not the
+    // framework's, and the rollback must not touch it.
+    const gh = fakes.github;
+    if (!gh) throw new Error('no fake GitHub');
+    gh.state.addMember(ORG_B, 'bob');
+    gh.state.addTeam(ORG_B, { name: 'platform-team', members: ['bob'] });
+    await syncRoutes({ target: TARGET_B, namespace: ORG_B });
+    await inventoryOf(TARGET_B);
+    try {
+      for (const kind of ['run_anyway', 'resync', 'migrate'] as const) {
+        await expect(
+          createRun(t.db.privileged, { migrationId: endpoint.id, kind, triggeredById: actorId }),
+          kind,
+        ).rejects.toMatchObject({
+          code: 'run.not_permitted',
+          message: expect.stringContaining(`Namespace ${ORG} is not in the Route`),
+        });
+      }
+      await analyze(endpoint.id);
+      expect((await endpointMigration()).blockerCodes).toContain(
+        'repository-settings.target-outside-route',
+      );
+      expect(teamSlugs(ORG_B)).toEqual(['platform-team']);
+
+      gh.clearRequests();
+      const { result } = await perform(endpoint.id, 'rollback');
+      expect(result).toEqual({ outcome: 'finished', status: 'succeeded' });
+      // Reverted in the organization the teams were written to, not looked for in the new one.
+      expect(teamSlugs()).not.toContain('platform-team');
+      // The other organization's team of the same slug is untouched, member included, and the
+      // rollback sent it nothing.
+      expect(orgState(ORG_B).teams.map((x) => [x.slug, Object.keys(x.members)])).toEqual([
+        ['platform-team', ['bob']],
+      ]);
+      const toOrgB = gh
+        .requests()
+        .filter((r) => r.write && r.path.toLowerCase().startsWith(`/orgs/${ORG_B}/`));
+      expect(toOrgB.map((r) => `${r.method} ${r.path}`)).toEqual([]);
+      expect(
+        await t.db.privileged.mutation.count({
+          where: { migrationId: endpoint.id, facetKey: 'teams', undoneAt: null, action: 'create' },
+        }),
+      ).toBe(0);
+      const after = await endpointMigration();
+      expect(after.status).toBe('rolled_back');
+      expect(after.targetPlacedEndpointId).toBeNull();
+      expect(after.targetPlacedNamespaceId).toBeNull();
+    } finally {
+      await syncRoutes();
+      await inventoryOf(TARGET);
+    }
+  }, 400_000);
 });

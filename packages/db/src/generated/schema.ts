@@ -278,6 +278,13 @@ export class SchemaType implements SchemaDef {
                     attributes: [{ name: "@relation", args: [{ name: "name", value: ExpressionUtils.literal("RouteTarget") }] }] as readonly AttributeApplication[],
                     relation: { opposite: "targetEndpoint", name: "RouteTarget" }
                 },
+                placedMigrations: {
+                    name: "placedMigrations",
+                    type: "Migration",
+                    array: true,
+                    attributes: [{ name: "@relation", args: [{ name: "name", value: ExpressionUtils.literal("MigrationPlacedEndpoint") }] }] as readonly AttributeApplication[],
+                    relation: { opposite: "targetPlacedEndpoint", name: "MigrationPlacedEndpoint" }
+                },
                 namespaces: {
                     name: "namespaces",
                     type: "Namespace",
@@ -589,6 +596,13 @@ export class SchemaType implements SchemaDef {
                     array: true,
                     attributes: [{ name: "@relation", args: [{ name: "name", value: ExpressionUtils.literal("RouteTargetNamespace") }] }] as readonly AttributeApplication[],
                     relation: { opposite: "targetNamespace", name: "RouteTargetNamespace" }
+                },
+                placedMigrations: {
+                    name: "placedMigrations",
+                    type: "Migration",
+                    array: true,
+                    attributes: [{ name: "@relation", args: [{ name: "name", value: ExpressionUtils.literal("MigrationPlacedNamespace") }] }] as readonly AttributeApplication[],
+                    relation: { opposite: "targetPlacedNamespace", name: "MigrationPlacedNamespace" }
                 }
             },
             attributes: [
@@ -793,6 +807,30 @@ export class SchemaType implements SchemaDef {
                         "targetRepository"
                     ] as readonly string[]
                 },
+                targetPlacedEndpointId: {
+                    name: "targetPlacedEndpointId",
+                    type: "String",
+                    optional: true,
+                    attributes: [{ name: "@map", args: [{ name: "name", value: ExpressionUtils.literal("target_placed_endpoint_id") }] }, { name: "@deny", args: [{ name: "operation", value: ExpressionUtils.literal("update") }, { name: "condition", value: ExpressionUtils.literal(true) }] }] as readonly AttributeApplication[],
+                    foreignKeyFor: [
+                        "targetPlacedEndpoint"
+                    ] as readonly string[]
+                },
+                targetPlacedNamespaceId: {
+                    name: "targetPlacedNamespaceId",
+                    type: "String",
+                    optional: true,
+                    attributes: [{ name: "@map", args: [{ name: "name", value: ExpressionUtils.literal("target_placed_namespace_id") }] }, { name: "@deny", args: [{ name: "operation", value: ExpressionUtils.literal("update") }, { name: "condition", value: ExpressionUtils.literal(true) }] }] as readonly AttributeApplication[],
+                    foreignKeyFor: [
+                        "targetPlacedNamespace"
+                    ] as readonly string[]
+                },
+                targetPlacementUnknown: {
+                    name: "targetPlacementUnknown",
+                    type: "Boolean",
+                    attributes: [{ name: "@default", args: [{ name: "value", value: ExpressionUtils.literal(false) }] }, { name: "@map", args: [{ name: "name", value: ExpressionUtils.literal("target_placement_unknown") }] }, { name: "@deny", args: [{ name: "operation", value: ExpressionUtils.literal("update") }, { name: "condition", value: ExpressionUtils.literal(true) }] }] as readonly AttributeApplication[],
+                    default: false as FieldDefault
+                },
                 plannedTargetName: {
                     name: "plannedTargetName",
                     type: "String",
@@ -974,6 +1012,20 @@ export class SchemaType implements SchemaDef {
                     optional: true,
                     attributes: [{ name: "@relation", args: [{ name: "name", value: ExpressionUtils.literal("MigrationTargetRepository") }, { name: "fields", value: ExpressionUtils.array("String", [ExpressionUtils.field("targetRepositoryId")]) }, { name: "references", value: ExpressionUtils.array("String", [ExpressionUtils.field("id")]) }, { name: "onDelete", value: ExpressionUtils.literal("Restrict") }] }] as readonly AttributeApplication[],
                     relation: { opposite: "targetMigrations", name: "MigrationTargetRepository", fields: ["targetRepositoryId"], references: ["id"], onDelete: "Restrict" }
+                },
+                targetPlacedEndpoint: {
+                    name: "targetPlacedEndpoint",
+                    type: "Endpoint",
+                    optional: true,
+                    attributes: [{ name: "@relation", args: [{ name: "name", value: ExpressionUtils.literal("MigrationPlacedEndpoint") }, { name: "fields", value: ExpressionUtils.array("String", [ExpressionUtils.field("targetPlacedEndpointId")]) }, { name: "references", value: ExpressionUtils.array("String", [ExpressionUtils.field("id")]) }, { name: "onDelete", value: ExpressionUtils.literal("Restrict") }] }] as readonly AttributeApplication[],
+                    relation: { opposite: "placedMigrations", name: "MigrationPlacedEndpoint", fields: ["targetPlacedEndpointId"], references: ["id"], onDelete: "Restrict" }
+                },
+                targetPlacedNamespace: {
+                    name: "targetPlacedNamespace",
+                    type: "Namespace",
+                    optional: true,
+                    attributes: [{ name: "@relation", args: [{ name: "name", value: ExpressionUtils.literal("MigrationPlacedNamespace") }, { name: "fields", value: ExpressionUtils.array("String", [ExpressionUtils.field("targetPlacedNamespaceId")]) }, { name: "references", value: ExpressionUtils.array("String", [ExpressionUtils.field("id")]) }, { name: "onDelete", value: ExpressionUtils.literal("Restrict") }] }] as readonly AttributeApplication[],
+                    relation: { opposite: "placedMigrations", name: "MigrationPlacedNamespace", fields: ["targetPlacedNamespaceId"], references: ["id"], onDelete: "Restrict" }
                 },
                 latestAnalysis: {
                     name: "latestAnalysis",

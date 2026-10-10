@@ -98,6 +98,12 @@ const AGENT_DECIDED_CODES: Readonly<Record<string, string>> = {
     'run-origin post task when a rollback leaves changes it cannot prove its own',
   'repository-settings.deletion-unproven':
     'run-origin post task when the ledger does not prove the framework created the target',
+  // LIF-011: a Route retargeted after its target was made; Runs that use the target are refused
+  // until a rollback or a restored Route settles it (ADR-0504).
+  'repository-settings.target-placement-unknown':
+    'analysis blocker for legacy target writes whose place is unknown',
+  'repository-settings.target-outside-route':
+    'analysis blocker when the target repository is no longer in the Route target',
 };
 
 /**

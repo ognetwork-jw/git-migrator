@@ -36,6 +36,7 @@ import { StepFailure } from '../run/errors.ts';
 import { recomputeReadiness } from '../run/findings.ts';
 import { teamsInUse } from '../run/guard.ts';
 import { REPOSITORY_LEVEL_FACET } from '../run/ledger.ts';
+import { loadPlacement, placementOutside } from '../run/placement.ts';
 import type { RunPlanner, StepDefinition, StepResult } from '../run/types.ts';
 import { unmapUndoneTeams } from './endpoint.ts';
 import {
@@ -61,6 +62,8 @@ interface RollbackWorld {
   readonly migrationId: string;
   readonly routeId: string;
   readonly scope: 'repository' | 'endpoint';
+  readonly sourceEndpointId: string;
+  /** Where the target is: the target repository's Endpoint, or the Route's when there is none. */
   readonly targetEndpointId: string;
   readonly namespace: NamespaceRef | undefined;
   readonly targetRepository:
@@ -72,21 +75,38 @@ interface RollbackWorld {
       }
     | undefined;
   readonly createdByFramework: boolean;
+  /** The framework's target is not where the Route points any more (ADR-0504). */
+  readonly outsideRoute: boolean;
 }
 
-async function loadWorld(ctx: MigrationContext): Promise<RollbackWorld> {
+/** Exported for tests. */
+export async function loadWorld(ctx: MigrationContext): Promise<RollbackWorld> {
   const m = await ctx.services.db.migration.findUniqueOrThrow({
     where: { id: ctx.migration.id },
-    include: { route: true, targetRepository: true },
+    include: { route: true, targetRepository: { include: { namespace: true } } },
   });
-  const namespace = m.route.targetNamespaceId
-    ? await ctx.services.db.namespace.findUnique({ where: { id: m.route.targetNamespaceId } })
-    : null;
+  // The target is reverted where the framework wrote it: a repository Migration's target
+  // repository on its own Endpoint and in its own Namespace, an endpoint Migration's pinned
+  // Namespace. Neither is the Route's when the Route was retargeted afterwards (ADR-0504). The
+  // guard refuses a rollback whose Endpoints are no longer configured.
+  const repo = m.scope === 'repository' ? m.targetRepository : null;
+  const pinned = await loadPlacement(ctx.services.db, m.id);
+  const placed = repo
+    ? { endpointId: repo.endpointId, namespace: repo.namespace }
+    : pinned
+      ? { endpointId: pinned.endpointId, namespace: pinned.namespace }
+      : null;
+  const namespace = placed
+    ? placed.namespace
+    : m.route.targetNamespaceId
+      ? await ctx.services.db.namespace.findUnique({ where: { id: m.route.targetNamespaceId } })
+      : null;
   return {
     migrationId: m.id,
     routeId: m.routeId,
     scope: m.scope,
-    targetEndpointId: m.route.targetEndpointId,
+    sourceEndpointId: m.route.sourceEndpointId,
+    targetEndpointId: placed?.endpointId ?? m.route.targetEndpointId,
     namespace: namespace ? { providerId: namespace.providerId, slug: namespace.slug } : undefined,
     targetRepository: m.targetRepository
       ? {
@@ -97,6 +117,7 @@ async function loadWorld(ctx: MigrationContext): Promise<RollbackWorld> {
         }
       : undefined,
     createdByFramework: m.targetCreatedByFramework,
+    outsideRoute: placementOutside(pinned, m.route),
   };
 }
 
@@ -240,7 +261,7 @@ async function deleteRepository(
         });
         throw new StepFailure(
           DELETION_FORBIDDEN,
-          `The provider does not let the framework delete ${fullName}. Allow repository deletion for the organization, or delete it by hand, then roll back again`,
+          `The provider does not let the framework delete ${fullName}. Allow the framework to delete repositories in the target Namespace, or delete it by hand, then roll back again`,
         );
       }
     }
@@ -271,11 +292,108 @@ export async function repositoryHeldElsewhere(
   return (recorded[0]?.n ?? 0) > 0;
 }
 
+/**
+ * `lookupById` for a repository an earlier Run created, which is not this Migration's target. It is
+ * looked up on the Endpoint its `Repository` row names, which is another one than the target's when
+ * the Route was retargeted to another Endpoint in between (ADR-0504): a credential of one Endpoint
+ * cannot see another's repositories, so asking the wrong one would read as "unreadable".
+ */
+async function lookupEarlier(
+  ctx: MigrationContext,
+  world: RollbackWorld,
+  connection: EndpointConnection,
+  providerId: string,
+  fullName: string,
+  /** The Endpoint the create record names (records written since ADR-0504 do). */
+  recordedEndpointId?: string,
+): Promise<RepositoryRecord | null> {
+  let endpointId = recordedEndpointId;
+  if (endpointId === undefined) {
+    const rows = await ctx.services.db.repository.findMany({
+      where: { providerId, endpointId: { not: world.sourceEndpointId } },
+      select: { endpointId: true },
+    });
+    endpointId = rows.some((r) => r.endpointId === world.targetEndpointId)
+      ? world.targetEndpointId
+      : rows[0]?.endpointId;
+  }
+  if (endpointId === undefined) {
+    // Asking the target's Endpoint could answer "not found" for a repository that lives elsewhere.
+    throw new StepFailure(
+      'rollback.endpoint-unknown',
+      `The ledger does not say on which Endpoint ${fullName} was created, and no repository row records it, so nothing more is reverted. Delete ${fullName} by hand if it still exists, then contact an administrator to settle its creation record`,
+      { repository: fullName },
+    );
+  }
+  const where =
+    endpointId === world.targetEndpointId
+      ? connection
+      : await ctx.services.connector.connect(endpointId, {
+          pool: 'interactive',
+          signal: ctx.signal,
+        });
+  return lookupById(ctx, where, providerId, fullName);
+}
+
+/** The Endpoint a repository create record names, if it names one. */
+const recordedEndpoint = (row: LedgerRow): string | undefined =>
+  typeof row.resourceRef.endpointId === 'string' ? row.resourceRef.endpointId : undefined;
+
 /** A repository an earlier Run created, which still exists and is not this Migration's target. */
 const leftRepository = (slug: string): UndoLeftEntry => ({
   kind: 'repository-earlier',
   name: slug,
 });
+
+/**
+ * After the Migration's own target was deleted: the recorded creations of OTHER repositories (an
+ * earlier Run created them, and the target moved on, for example after the Route was retargeted)
+ * are checked by provider id, as on an adopted target. One that still exists is left and reported,
+ * together with the records written between its creation and the deleted target's creation, which
+ * went to it and not to the deleted repository. One the provider says is gone is undone with the
+ * rest (ADR-0504).
+ */
+async function earlierRepositoriesLeft(
+  ctx: MigrationContext,
+  world: RollbackWorld,
+  connection: EndpointConnection,
+  deletedProviderId: string,
+  rows: readonly LedgerRow[],
+): Promise<{ ids: Set<string>; lefts: UndoLeftEntry[] }> {
+  const isCreation = (row: LedgerRow) =>
+    dispositionOf(row) === 'repository' && row.state === 'recorded';
+  const deletedAt = rows.find(
+    (r) => isCreation(r) && String(r.resourceRef.id ?? '') === deletedProviderId,
+  )?.seq;
+  const ids = new Set<string>();
+  const lefts: UndoLeftEntry[] = [];
+  let firstLeft: bigint | undefined;
+  for (const row of rows) {
+    const id = String(row.resourceRef.id ?? '');
+    if (!isCreation(row) || id === '' || id === deletedProviderId) continue;
+    ctx.checkpoint();
+    const still = await lookupEarlier(
+      ctx,
+      world,
+      connection,
+      id,
+      String(row.resourceRef.name ?? id),
+      recordedEndpoint(row),
+    );
+    if (still === null) continue;
+    ids.add(row.id);
+    lefts.push(leftRepository(still.slug));
+    if (firstLeft === undefined || row.seq < firstLeft) firstLeft = row.seq;
+  }
+  if (firstLeft !== undefined) {
+    const from = firstLeft;
+    for (const row of rows) {
+      if (isCreation(row) || row.seq <= from) continue;
+      if (deletedAt === undefined || row.seq < deletedAt) ids.add(row.id);
+    }
+  }
+  return { ids, lefts };
+}
 
 /** How many entries a `left-in-place` task and failure name. */
 const MAX_LEFT = 20;
@@ -371,6 +489,7 @@ class TargetGone extends Error {}
  */
 async function settleGoneTarget(
   ctx: MigrationContext,
+  world: RollbackWorld,
   connection: EndpointConnection,
   fullPath: string,
   tally: { undone: number; left: number; deleted: number },
@@ -385,7 +504,10 @@ async function settleGoneTarget(
     if (dispositionOf(row) === 'repository' && row.state === 'recorded') {
       const id = String(row.resourceRef.id ?? '');
       const name = String(row.resourceRef.name ?? id);
-      const still = id === '' ? null : await lookupById(ctx, connection, id, name);
+      const still =
+        id === ''
+          ? null
+          : await lookupEarlier(ctx, world, connection, id, name, recordedEndpoint(row));
       if (still !== null) {
         stay.push(leftRepository(still.slug));
         continue;
@@ -438,14 +560,22 @@ export function rollbackTargetStep(): StepDefinition<MigrationServices> {
       if (world.scope === 'repository') {
         deletedWhole = await deleteCreatedRepository(ctx, world, connection, todo, tally);
       }
-      if (deletedWhole) {
-        // Everything else recorded for the repository went with it.
+      if (deletedWhole && world.targetRepository) {
+        // Everything else recorded for the repository went with it, except a repository an
+        // earlier Run created that still exists (a Route retargeted between the Runs, ADR-0504),
+        // and what was written to it: those are left and reported.
         const rest = undoableOf(await ledgerRows(db, world.migrationId, 'target'));
-        await markUndone(
+        const kept = await earlierRepositoriesLeft(
           ctx,
-          rest.map((r) => r.id),
+          world,
+          connection,
+          world.targetRepository.providerId,
+          rest,
         );
-        tally.undone += rest.length;
+        const gone = rest.filter((r) => !kept.ids.has(r.id)).map((r) => r.id);
+        await markUndone(ctx, gone);
+        tally.undone += gone.length;
+        if (kept.lefts.length > 0) throw await leftInPlace(ctx, kept.lefts);
         await settleLeftInPlaceTasks(ctx, null);
         return { status: 'succeeded', detail: tally };
       }
@@ -477,7 +607,7 @@ export function rollbackTargetStep(): StepDefinition<MigrationServices> {
           world.targetRepository.fullPath,
         );
         if (live === null) {
-          return settleGoneTarget(ctx, connection, world.targetRepository.fullPath, tally);
+          return settleGoneTarget(ctx, world, connection, world.targetRepository.fullPath, tally);
         }
         repoRef = { providerId: live.providerId, namespace: world.namespace, slug: live.slug };
         facetTarget = { scope: 'repository', repository: repoRef, namespace: world.namespace };
@@ -584,7 +714,10 @@ export function rollbackTargetStep(): StepDefinition<MigrationServices> {
               // It is undone once the provider says it is gone; if it exists, it is left and reported.
               const id = String(row.resourceRef.id ?? '');
               const name = String(row.resourceRef.name ?? id);
-              const still = id === '' ? null : await lookupById(ctx, connection, id, name);
+              const still =
+                id === ''
+                  ? null
+                  : await lookupEarlier(ctx, world, connection, id, name, recordedEndpoint(row));
               if (still === null) {
                 await markUndone(ctx, [row.id]);
                 tally.undone += 1;
@@ -597,7 +730,7 @@ export function rollbackTargetStep(): StepDefinition<MigrationServices> {
         }
       } catch (error) {
         if (!(error instanceof TargetGone) || !target) throw error;
-        return settleGoneTarget(ctx, connection, target.fullPath, tally);
+        return settleGoneTarget(ctx, world, connection, target.fullPath, tally);
       }
       if (lefts.length > 0) throw await leftInPlace(ctx, lefts);
       await settleLeftInPlaceTasks(ctx, null);
@@ -744,7 +877,23 @@ export function rollbackSettleStep(): StepDefinition<MigrationServices> {
               where: { id: world.targetRepository.id },
               data: { presence: 'missing' },
             });
+          } else if (world.scope === 'repository' && world.targetRepository && world.outsideRoute) {
+            // An adopted target the Route no longer points at: nothing of the framework's is left
+            // in it, so the Migration lets it go and plans its target in the Route's new place.
+            await tx.migration.update({
+              where: { id: world.migrationId },
+              data: { targetRepositoryId: null },
+            });
           }
+          // Nothing the framework wrote is left on the target: the place is no longer pinned.
+          await tx.migration.update({
+            where: { id: world.migrationId },
+            data: {
+              targetPlacedEndpointId: null,
+              targetPlacedNamespaceId: null,
+              targetPlacementUnknown: false,
+            },
+          });
           await tx.parityResult.deleteMany({ where: { migrationId: world.migrationId } });
           await markAnalysesStale(tx, { ids: [world.migrationId] });
         },

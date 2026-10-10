@@ -597,3 +597,117 @@ describe('[UI-022] the Overview, Tasks, Facets, Runs and Audit tabs', () => {
     expect(JSON.parse(audit?.url.searchParams.get('q') ?? '{}').where.OR).toHaveLength(2);
   });
 });
+
+describe('[LIF-077] a legacy Migration of unknown place confirms the Route place (ADR-0504)', () => {
+  const click = (name: string) => fireEvent.click(screen.getByRole('button', { name }));
+  const dialog = () => within(screen.getByRole('dialog'));
+  const PLACEMENT = 'repository-settings.target-placement-unknown';
+  const legacy = (extra: Partial<MigrationDetail> = {}) =>
+    migration({
+      status: 'failed',
+      readiness: 'blocked',
+      blockerCodes: [PLACEMENT],
+      readinessCounts: { blockers: 1, preTasks: 0, postTasks: 0 },
+      targetPlacementUnknown: true,
+      ...extra,
+    });
+
+  it('[LIF-043] Migrate asks for the target full name, sends it as confirm, and the Run is admitted', async () => {
+    world.migration = legacy();
+    start();
+    await ready();
+    click('Migrate');
+    expect(dialog().getByText(/type acme-org\/plat-api to confirm it/)).toBeTruthy();
+    const ok = dialog().getByRole('button', { name: 'Migrate' }) as HTMLButtonElement;
+    expect(ok.disabled).toBe(true);
+    const input = dialog().getByRole('textbox');
+    fireEvent.change(input, { target: { value: 'acme-org' } });
+    expect(ok.disabled).toBe(true);
+    fireEvent.change(input, { target: { value: 'acme-org/plat-api' } });
+    expect(ok.disabled).toBe(false);
+    fireEvent.click(ok);
+    await waitFor(() => expect(posted('/api/v1/migrations/m1/runs')).toHaveLength(1));
+    expect(bodyOf(posted('/api/v1/migrations/m1/runs')[0])).toEqual({
+      kind: 'migrate',
+      confirm: 'acme-org/plat-api',
+    });
+    const link = await screen.findByRole('link', { name: 'Open the Run' });
+    expect(link.getAttribute('href')).toBe('/runs/run-new');
+  });
+
+  it('[LIF-043] with open pre tasks it offers Run anyway, confirmed the same way', async () => {
+    world.migration = legacy({ readinessCounts: { blockers: 1, preTasks: 2, postTasks: 0 } });
+    start();
+    await ready();
+    expect(screen.queryByRole('button', { name: 'Migrate' })).toBeNull();
+    click('Run anyway');
+    fireEvent.change(dialog().getByRole('textbox'), { target: { value: 'acme-org/plat-api' } });
+    fireEvent.click(dialog().getByRole('button', { name: 'Run anyway' }));
+    await waitFor(() => expect(posted('/api/v1/migrations/m1/runs')).toHaveLength(1));
+    expect(bodyOf(posted('/api/v1/migrations/m1/runs')[0])).toEqual({
+      kind: 'run_anyway',
+      confirm: 'acme-org/plat-api',
+    });
+  });
+
+  it('[LIF-077] Resync and Rollback ask for the same name and send it as confirm', async () => {
+    world.migration = legacy({ status: 'partial' });
+    world.runs = [run(1)];
+    start();
+    await ready();
+    click('Resync');
+    expect(dialog().getByText(/type acme-org\/plat-api to confirm it/)).toBeTruthy();
+    fireEvent.change(dialog().getByRole('textbox'), { target: { value: 'acme-org/plat-api' } });
+    fireEvent.click(dialog().getByRole('button', { name: 'Resync' }));
+    await waitFor(() => expect(posted('/api/v1/migrations/m1/runs')).toHaveLength(1));
+    expect(bodyOf(posted('/api/v1/migrations/m1/runs')[0])).toEqual({
+      kind: 'resync',
+      confirm: 'acme-org/plat-api',
+    });
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+
+    click('Roll back');
+    expect(dialog().getByText(/type acme-org\/plat-api to confirm it/)).toBeTruthy();
+    const ok = dialog().getByRole('button', { name: 'Roll back' }) as HTMLButtonElement;
+    expect(ok.disabled).toBe(true);
+    fireEvent.change(dialog().getByRole('textbox'), { target: { value: 'acme-org/plat-api' } });
+    fireEvent.click(ok);
+    await waitFor(() => expect(posted('/api/v1/migrations/m1/runs')).toHaveLength(2));
+    expect(bodyOf(posted('/api/v1/migrations/m1/runs')[1])).toEqual({
+      kind: 'rollback',
+      confirm: 'acme-org/plat-api',
+    });
+  });
+
+  it('[LIF-077] a refused confirmation names what to type', async () => {
+    world.migration = legacy();
+    world.responses['POST /api/v1/migrations/m1/runs'] = () =>
+      problem(422, 'confirmation_required');
+    start();
+    await ready();
+    click('Migrate');
+    fireEvent.change(dialog().getByRole('textbox'), { target: { value: 'acme-org/plat-api' } });
+    fireEvent.click(dialog().getByRole('button', { name: 'Migrate' }));
+    expect(
+      await dialog().findByText('This Run needs acme-org/plat-api typed exactly as confirmation.'),
+    ).toBeTruthy();
+  });
+
+  it('[LIF-005] another blocker still blocks, and a Migration of known place types nothing', async () => {
+    world.migration = legacy({ blockerCodes: [PLACEMENT, 'target.namespace-missing'] });
+    start();
+    await ready();
+    expect(screen.queryByRole('button', { name: 'Migrate' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Run anyway' })).toBeNull();
+    cleanup();
+
+    world.migration = migration({ targetPlacementUnknown: false });
+    start();
+    await ready();
+    click('Migrate');
+    expect(dialog().queryByRole('textbox')).toBeNull();
+    fireEvent.click(dialog().getByRole('button', { name: 'Migrate' }));
+    await waitFor(() => expect(posted('/api/v1/migrations/m1/runs')).toHaveLength(1));
+    expect(bodyOf(posted('/api/v1/migrations/m1/runs')[0])).toEqual({ kind: 'migrate' });
+  });
+});
