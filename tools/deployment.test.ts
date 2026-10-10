@@ -435,6 +435,40 @@ describe('docs/deployment.md (DEP-020)', () => {
     expect(doc).not.toMatch(/\/api\/auth\/callback\/entra/);
   });
 
+  it('[DATA-010] states the 80% rule and the minimum max_connections for the chart defaults', () => {
+    const values = parse(read('deploy/helm/git-migrator/values.yaml'));
+    const app = values.postgres.pool.app as number;
+    // The Better Auth pool size comes from the code, which follows DATA-010 (5, web only).
+    const auth = Number(
+      read('packages/auth/src/storage.ts').match(/AUTH_POOL_MAX = (\d+);/)?.[1] ?? Number.NaN,
+    );
+    expect(auth).toBe(5);
+    // Per process, as the doc derives it: app pool, Better Auth, BullMQ (Workers + 4), LISTEN or
+    // leader (1).
+    const perWeb = app + auth + 4 + 1;
+    const perStandard = 6 + 4 + app + 1;
+    const perLarge = 1 + 4 + app;
+    const total =
+      values.web.replicas * perWeb +
+      values.worker.standard.replicas * perStandard +
+      values.worker.large.replicas * perLarge;
+    const reserved = 15;
+    // total < 0.8 × (max_connections − reserved), max_connections an integer.
+    const minimum = Math.floor(total / 0.8 + reserved) + 1;
+    // A rolling update (total × 1.25 + 10) must also fit in the usable connections.
+    const rolling = Math.ceil(total * 1.25 + 10);
+    expect(total).toBe(97);
+    expect(doc).toContain(`Each web pod holds at most ${perWeb} connections`);
+    expect(doc).toContain(
+      `= ${values.web.replicas}×${perWeb} + ${values.worker.standard.replicas}×${perStandard} + ${values.worker.large.replicas}×${perLarge} = ${total}`,
+    );
+    expect(doc).toContain('`total < 0.8 × usable`');
+    expect(doc).toContain(`\`max_connections ≥ ${minimum}\``);
+    expect(minimum).toBe(137);
+    expect(doc).toContain(`\`max_connections ≥ ${rolling + reserved}\``);
+    expect(rolling + reserved).toBe(147);
+  });
+
   it('[DEP-020] covers Azure prerequisites, Key Vault secrets, workload identity, extensions and connections', () => {
     for (const heading of [
       '## Azure prerequisites',

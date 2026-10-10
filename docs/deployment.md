@@ -129,25 +129,36 @@ total           = bullmq + application + leader
 
 The BullMQ pool is a cap: measured with the `all` role and 20 jobs processed, it held 4 connections. Size `max_connections` for the sum over all pods plus the web pods' pools.
 
-Each web pod holds the application pool (`postgres.pool.app`, default 10) plus the Better Auth pool (4), so 14 at the defaults.
+Each web pod holds at most 20 connections at the defaults:
+
+- the application pool (`postgres.pool.app`, default 10);
+- the Better Auth pool (5, DATA-010);
+- the BullMQ pool of the queue producer (no Workers, so 4);
+- the one LISTEN connection of the event hub (JOB-060).
 
 ### Connection-count formula
 
 With the chart defaults (`web.replicas: 2`, `worker.standard.replicas: 2`, `worker.large.replicas: 1`, `postgres.pool.app: 10`):
 
 ```
-web              = web.replicas × (pool.app + 4)
+web              = web.replicas × (pool.app + 5 + 4 + 1)
 worker-standard  = standard.replicas × (6 + 4 + pool.app + 1)
 worker-large     = large.replicas × (1 + 4 + pool.app)
 migrate          = up to 3 while the hook Job runs (before the new pods start)
 total            = web + worker-standard + worker-large
-                 = 2×14 + 2×21 + 1×15 = 85
-needed           = total × 1.25 (rolling updates start new pods before old ones stop)
+                 = 2×20 + 2×21 + 1×15 = 97
+usable           = max_connections − superuser_reserved_connections (15 on Flexible Server)
+rolling          = total × 1.25 (rolling updates start new pods before old ones stop)
                  + 10 (psql sessions, monitoring, the migrate Job)
-                 ≈ 116
+                 ≈ 132 (131.25, rounded up)
 ```
 
-Set the server's `max_connections` above `needed`, minus the connections Azure reserves for itself (`superuser_reserved_connections`, 15 on Flexible Server). With HPA scale-out, use `web.hpa.maxReplicas` instead of `web.replicas`. Lowering `postgres.pool.app` is the first lever; the BullMQ pool sizes follow the worker count and are not configurable.
+**The rule (DATA-010).** The default deployment must stay under 80% of the server's connections: `total < 0.8 × usable`. The connections Azure reserves for itself (`superuser_reserved_connections`) are not usable by the application, so they are subtracted first.
+
+- **Minimum for the defaults:** `max_connections ≥ 137`, because 97 / 0.8 + 15 = 136.25.
+- **Recommended:** `max_connections ≥ 147`, so that a rolling update also fits (`rolling ≤ usable`: 132 + 15). At 147 the steady state uses 73% of the usable connections.
+
+Small Flexible Server tiers have a lower default `max_connections` than this, so check the server parameter before installing. With HPA scale-out, use `web.hpa.maxReplicas` instead of `web.replicas`, and recompute. Lowering `postgres.pool.app` is the first lever. The BullMQ pool sizes follow the worker count and are not configurable.
 
 ## PostgreSQL extensions
 

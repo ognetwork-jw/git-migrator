@@ -3,12 +3,15 @@ import { getMigrations } from 'better-auth/db/migration';
 import pg from 'pg';
 import { betterAuthLogger } from './logger.ts';
 
+/** Size of the Better Auth pool of the web process (DATA-010: "Better Auth: 5, web only"). */
+export const AUTH_POOL_MAX = 5;
+
 /**
  * Better Auth's own pool (AUTH-001): every connection has `search_path=auth`, so the library's
  * unqualified table names resolve to schema `auth` and never touch `app`. ZenStack never models
  * these tables (DATA-002).
  */
-export function createAuthPool(connectionString: string, max = 4): pg.Pool {
+export function createAuthPool(connectionString: string, max = AUTH_POOL_MAX): pg.Pool {
   const pool = new pg.Pool({ connectionString, max, options: '-c search_path=auth' });
   pool.on('error', () => undefined);
   return pool;
