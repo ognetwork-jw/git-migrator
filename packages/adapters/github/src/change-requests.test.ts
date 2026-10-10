@@ -261,6 +261,15 @@ describe('code-ownership', () => {
     const current = (await d?.read(h.ctx, h.target('r')))?.data;
     const out = await all(d?.apply?.(h.ctx, h.target('r'), desired, current, []));
     expect(out.length).toBeGreaterThan(0);
+    // Every record is the code-ownership facet's and covers /owners (LIF-045, ADP-012), while the
+    // resource kinds rollback dispatches on are unchanged (LIF-077).
+    expect(out.map((m) => [m.facetKey, m.paths])).toEqual(
+      out.map(() => ['code-ownership', ['/owners']]),
+    );
+    expect(out.map((m) => String(m.resourceRef.kind))).toContain('change-request');
+    expect(out.find((m) => m.resourceRef.kind === 'change-request')?.resourceRef.purpose).toBe(
+      'codeowners',
+    );
     expect(repo.pulls).toHaveLength(1);
     // Not merged yet: the default branch still has no CODEOWNERS, the open request is updated in place.
     const again = await all(d?.apply?.(h.ctx, h.target('r'), desired, current, []));
@@ -293,9 +302,11 @@ describe('code-ownership partial writes', () => {
       ],
     };
     const yielded: string[] = [];
+    const keys = new Set<string>();
     let thrown: unknown;
     try {
       for await (const m of d?.apply?.(h.ctx, h.target('r'), desired, null, []) ?? []) {
+        keys.add(`${m.facetKey}:${m.paths.join(',')}`);
         yielded.push(`${m.action}:${String(m.resourceRef.kind)}`);
       }
     } catch (error) {
@@ -303,5 +314,6 @@ describe('code-ownership partial writes', () => {
     }
     expect(thrown).toMatchObject({ code: 'invalid' });
     expect(yielded).toEqual(['create:ref', 'update:ref']);
+    expect([...keys]).toEqual(['code-ownership:/owners']);
   });
 });

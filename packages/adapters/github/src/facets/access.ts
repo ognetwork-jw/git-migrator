@@ -1,5 +1,5 @@
 /** access-control (FAC-ACL) and code-ownership (FAC-COD) drivers. */
-import type { FacetDriver } from '@git-migrator/adapter-sdk';
+import type { FacetDriver, MutationRecord } from '@git-migrator/adapter-sdk';
 import type {
   AccessControl,
   AccessRole,
@@ -12,6 +12,7 @@ import { Collector, type Json, obj, repoPath, str } from '../gh.ts';
 import {
   cannotUndo,
   type DriverDeps,
+  fieldPath,
   ghOf,
   ignoreGone,
   itemPath,
@@ -200,6 +201,7 @@ export function accessControlDriver(deps: DriverDeps): FacetDriver<AccessControl
 
 export const CODEOWNERS_PATHS = ['.github/CODEOWNERS', 'CODEOWNERS', 'docs/CODEOWNERS'] as const;
 export const CODEOWNERS_PURPOSE = 'codeowners';
+const OWNERS_PATH = fieldPath('owners');
 
 /** Renders a CODEOWNERS file; `name` turns a principal into `@login` or `@org/team`. */
 export function renderCodeowners(
@@ -310,10 +312,20 @@ export function codeOwnershipDriver(deps: DriverDeps): FacetDriver<CodeOwnership
         });
       } catch (error) {
         // The branch and commit written before the failure are real: yield them so they are ledgered.
-        for (const m of partialMutations(error)) yield m;
+        for (const m of partialMutations(error)) yield ownedByCodeOwnership(m);
         throw error;
       }
-      for (const m of result.mutations) yield m;
+      for (const m of result.mutations) yield ownedByCodeOwnership(m);
     },
   };
+}
+
+/**
+ * The Change Request writer's records are this facet's writes: they carry its key and the field they
+ * deliver, so a ledger filtered by facet finds them and they cover `/owners` (LIF-045, ADP-012).
+ * Rollback dispatches on the record's `resourceRef.kind`, not on the facet key, so it still closes the
+ * pull request and leaves the branch (LIF-077).
+ */
+function ownedByCodeOwnership(record: MutationRecord): MutationRecord {
+  return { ...record, facetKey: 'code-ownership', paths: [OWNERS_PATH] };
 }

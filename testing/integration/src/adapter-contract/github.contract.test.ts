@@ -474,11 +474,6 @@ const contract: AdapterContract<World> = {
       // default branch (LIF-047).
       facet: 'code-ownership',
       name: 'CODEOWNERS delivered by a Change Request and merged',
-      // Known adapter defect (reported, not fixed in T-034): the code-ownership driver yields the
-      // Change Request writer's records unchanged. They carry facetKey 'change-requests' and an
-      // empty paths list, so a ledger filtered by facet (LIF-045) misses them and they cover no
-      // changed field of /owners (ADP-012). Remove `knownDefect` when the driver is fixed.
-      knownDefect: 'code-ownership records have facetKey change-requests and no paths',
       prepare: ({ world }) => {
         const s = world.state;
         const bob = s.addMember('acme', 'bob');
