@@ -13,12 +13,11 @@ PROC-013 says to run `pnpm turbo run typecheck test --filter=...[origin/main]` w
 - **Explicit timeouts.** `Stop` has a 1800 s timeout and `SubagentStop` a 900 s timeout in `.claude/settings.json`. Pre- and post-tool hooks have 60 s.
 - **PROC-013** (`.claude/hooks/subagent-stop-check.sh`). It runs only when the hook's `cwd` matches `*/.worktrees/T-*`. Reviewer agents are skipped when the payload names one (`agent_type` or `agent_name` starting with `reviewer-`). This field name is not verified against a live payload. If the payload does not expose it, reviewers in a task worktree still run the check, as the spec allows, and the time cost is accepted. The hook counts `origin/ai-main..HEAD` in the worktree. A count of zero allows the stop without running the check. An unresolvable base blocks (fail closed), with a hint to run `git fetch origin ai-main`.
 - **PROC-014** (`.claude/hooks/stop-dod.sh`). It runs only in the main checkout (a root with a `.git` directory) and only when `docs/process/progress.md` has at least one `| T-xxx |` row and every row is `merged` or `split`. `split` counts as done: the task was divided, and its parts are tracked in their own rows. Any other status keeps the hook quiet.
-- **Green-state cache (PROC-014).** A green run is recorded in `.git/gm-dod-green` as a checksum of `HEAD`, `git status --porcelain` and `git diff HEAD`. A later stop with the same state skips the Definition of Done. A red run is never cached, so the next stop runs again.
+- **Green-state cache (PROC-014).** A green run is recorded in `.git/gm-dod-green` as a checksum of `HEAD`, `git status --porcelain`, `git diff HEAD` and the contents of untracked, non-ignored files. A later stop with the same state skips the Definition of Done. A red run is never cached, so the next stop runs again.
 
 ## Consequences
 
 - While `test:integration`, `test:e2e` and `helm:check` are not implemented (`tools/not-implemented.ts`), PROC-014 fails once every task is merged or split. That is the intended signal, and the loop guard means it warns instead of trapping the session.
-- Untracked file contents are not part of the cache key. Only their names are, through `git status --porcelain`.
 
 ## Affected requirements
 
