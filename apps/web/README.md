@@ -2,11 +2,11 @@
 
 Next.js app: UI and Hono API.
 
-Status: the API is mounted (T-021) and the UI shell exists (T-080). `pnpm dev` runs `next dev` (HOST and PORT honoured).
+Status: the API is mounted (T-021), the UI pages exist (T-080 to T-091) and the image runs both from the standalone build (T-097). `pnpm dev` runs `next dev` (HOST and PORT honoured).
 
 ## UI shell (UI-001, UI-010, UI-036)
 
-- `app/` is the App Router: `layout.tsx` (next-intl, `AntdRegistry layer`, theme and query providers), `(shell)/` (signed-in pages inside the sidebar layout), `signin`, `auth/error`. Pages the later UI tasks build answer through `(shell)/[...slug]` until they exist.
+- `app/` is the App Router: `layout.tsx` (next-intl, `AntdRegistry layer`, theme and query providers), `(shell)/` (signed-in pages inside the sidebar layout), `signin`, `auth/error`. `(shell)/[...slug]` answers any other address inside the shell: a sidebar item without a page of its own gets a placeholder (`comingSoon`), and any other address gets the shell's 404.
 - CSS: `app/globals.css` declares the layer order `theme, base, antd, components, utilities`, so Tailwind utilities beat antd, which beats Tailwind's reset. Do not reorder it. Themes follow the OS (`theme.algorithm` plus Tailwind `dark:`).
 - `src/shell/navigation.ts` is the single table of sidebar items and their capability (ADR-0300). `app-shell.tsx` loads the Actor from `GET /api/v1/me`, redirects signed-out visitors to `/signin?next=` and Actors without the role to `/denied?required=<role>`. Server routes still enforce permissions.
 - Strings: every text is in `messages/en.json`; a test fails on literal JSX text. The live indicator shows the `polling` mode of `useLiveInvalidation` (`shell.live.polling`).
@@ -21,7 +21,15 @@ Status: the API is mounted (T-021) and the UI shell exists (T-080). `pnpm dev` r
 
 ## Production entrypoint (DEP-002, ADR-0290)
 
-`src/web.ts` is what the image runs as `web` (`/app/dist/web.js`). Until the Next.js app lands it serves the Hono API (`/api/healthz`, `/api/readyz`, `/api/v1`, `/api/auth`) with `@hono/node-server` on port 3000 (`PORT`, `HOST`), starts the metrics server on `metrics.port` and tracing, and on SIGTERM stops accepting connections, finishes in-flight requests, cuts streams still open after 20 s and exits 0. T-080 swaps the server for the Next.js standalone one.
+`src/web.ts` is what the image runs as `web` (`/app/dist/web.js`). It loads the Next.js standalone build (`.next/standalone/apps/web`, or `GM_WEB_STANDALONE_DIR`) in its own process through Next.js's programmatic server (`prepareNextHandler`), and serves it on its own `http` server on port 3000 (`PORT`, `HOST`). That one server answers the UI pages and the Hono API (`/api/healthz`, `/api/readyz`, `/api/v1`, `/api/auth`, `/api/model`) through `app/api/[[...route]]`. Before Next.js loads, `web.ts` starts tracing, starts the metrics server on `metrics.port` and builds the API runtime. It shares the runtime with the server bundle through `setApiRuntime` and `getApiRuntime`, which keep it on `globalThis`. On SIGTERM (`createShutdown`) it does the following:
+
+- stops accepting connections, finishes in-flight requests and cuts streams still open after 20 s;
+- closes Next.js, the metrics server, the API runtime and the tracing exporter, giving each step at most 1 s;
+- exits 0.
+
+A hard deadline of 23 s exits 0 in any case: the chart's 30 s grace period minus the 5 s `preStop` minus 2 s. The constants in `web.ts` must follow `values.yaml`. After shutdown, `getApiRuntime` throws instead of rebuilding the runtime.
+
+The image's build stage copies `.next/static` (and `public`, if there is one) into the standalone folder. It links the standalone folder's `.next/cache` to `apps/web/.next/cache`, where the chart mounts a writable volume (ADR-0500). For local runs, `pnpm --filter @git-migrator/web start` (`scripts/start-standalone.mjs`) does the copy and runs `server.js` without the metrics server and the drain.
 
 ## API mount (API-001)
 

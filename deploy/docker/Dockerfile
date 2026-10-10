@@ -68,12 +68,25 @@ RUN --mount=type=cache,target=/pnpm-store \
  && pnpm install --frozen-lockfile
 RUN pnpm generate \
  && pnpm turbo run build
+# The Next.js standalone server (DEP-002, ADR-0500): `next build` leaves the static assets and
+# `public` outside `.next/standalone`, so they are copied in. The server's cache directory points
+# at `apps/web/.next/cache`, where the chart mounts an emptyDir (DEP-003); the build cache that
+# `next build` left there is dropped, since the mount hides it anyway.
+RUN standalone=apps/web/.next/standalone/apps/web \
+ && test -f "$standalone/server.js" \
+ && cp -R apps/web/.next/static "$standalone/.next/static" \
+ && { [ ! -d apps/web/public ] || cp -R apps/web/public "$standalone/public"; } \
+ && rm -rf apps/web/.next/cache \
+ && mkdir apps/web/.next/cache \
+ && test ! -e "$standalone/.next/cache" \
+ && ln -s ../../../../cache "$standalone/.next/cache"
 # The ZenStack CLI (a production dependency of the db package) runs `migrate`, and the Prisma
 # engines it needs are fetched by the install scripts, so scripts stay on for this install.
 RUN --mount=type=cache,target=/pnpm-store \
     pnpm config set --global store-dir /pnpm-store \
  && pnpm install --frozen-lockfile --prod
-# /app/dist/<command>.js is what entrypoint.sh starts (DEP-002).
+# /app/dist/<command>.js is what entrypoint.sh starts (DEP-002). web.ts loads the Next.js
+# standalone server prepared above, which serves the UI and mounts the Hono API.
 RUN mkdir -p /app/dist \
  && printf "import { main } from '../apps/web/src/web.ts';\nawait main();\n" > /app/dist/web.js \
  && printf "import { main } from '../apps/worker/src/worker.ts';\nawait main();\n" > /app/dist/worker.js \

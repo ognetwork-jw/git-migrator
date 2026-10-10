@@ -21,3 +21,7 @@ The first e2e run against the standalone web build answered every endpoint that 
 ## Consequences
 
 The runtime image (DEP-001) contains the library in its traced `node_modules`. The image build (T-090) needs no change, because it copies the standalone folder.
+
+## Correction (2026-10-09, T-097)
+
+The last sentence above was not true when it was written. The image copied `apps/`, which contains the standalone folder, but `web` did not run the standalone server, so the image never loaded the queue library from the traced `node_modules`. Since ADR-0500, `web.ts` runs the standalone build, so the consequence above now holds. The external package resolves through `.next/node_modules` inside the standalone folder.

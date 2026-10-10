@@ -34,3 +34,7 @@ DEP-001 says the build stage runs `pnpm deploy --prod` for the worker and takes 
 ## Affected requirements
 
 DEP-001, DEP-002, DEP-003, DEP-010, API-001.
+
+## Correction (2026-10-09, T-097)
+
+Point 4 said that T-080 replaces the web entrypoint's server with the Next.js standalone server. Neither T-080 nor this task did it, and until T-097 the image served the API only, with no UI. ADR-0500 records the replacement. `web.ts` now loads the standalone build in process and keeps the metrics server, tracing and the drain described in point 4. The build stage copies the static assets into the standalone folder.

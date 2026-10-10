@@ -112,10 +112,66 @@ export async function closeAll(steps: readonly (() => unknown)[]): Promise<void>
   if (errors.length > 0) throw errors[0];
 }
 
-let runtime: ApiRuntime | undefined;
+/**
+ * The process-wide API runtime lives on `globalThis` under a registered symbol, not in a module
+ * variable. In the image the `web` entrypoint (`src/web.ts`, run by Node from source) and the
+ * Next.js server bundle each load their own copy of this module in the same process; the symbol
+ * lets both share one runtime, so there is one database pool and one event hub, and the
+ * entrypoint can close it on SIGTERM (DEP-002, ADR-0500).
+ */
+const RUNTIME_KEY = Symbol.for('git-migrator.web.api-runtime');
+/**
+ * Whether the runtime was handed in by the entrypoint (`provided`) or closed (`closed`). Only when
+ * neither happened (`next dev`, tests) does `getApiRuntime` build one on first use.
+ */
+const STATE_KEY = Symbol.for('git-migrator.web.api-runtime-state');
 
-/** The process-wide API runtime, built on first use. */
+type RuntimeHolder = {
+  [RUNTIME_KEY]?: ApiRuntime;
+  [STATE_KEY]?: 'provided' | 'closed';
+};
+
+const holder = globalThis as RuntimeHolder;
+
+/** Thrown by `getApiRuntime` once the runtime is closed (shutdown) or was never provided. */
+export class ApiRuntimeUnavailableError extends Error {
+  constructor(state: 'provided' | 'closed') {
+    super(
+      state === 'closed'
+        ? 'the API runtime is closed: the process is shutting down'
+        : 'the API runtime provided by the entrypoint is gone',
+    );
+    this.name = 'ApiRuntimeUnavailableError';
+  }
+}
+
+/**
+ * The process-wide API runtime. Built on first use only when the entrypoint never provided one
+ * (`next dev`); after `closeApiRuntime` it throws instead of opening new pools during shutdown.
+ */
 export function getApiRuntime(): ApiRuntime {
-  runtime ??= buildApiRuntime();
-  return runtime;
+  const runtime = holder[RUNTIME_KEY];
+  if (runtime) return runtime;
+  const state = holder[STATE_KEY];
+  if (state) throw new ApiRuntimeUnavailableError(state);
+  const built = buildApiRuntime();
+  holder[RUNTIME_KEY] = built;
+  return built;
+}
+
+/** Makes `runtime` the process-wide API runtime that `getApiRuntime` returns. */
+export function setApiRuntime(runtime: ApiRuntime): void {
+  holder[RUNTIME_KEY] = runtime;
+  holder[STATE_KEY] = 'provided';
+}
+
+/**
+ * Closes the process-wide API runtime, if one was built, and marks it closed: later calls of
+ * `getApiRuntime` throw and never build a new one.
+ */
+export async function closeApiRuntime(): Promise<void> {
+  const runtime = holder[RUNTIME_KEY];
+  delete holder[RUNTIME_KEY];
+  holder[STATE_KEY] = 'closed';
+  await runtime?.close();
 }

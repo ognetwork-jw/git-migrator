@@ -3,9 +3,10 @@
  *
  * `next start` refuses to run a standalone build, and the standalone folder does not contain the
  * static assets. This script copies them in (what the Next.js docs describe), maps HOST and PORT
- * onto the HOSTNAME and PORT the server reads, and runs `server.js`. The runtime image (T-090)
- * does the same copy at build time and runs `server.js` directly, so this file is for local runs
- * and the visual regression suite.
+ * onto the HOSTNAME and PORT the server reads, and runs `server.js` in a child process. It is for
+ * local runs and the visual and e2e suites. The runtime image does not use it: the build stage
+ * copies the static assets at build time, and `src/web.ts` loads the standalone build in its own
+ * process, so that the metrics server, tracing and the SIGTERM drain stay in place (ADR-0500).
  */
 import { spawn } from 'node:child_process';
 import { cpSync, existsSync } from 'node:fs';

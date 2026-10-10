@@ -79,6 +79,61 @@ describe('image (DEP-001)', () => {
     expect(read('apps/worker/src/worker.ts')).toMatch(/export async function main\(\)/);
   });
 
+  it('[DEP-002] web.js starts the Next.js standalone server, with its static assets, in the image', () => {
+    // next build writes the standalone server for apps/web.
+    expect(read('apps/web/next.config.ts')).toMatch(/output: 'standalone'/);
+    // web.ts (the web shim's entrypoint) loads that build and serves it; it no longer serves the
+    // API on its own.
+    const web = read('apps/web/src/web.ts');
+    expect(web).toMatch(/'\.next', 'standalone', 'apps', 'web'/);
+    expect(web).toMatch(/await prepareNextHandler\(/);
+    expect(web).toMatch(/startWebServer\(\{ handler: nextApp\.handler/);
+    expect(web).not.toMatch(/runtime\.app\.fetch/);
+    // The build stage completes the standalone folder after `next build` and before the prune.
+    const build = dockerfile.slice(
+      dockerfile.indexOf('AS build'),
+      dockerfile.indexOf('AS runtime'),
+    );
+    const standalone = 'apps/web/.next/standalone/apps/web';
+    expect(build).toContain(`standalone=${standalone}`);
+    expect(build).toContain('test -f "$standalone/server.js"');
+    expect(build).toContain('cp -R apps/web/.next/static "$standalone/.next/static"');
+    expect(build).toContain('cp -R apps/web/public "$standalone/public"');
+    const order = ['pnpm turbo run build', 'cp -R apps/web/.next/static', '--prod'].map((s) =>
+      build.indexOf(s),
+    );
+    expect([...order].sort((a, b) => a - b)).toEqual(order);
+    // The runtime stage copies apps/, which holds the standalone folder.
+    const runtime = dockerfile.slice(dockerfile.indexOf('AS runtime'));
+    expect(runtime).toContain('COPY --from=build /app/apps ./apps');
+  });
+
+  it('[DEP-003] the standalone server caches under the chart-mounted .next/cache', () => {
+    const build = dockerfile.slice(
+      dockerfile.indexOf('AS build'),
+      dockerfile.indexOf('AS runtime'),
+    );
+    // standalone/apps/web/.next/cache -> apps/web/.next/cache, the emptyDir mount of the chart.
+    expect(build).toContain('ln -s ../../../../cache "$standalone/.next/cache"');
+    expect(build).toContain('mkdir apps/web/.next/cache');
+    // A cache directory that next build left in the standalone folder would make ln -s create
+    // the link inside it instead of failing.
+    expect(build.indexOf('test ! -e "$standalone/.next/cache"')).toBeGreaterThan(-1);
+    expect(build.indexOf('test ! -e "$standalone/.next/cache"')).toBeLessThan(
+      build.indexOf('ln -s ../../../../cache'),
+    );
+    // The smoke test writes through the link and finds the file on the mounted volume.
+    expect(read('deploy/docker/smoke.sh')).toContain(
+      'touch /app/apps/web/.next/standalone/apps/web/.next/cache/.w && test -f /app/apps/web/.next/cache/.w',
+    );
+    const linkDir = 'apps/web/.next/standalone/apps/web/.next';
+    expect(join('/app', linkDir, '../../../../cache')).toBe('/app/apps/web/.next/cache');
+    expect(read('deploy/helm/git-migrator/templates/deployment-web.yaml')).toContain(
+      'mountPath: /app/apps/web/.next/cache',
+    );
+    expect(read('deploy/docker/smoke.sh')).toContain('--tmpfs /app/apps/web/.next/cache');
+  });
+
   it('[DEP-003] the image sets HOME, GM_SCRATCH_DIR and TMPDIR and owns the scratch directory', () => {
     const runtime = dockerfile.slice(dockerfile.indexOf('AS runtime'));
     expect(runtime).toMatch(/HOME=\/home\/gm/);
@@ -356,6 +411,17 @@ describe('workflows (DEP-060)', () => {
     expect(smoke).toContain('/api/healthz');
     expect(smoke).toContain('/api/readyz');
     expect(smoke).toContain('8081/readyz');
+  });
+
+  it('[DEP-002] the smoke script checks that web serves the UI: /, the sign-in page and its assets', () => {
+    const smoke = read('deploy/docker/smoke.sh');
+    expect(smoke).toContain('expect_html / "$(page / ');
+    expect(smoke).toContain('expect_html /signin "$(page /signin ');
+    expect(smoke).toContain("grep -q 'Sign in to git-migrator'");
+    expect(smoke).toContain('/_next/static/');
+    // The text the smoke script looks for is the sign-in page's title.
+    const en = JSON.parse(read('apps/web/messages/en.json'));
+    expect(en.auth.signin.title).toBe('Sign in to git-migrator');
   });
 });
 

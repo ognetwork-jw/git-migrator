@@ -5,7 +5,15 @@ import { PROBLEMS } from '@git-migrator/api';
 import { migrateAuthSchema } from '@git-migrator/auth';
 import { createTestDatabase, type TestDatabase } from '@git-migrator/db/testing';
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
-import { buildApiRuntime, closeAll } from './api.ts';
+import {
+  type ApiRuntime,
+  ApiRuntimeUnavailableError,
+  buildApiRuntime,
+  closeAll,
+  closeApiRuntime,
+  getApiRuntime,
+  setApiRuntime,
+} from './api.ts';
 
 const messages = JSON.parse(
   readFileSync(new URL('../../messages/en.json', import.meta.url), 'utf8'),
@@ -76,7 +84,7 @@ describe('[API-001] the Hono app is composed from configuration and mounted in N
       );
       expect(denied.status).toBe(401);
       const server = await import('./api.ts');
-      await server.getApiRuntime().close();
+      await server.closeApiRuntime();
     } finally {
       vi.unstubAllEnvs();
     }
@@ -104,5 +112,46 @@ describe('[API-011] problem messages for the UI', () => {
       ]),
     ).rejects.toThrow('first');
     expect(closed).toEqual(['events', 'jobs', 'auth', 'db']);
+  });
+});
+
+describe('[DEP-002] one API runtime per web process', () => {
+  it('[DEP-002] the entrypoint and the Next.js bundle share the runtime, and the entrypoint closes it', async () => {
+    const close = vi.fn(async () => undefined);
+    const runtime = { app: {}, config: {}, close } as unknown as ApiRuntime;
+    setApiRuntime(runtime);
+    try {
+      expect(getApiRuntime()).toBe(runtime);
+      // The Next.js server bundle holds its own copy of this module; it must see the same runtime.
+      vi.resetModules();
+      const bundled = await import('./api.ts');
+      expect(bundled.getApiRuntime()).toBe(runtime);
+    } finally {
+      await closeApiRuntime();
+    }
+    expect(close).toHaveBeenCalledOnce();
+    // Closed and forgotten: a second close does nothing.
+    await closeApiRuntime();
+    expect(close).toHaveBeenCalledOnce();
+  });
+
+  it('[DEP-002][DEP-030] after shutdown closed it, the runtime is never rebuilt', async () => {
+    // A valid environment, so a lazy build would succeed if it were attempted.
+    for (const [key, value] of Object.entries(env)) vi.stubEnv(key, value);
+    try {
+      setApiRuntime({ app: {}, config: {}, close: async () => undefined } as unknown as ApiRuntime);
+      await closeApiRuntime();
+      expect(() => getApiRuntime()).toThrow(ApiRuntimeUnavailableError);
+      expect(() => getApiRuntime()).toThrow(/closed/);
+      // The Next.js bundle's copy of the module sees the same marker.
+      vi.resetModules();
+      const bundled = await import('./api.ts');
+      expect(() => bundled.getApiRuntime()).toThrow(/closed/);
+      // A later close is still harmless.
+      await closeApiRuntime();
+      expect(() => getApiRuntime()).toThrow(/closed/);
+    } finally {
+      vi.unstubAllEnvs();
+    }
   });
 });
