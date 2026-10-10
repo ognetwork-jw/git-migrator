@@ -19,7 +19,7 @@ How to run git-migrator on Azure Kubernetes Service (AKS) with the Helm chart in
 2. **Azure Key Vault** with the RBAC permission model. Nobody needs data-plane access except the managed identity below and the operator who populates the secrets.
 3. **User-assigned managed identity** with the **Key Vault Secrets User** role on that vault. Its client id is `azure.workloadIdentityClientId`.
 4. **Azure Database for PostgreSQL Flexible Server**, version 16, reachable from the cluster, with a database (`git_migrator`) and a role that owns it. Add `PG_TRGM` to `azure.extensions` (see [PostgreSQL extensions](#postgresql-extensions)). TLS is on: the chart sets `postgres.sslmode: require`.
-5. **Microsoft Entra app registration** for sign-in (redirect URI `<publicUrl>/api/auth/callback/entra`). The tenant id goes in `config.auth.entra.tenantId`; the client id and secret go in Key Vault.
+5. **Microsoft Entra app registration** for sign-in (redirect URI `<publicUrl>/api/auth/callback/microsoft`, because `microsoft` is the sign-in provider id in `packages/auth/src/auth.ts`). The tenant id goes in `config.auth.entra.tenantId`; the client id and secret go in Key Vault.
 6. **Image registry access**: the release workflow publishes to `ghcr.io/<owner>/git-migrator` and the chart to `oci://ghcr.io/<owner>/charts`. Private packages need `imagePullSecrets`.
 7. A **GitHub App** and **Bitbucket credentials** for the endpoints you configure (see `docs/providers/`).
 

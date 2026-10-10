@@ -428,6 +428,13 @@ describe('workflows (DEP-060)', () => {
 describe('docs/deployment.md (DEP-020)', () => {
   const doc = read('docs/deployment.md');
 
+  it('[AUTH-002][DEP-020] the documented Entra redirect URI uses the sign-in provider id', () => {
+    const id = read('packages/auth/src/auth.ts').match(/ENTRA_PROVIDER_ID = '([^']+)'/)?.[1];
+    expect(id).toBe('microsoft');
+    expect(doc).toContain(`\`<publicUrl>/api/auth/callback/${id}\``);
+    expect(doc).not.toMatch(/\/api\/auth\/callback\/entra/);
+  });
+
   it('[DEP-020] covers Azure prerequisites, Key Vault secrets, workload identity, extensions and connections', () => {
     for (const heading of [
       '## Azure prerequisites',
