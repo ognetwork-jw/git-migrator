@@ -1,6 +1,6 @@
 'use client';
 
-import type { ParamValues } from '@git-migrator/guidance';
+import { joinSecretParams, type ParamValues } from '@git-migrator/guidance';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Button, Collapse, Input, Tag, Typography } from 'antd';
 import { useTranslations } from 'next-intl';
@@ -117,7 +117,7 @@ function TaskItem({
     <div className="flex flex-col gap-3">
       <GuidanceView
         code={task.code}
-        params={task.params}
+        params={joinSecretParams(task.params, task.secretParams)}
         fieldPaths={task.sourcePlanItem?.fieldPaths}
         defaults={defaults}
         showTitle={false}

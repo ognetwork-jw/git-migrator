@@ -4,6 +4,7 @@
  * docs/adr/0343-run-guard-and-findings.md.
  */
 import { deriveReadiness, hashCanonical } from '@git-migrator/core';
+import { joinSecretParams, splitSecretParams } from '@git-migrator/guidance';
 import { toJson } from './store.ts';
 import type { Tx } from './types.ts';
 
@@ -102,6 +103,53 @@ export async function clearRunBlockers(
 }
 
 /**
+ * Moves secret guidance parameters (a webhook `targetUrl`) out of `params` into `secretParams` on
+ * every ManualTask and PlanItem of a Migration that still holds them in `params`. The migration
+ * `20261010000001_secret_params` does this once, but during a rolling upgrade a pod of the previous
+ * version can still write such rows after it ran; every write path of this version calls this, so
+ * those rows are cleaned on the Migration's next Analysis or Run finding (ADR-0503).
+ */
+export async function moveLegacySecretParams(
+  tx: Pick<Tx, '$queryRaw' | 'manualTask' | 'planItem'>,
+  migrationId: string,
+): Promise<number> {
+  const tasks = await tx.$queryRaw<{ id: string }[]>`
+    SELECT id FROM app.manual_task WHERE migration_id = ${migrationId} AND params ? 'targetUrl'`;
+  const items = await tx.$queryRaw<{ id: string }[]>`
+    SELECT p.id FROM app.plan_item p JOIN app.analysis a ON a.id = p.analysis_id
+    WHERE a.migration_id = ${migrationId} AND p.params ? 'targetUrl'`;
+  for (const { id } of tasks) {
+    const row = await tx.manualTask.findUniqueOrThrow({
+      where: { id },
+      select: { params: true, secretParams: true },
+    });
+    const split = splitSecretParams(row.params as Record<string, unknown>);
+    await tx.manualTask.update({
+      where: { id },
+      data: {
+        params: toJson(split.params),
+        secretParams: toJson(joinSecretParams(row.secretParams, split.secretParams)),
+      },
+    });
+  }
+  for (const { id } of items) {
+    const row = await tx.planItem.findUniqueOrThrow({
+      where: { id },
+      select: { params: true, secretParams: true },
+    });
+    const split = splitSecretParams(row.params as Record<string, unknown>);
+    await tx.planItem.update({
+      where: { id },
+      data: {
+        params: toJson(split.params),
+        secretParams: toJson(joinSecretParams(row.secretParams, split.secretParams)),
+      },
+    });
+  }
+  return tasks.length + items.length;
+}
+
+/**
  * Adds a run-origin ManualTask, identified by (code, facetKey, paramsHash) like an analysis-origin
  * one. An existing task of that identity keeps its status and origin: a task an operator completed
  * is not reopened by a later Run. Returns whether a task was created.
@@ -118,7 +166,9 @@ export async function addRunTask(
   },
 ): Promise<boolean> {
   const params = finding.params ?? {};
+  await moveLegacySecretParams(tx, migrationId);
   const paramsHash = hashCanonical(params);
+  const split = splitSecretParams(params);
   const existing = await tx.manualTask.findFirst({
     where: { migrationId, code: finding.code, facetKey: finding.facetKey, paramsHash },
     select: { id: true },
@@ -131,7 +181,9 @@ export async function addRunTask(
       code: finding.code,
       phase: finding.phase,
       origin: 'run',
-      params: toJson(params),
+      // A parameter that may carry a credential is stored apart (ADR-0503).
+      params: toJson(split.params),
+      ...(split.secretParams ? { secretParams: toJson(split.secretParams) } : {}),
       verifiable: finding.verifiable === true,
       paramsHash,
     },

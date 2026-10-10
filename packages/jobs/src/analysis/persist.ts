@@ -4,6 +4,7 @@
  * transaction. The Migration row is read inside the transaction and written with a guard, so a Run
  * that starts meanwhile is never overwritten (LIF-002). Decisions: docs/adr/0310-analysis-processor.md.
  */
+
 import { randomUUID } from 'node:crypto';
 import {
   deriveReadiness,
@@ -16,8 +17,10 @@ import {
   transition,
 } from '@git-migrator/core';
 import { type Db, publishEventIn } from '@git-migrator/db';
+import { splitSecretParams } from '@git-migrator/guidance';
 import type { Logger } from '@git-migrator/observability';
 import { databaseNow } from '../db-clock.ts';
+import { moveLegacySecretParams } from '../run/findings.ts';
 
 type Json = Record<string, unknown>;
 
@@ -66,6 +69,19 @@ export interface PersistHooks {
 const OBSOLETE = 'obsolete';
 const MAX_TASK_EVENTS = 25;
 const WRITE_ATTEMPTS = 5;
+
+/**
+ * `params` and `secretParams` of a PlanItem or ManualTask: a parameter that may carry a credential
+ * (a webhook URL) is stored apart, where viewers cannot read it (ADR-0503). The identity hash is
+ * still computed over all of them, in the Plan.
+ */
+function secretSplit(all: Record<string, unknown>) {
+  const { params, secretParams } = splitSecretParams(all);
+  return {
+    params: asJson(params),
+    ...(secretParams ? { secretParams: asJson(secretParams) } : {}),
+  };
+}
 
 /** Plan items need a facet key in the table; naming and target findings use their code prefix. */
 export function planFacetKey(item: Pick<PlanItem, 'facetKey' | 'code'>): string {
@@ -143,7 +159,7 @@ export async function persistAnalysis(
           code: item.code,
           fidelity: item.fidelity ?? null,
           fieldPaths: item.fieldPaths,
-          params: asJson(item.params),
+          ...secretSplit(item.params),
           order: item.order,
         },
         select: { id: true },
@@ -151,6 +167,8 @@ export async function persistAnalysis(
       planItemIds.set(item, row.id);
     }
 
+    // Rows a previous version wrote during a rolling upgrade keep no URL in params (ADR-0503).
+    await moveLegacySecretParams(tx, input.migrationId);
     const changedTaskIds = await upsertTasks(tx, input, planItemIds);
     await recordExpectedDifferences(tx, input);
 
@@ -220,7 +238,7 @@ async function upsertTasks(
           code: item.code,
           phase: item.kind === 'pre_task' ? 'pre' : 'post',
           origin: 'analysis',
-          params: asJson(item.params),
+          ...secretSplit(item.params),
           verifiable: item.verifiable === true,
           paramsHash: item.paramsHash,
           sourcePlanItemId,

@@ -1086,7 +1086,8 @@ export class SchemaType implements SchemaDef {
                 },
                 data: {
                     name: "data",
-                    type: "Json"
+                    type: "Json",
+                    attributes: [{ name: "@deny", args: [{ name: "operation", value: ExpressionUtils.literal("read") }, { name: "condition", value: ExpressionUtils.binary(ExpressionUtils.member(ExpressionUtils.call("auth"), ["role"]), "==", ExpressionUtils.literal("viewer")) }] }] as readonly AttributeApplication[]
                 },
                 unreadable: {
                     name: "unreadable",
@@ -1251,7 +1252,8 @@ export class SchemaType implements SchemaDef {
                 },
                 translation: {
                     name: "translation",
-                    type: "Json"
+                    type: "Json",
+                    attributes: [{ name: "@deny", args: [{ name: "operation", value: ExpressionUtils.literal("read") }, { name: "condition", value: ExpressionUtils.binary(ExpressionUtils.member(ExpressionUtils.call("auth"), ["role"]), "==", ExpressionUtils.literal("viewer")) }] }] as readonly AttributeApplication[]
                 },
                 startedAt: {
                     name: "startedAt",
@@ -1352,6 +1354,12 @@ export class SchemaType implements SchemaDef {
                 params: {
                     name: "params",
                     type: "Json"
+                },
+                secretParams: {
+                    name: "secretParams",
+                    type: "Json",
+                    optional: true,
+                    attributes: [{ name: "@map", args: [{ name: "name", value: ExpressionUtils.literal("secret_params") }] }, { name: "@deny", args: [{ name: "operation", value: ExpressionUtils.literal("read") }, { name: "condition", value: ExpressionUtils.binary(ExpressionUtils.member(ExpressionUtils.call("auth"), ["role"]), "==", ExpressionUtils.literal("viewer")) }] }] as readonly AttributeApplication[]
                 },
                 order: {
                     name: "order",
@@ -1907,6 +1915,12 @@ export class SchemaType implements SchemaDef {
                     name: "params",
                     type: "Json",
                     attributes: [{ name: "@deny", args: [{ name: "operation", value: ExpressionUtils.literal("update") }, { name: "condition", value: ExpressionUtils.literal(true) }] }] as readonly AttributeApplication[]
+                },
+                secretParams: {
+                    name: "secretParams",
+                    type: "Json",
+                    optional: true,
+                    attributes: [{ name: "@deny", args: [{ name: "operation", value: ExpressionUtils.literal("update") }, { name: "condition", value: ExpressionUtils.literal(true) }] }, { name: "@deny", args: [{ name: "operation", value: ExpressionUtils.literal("read") }, { name: "condition", value: ExpressionUtils.binary(ExpressionUtils.member(ExpressionUtils.call("auth"), ["role"]), "==", ExpressionUtils.literal("viewer")) }] }, { name: "@map", args: [{ name: "name", value: ExpressionUtils.literal("secret_params") }] }] as readonly AttributeApplication[]
                 },
                 verifiable: {
                     name: "verifiable",

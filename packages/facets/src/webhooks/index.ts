@@ -151,8 +151,16 @@ export function translateHookSet(
       postTasks.push({
         code: codes.recreateManually,
         paths: [hookPath(h.key)],
-        // `hasSecret` is a flag only: the guidance tells the operator to set a new secret.
-        params: { targetUrl: h.url, events, ...(h.hasSecret ? { hasSecret: true } : {}) },
+        // `hasSecret` is a flag only: the guidance tells the operator to set a new secret. The full
+        // URL is for the copy snippet; persistence stores it apart from the other parameters, where
+        // viewers cannot read it, and `key` identifies the hook for completion (ADR-0503).
+        params: {
+          key: h.key,
+          targetUrl: h.url,
+          targetUrlDisplay: redactWebhookUrl(h.url),
+          events,
+          ...(h.hasSecret ? { hasSecret: true } : {}),
+        },
       });
     }
     // A hook that is not created appears only as the recreate task, whose guidance covers its

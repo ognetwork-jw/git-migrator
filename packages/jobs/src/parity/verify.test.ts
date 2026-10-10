@@ -1,3 +1,4 @@
+import { webhookKey } from '@git-migrator/canonical';
 import { hashCanonical } from '@git-migrator/core';
 import { createTestDatabase, type TestDatabase } from '@git-migrator/db/testing';
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
@@ -83,6 +84,36 @@ describe('[LIF-061] verifiable tasks complete themselves', () => {
       action: PARITY_COMPLETION_ACTION,
       subjectType: 'manual_task',
     });
+  });
+
+  it('[LIF-061] [FAC-WEB-002] a recreate task whose URL is in secretParams (a migrated legacy row with no key) still completes itself', async () => {
+    const w = await seedParityWorld(db());
+    const url = 'https://ci.example.test/hook?token=legacy';
+    const hook = {
+      key: webhookKey(url),
+      url,
+      events: ['push'],
+      active: true,
+      hasSecret: false,
+      verifyTls: true,
+    };
+    const params = { events: ['push'], targetUrlDisplay: 'https://ci.example.test/…' };
+    const task = await db().manualTask.create({
+      data: {
+        migrationId: w.migrationId,
+        facetKey: 'webhooks',
+        code: 'webhooks.recreate-manually',
+        phase: 'post',
+        origin: 'analysis',
+        params,
+        secretParams: { targetUrl: url },
+        verifiable: true,
+        paramsHash: hashCanonical({ ...params, targetUrl: url }),
+      },
+    });
+    const sim = equalSim().differ('webhooks', { hooks: [hook] }, { hooks: [hook] });
+    const result = await runParity(parityDeps(db(), t.db.pool, sim), w.migrationId, options);
+    expect(result.skipped === undefined && result.completedTasks).toEqual([task.id]);
   });
 
   it('[LIF-061] the completion keeps the reopen rule: no task is dismissed, so none can be reopened by an Analysis', async () => {

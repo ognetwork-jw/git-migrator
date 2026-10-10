@@ -191,6 +191,7 @@
 | [0491](0491-live-e2e-target-switch.md) | The live e2e chooses its target with `GM_E2E_TARGET` and fails closed; the dry mode runs in CI | agent-decided |
 | [0492](0492-live-e2e-stack-fixture-and-reset.md) | Live e2e stack, fixture constants and reset | agent-decided |
 | [0500](0500-web-entrypoint-runs-next-standalone.md) | The web entrypoint runs the Next.js standalone build in process, keeping metrics, tracing and the drain | agent-decided |
+| [0503](0503-viewers-do-not-read-snapshot-data.md) | Viewers do not read Snapshot data or Analysis translations through RPC (webhook URLs may carry credentials); amends ADR-0331 | agent-decided |
 | [0506](0506-illustrative-requirement-ids.md) | Illustrative IDs in the overview are not requirements | agent-decided |
 
 New ADRs take the next free number, or the range the orchestrator assigns to a task or fix branch (check the highest row above, and the highest file in this directory, before choosing). Implementor decisions use `status: agent-decided` (PROC-005); the orchestrator folds them into the spec and changes the status to `accepted (spec updated)`.

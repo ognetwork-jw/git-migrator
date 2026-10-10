@@ -1,6 +1,6 @@
 'use client';
 
-import type { ParamValues } from '@git-migrator/guidance';
+import { joinSecretParams, type ParamValues } from '@git-migrator/guidance';
 import { Tag, Typography } from 'antd';
 import { useTranslations } from 'next-intl';
 import { useMemo } from 'react';
@@ -61,7 +61,7 @@ export function groupFindings(
               key: item.id,
               kind: item.kind,
               code: item.code,
-              params: item.params,
+              params: joinSecretParams(item.params, item.secretParams),
               facetKey: item.facetKey,
               fieldPaths: item.fieldPaths,
               runOrigin: false,

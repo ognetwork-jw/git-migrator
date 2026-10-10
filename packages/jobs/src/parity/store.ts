@@ -3,8 +3,10 @@
  * verifiable ManualTasks. The caller holds the Migration row lock (and, in a Run, the Run row lock
  * after it, ADR-0340). Decisions: docs/adr/0396-parity-engine-and-verified-status.md.
  */
+
 import { type FacetLookup, satisfiedTasks } from '@git-migrator/core';
 import { publishEventIn } from '@git-migrator/db';
+import { joinSecretParams } from '@git-migrator/guidance';
 import type { Logger } from '@git-migrator/observability';
 import { recomputeReadiness } from '../run/findings.ts';
 import { toJson } from '../run/store.ts';
@@ -155,13 +157,20 @@ async function completeVerifiableTasks(
     if (tasks.length === 0) continue;
     let satisfied: typeof tasks;
     try {
+      // The Facet judges a task by all its parameters, the secret ones included (a webhook URL,
+      // ADR-0503): a task row written before `key` was a parameter is found by its URL.
+      const judged = tasks.map((t) => ({
+        ...t,
+        params: joinSecretParams(t.params, t.secretParams),
+      }));
+      const byId = new Map(tasks.map((t) => [t.id, t]));
       satisfied = satisfiedTasks(
         input.registry,
         facet.facetKey,
-        tasks,
+        judged,
         evidence.target,
         evidence.diffs,
-      );
+      ).flatMap((t) => byId.get(t.id) ?? []);
     } catch (error) {
       // A Facet that cannot judge its tasks leaves them open; the check itself stands.
       input.log.warn(

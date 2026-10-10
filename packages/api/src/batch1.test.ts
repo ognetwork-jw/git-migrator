@@ -860,6 +860,69 @@ describe('[API-020] [LIF-063] GET /migrations/{id}/diff', () => {
     expect(JSON.stringify(vars.source)).toContain('git.example');
   });
 
+  it('[FAC-WEB-002] a viewer reads no webhook URL through RPC; the redacted diff is the way (ADR-0503)', async () => {
+    const rpc = async (role: Role, model: string, args: unknown) => {
+      const q = encodeURIComponent(JSON.stringify(args));
+      const res = await app.request(`${ORIGIN}/api/model/${model}/findMany?q=${q}`, {
+        headers: { authorization: `Bearer ${keys[role]}` },
+      });
+      expect(res.status).toBe(200);
+      return res.text();
+    };
+    const snapshots = { where: { facetKey: 'webhooks' } };
+    const analyses = { where: { migrationId: seed.mApi } };
+    expect(await rpc('viewer', 'facetSnapshot', snapshots)).not.toContain('PATHSECRET');
+    expect(await rpc('viewer', 'analysis', analyses)).not.toContain('PATHSECRET');
+    // The operator still reads it, so the viewer's answer is the policy and not an empty query.
+    expect(await rpc('operator', 'facetSnapshot', snapshots)).toContain('PATHSECRET');
+    expect(await rpc('operator', 'analysis', analyses)).toContain('PATHSECRET');
+
+    // The recreate task and its PlanItem keep the full URL in secretParams only (ADR-0503).
+    const db = t.db.privileged;
+    const { latestAnalysisId } = await db.migration.findUniqueOrThrow({
+      where: { id: seed.mApi },
+    });
+    const split = { key: 'k', targetUrlDisplay: 'https://hooks.example/…' };
+    const secret = { targetUrl: 'https://hooks.example/path/PATHSECRET?x=1' };
+    const item = await db.planItem.create({
+      data: {
+        analysisId: latestAnalysisId as string,
+        facetKey: 'webhooks',
+        kind: 'post_task',
+        code: 'webhooks.recreate-manually',
+        fieldPaths: [],
+        params: split,
+        secretParams: secret,
+        order: 99,
+      },
+    });
+    await db.manualTask.create({
+      data: {
+        migrationId: seed.mApi,
+        facetKey: 'webhooks',
+        code: 'webhooks.recreate-manually',
+        phase: 'post',
+        origin: 'analysis',
+        params: split,
+        secretParams: secret,
+        verifiable: true,
+        paramsHash: 'h-recreate',
+        sourcePlanItemId: item.id,
+      },
+    });
+    const tasks = { where: { migrationId: seed.mApi } };
+    const items = { where: { id: item.id } };
+    for (const [model, args] of [
+      ['manualTask', tasks],
+      ['planItem', items],
+    ] as const) {
+      const viewer = await rpc('viewer', model, args);
+      expect(viewer, model).not.toContain('PATHSECRET');
+      expect(viewer, model).toContain('hooks.example/…');
+      expect(await rpc('operator', model, args), model).toContain('PATHSECRET');
+    }
+  });
+
   it('[LIF-063] ?facetKey narrows to one Facet; an unknown Facet is a 422 problem', async () => {
     const one = await diff('?facetKey=variables');
     expect(one.facets.map((f) => f.facetKey)).toEqual(['variables']);

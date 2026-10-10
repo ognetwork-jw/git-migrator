@@ -369,4 +369,83 @@ describe('[LIF-049] run-origin findings', () => {
       (await h.db.manualTask.findUniqueOrThrow({ where: { id: tasks[0]?.id ?? '' } })).status,
     ).toBe('done');
   });
+
+  it('[FAC-WEB-002] a task parameter that may carry a credential is stored apart, with its display form in params (ADR-0503)', async () => {
+    const h = new Harness(t);
+    const { world } = await h.queuedRun();
+    const url = 'https://hooks.example/path/SECRETPATH?token=x';
+    await h.db.$transaction((tx) =>
+      addRunTask(tx, world.migrationId, {
+        code: 'webhooks.recreate-manually',
+        facetKey: 'webhooks',
+        phase: 'post',
+        params: { key: 'k', targetUrl: url, events: ['push'] },
+      }),
+    );
+    const task = await h.db.manualTask.findFirstOrThrow({
+      where: { migrationId: world.migrationId, code: 'webhooks.recreate-manually' },
+    });
+    expect(task.params).toEqual({
+      key: 'k',
+      targetUrlDisplay: 'https://hooks.example/…',
+      events: ['push'],
+    });
+    expect(task.secretParams).toEqual({ targetUrl: url });
+  });
+
+  it('[FAC-WEB-002] a task row a previous version wrote with the URL in params during a rolling upgrade is cleaned on the next write (ADR-0503)', async () => {
+    const h = new Harness(t);
+    const { world } = await h.queuedRun();
+    const url = 'https://hooks.example/path/OLDPOD?token=x';
+    // Written by a pod of the previous version after the migration ran.
+    const legacy = await h.db.manualTask.create({
+      data: {
+        migrationId: world.migrationId,
+        facetKey: 'webhooks',
+        code: 'webhooks.recreate-manually',
+        phase: 'post',
+        origin: 'analysis',
+        params: { targetUrl: url, events: ['push'] },
+        verifiable: true,
+        paramsHash: 'old-pod',
+      },
+    });
+    const analysis = await h.db.analysis.create({
+      data: {
+        migrationId: world.migrationId,
+        readiness: 'ready',
+        sourceSnapshotIds: [],
+        targetSnapshotIds: [],
+        translation: {},
+      },
+    });
+    const legacyItem = await h.db.planItem.create({
+      data: {
+        analysisId: analysis.id,
+        facetKey: 'webhooks',
+        kind: 'post_task',
+        code: 'webhooks.recreate-manually',
+        fieldPaths: [],
+        params: { targetUrl: url, events: ['push'] },
+        order: 1,
+      },
+    });
+    await h.db.$transaction((tx) =>
+      addRunTask(tx, world.migrationId, {
+        code: 'deploy-keys.key-in-use',
+        facetKey: 'deploy-keys',
+        phase: 'pre',
+        params: { title: 'ci' },
+      }),
+    );
+    const cleaned = await h.db.manualTask.findUniqueOrThrow({ where: { id: legacy.id } });
+    expect(cleaned.params).toEqual({
+      events: ['push'],
+      targetUrlDisplay: 'https://hooks.example/…',
+    });
+    expect(cleaned.secretParams).toEqual({ targetUrl: url });
+    const item = await h.db.planItem.findUniqueOrThrow({ where: { id: legacyItem.id } });
+    expect(JSON.stringify(item.params)).not.toContain('OLDPOD');
+    expect(item.secretParams).toEqual({ targetUrl: url });
+  });
 });

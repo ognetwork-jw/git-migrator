@@ -69,7 +69,12 @@ describe('org-webhooks facet', () => {
         expect.objectContaining({
           code: 'org-webhooks.recreate-manually',
           paths: [hpath(URL_A)],
-          params: { targetUrl: URL_A, events: ['cr.merged', 'push'] },
+          params: {
+            key: webhookKey(URL_A),
+            targetUrl: URL_A,
+            targetUrlDisplay: 'https://ci.example.com/…',
+            events: ['cr.merged', 'push'],
+          },
           verifiable: true,
         }),
       ]);

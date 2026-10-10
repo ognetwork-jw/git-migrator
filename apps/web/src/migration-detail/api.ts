@@ -16,6 +16,8 @@ export interface PlanItemRow {
   readonly code: string;
   readonly fieldPaths: readonly string[];
   readonly params: unknown;
+  /** Secret guidance parameters (a webhook URL); null for viewers (ADR-0503). */
+  readonly secretParams?: unknown;
   readonly order: number;
 }
 
@@ -68,6 +70,8 @@ export interface TaskRow {
   readonly phase: 'pre' | 'post';
   readonly origin: 'analysis' | 'run';
   readonly params: unknown;
+  /** Secret guidance parameters (a webhook URL); null for viewers (ADR-0503). */
+  readonly secretParams?: unknown;
   readonly verifiable: boolean;
   readonly status: 'open' | 'done' | 'dismissed';
   readonly note: string | null;
@@ -206,6 +210,7 @@ export const fetchMigration = async (id: string): Promise<MigrationDetail | null
                 code: true,
                 fieldPaths: true,
                 params: true,
+                secretParams: true,
                 order: true,
               },
             },
@@ -227,6 +232,7 @@ export const fetchTasks = (id: string) =>
       phase: true,
       origin: true,
       params: true,
+      secretParams: true,
       verifiable: true,
       status: true,
       note: true,

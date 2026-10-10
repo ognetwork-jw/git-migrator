@@ -10,5 +10,6 @@ export * from './coverage.ts';
 export * from './entries.ts';
 export * from './params.ts';
 export * from './render.ts';
+export * from './secret-params.ts';
 export * from './template.ts';
 export * from './types.ts';

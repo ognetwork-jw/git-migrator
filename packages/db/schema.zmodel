@@ -343,7 +343,7 @@ model FacetSnapshot {
     repositoryId   String?     @map("repository_id") // null for endpoint-level facets
     facetKey       String      @map("facet_key")
     schemaVersion  Int         @map("schema_version")
-    data           Json // canonical, validated by facet schema
+    data           Json        @deny('read', auth().role == viewer) // canonical, validated by facet schema; webhook URLs may carry credentials, so viewers read it through the redacted diff only (ADR-0503)
     unreadable     String[] // field paths that could not be read
     hash           String // sha256 of canonical JSON (RFC 8785 JCS)
     fetchedAt      DateTime    @map("fetched_at") @db.Timestamptz(3)
@@ -385,7 +385,7 @@ model Analysis {
     sourceSnapshotIds String[]    @map("source_snapshot_ids")
     targetSnapshotIds String[]    @map("target_snapshot_ids")
     readiness         Readiness
-    translation       Json // per facet: desired target canonical + field fidelity
+    translation       Json        @deny('read', auth().role == viewer) // per facet: desired target canonical + field fidelity; viewers read it through the redacted diff only (ADR-0503)
     startedAt         DateTime?   @map("started_at") @db.Timestamptz(3) // database clock when the Analysis started (ADR-0310)
     createdAt         DateTime    @default(now()) @map("created_at") @db.Timestamptz(3)
     updatedAt         DateTime    @updatedAt @map("updated_at") @db.Timestamptz(3)
@@ -420,7 +420,8 @@ model PlanItem {
     code        String // e.g. "branch-rules.lossy-merge-check"
     fidelity    String?
     fieldPaths  String[]     @map("field_paths")
-    params      Json // rendered into guidance
+    params      Json // rendered into guidance; never holds a secret parameter (ADR-0503)
+    secretParams Json?       @map("secret_params") @deny('read', auth().role == viewer) // secret guidance parameters such as targetUrl (ADR-0503)
     order       Int
     createdAt   DateTime     @default(now()) @map("created_at") @db.Timestamptz(3)
     updatedAt   DateTime     @updatedAt @map("updated_at") @db.Timestamptz(3)
@@ -596,14 +597,15 @@ model ManualTask {
     code             String     @deny('update', true)
     phase            String     @deny('update', true) // "pre" | "post"
     origin           String     @deny('update', true) // "analysis" | "run" (LIF-049)
-    params           Json       @deny('update', true)
+    params           Json       @deny('update', true) // never holds a secret parameter (ADR-0503)
+    secretParams     Json?      @deny('update', true) @deny('read', auth().role == viewer) @map("secret_params") // secret guidance parameters such as targetUrl (ADR-0503)
     verifiable       Boolean    @deny('update', true) // parity can auto-complete it
     status           TaskStatus @default(open) @deny('update', true)
     completedById    String?    @deny('update', true) @map("completed_by_id")
     completedAt      DateTime?  @deny('update', true) @map("completed_at") @db.Timestamptz(3)
     note             String?
     sourcePlanItemId String?    @deny('update', true) @map("source_plan_item_id")
-    paramsHash       String     @deny('update', true) @map("params_hash") // sha256(JCS(params))
+    paramsHash       String     @deny('update', true) @map("params_hash") // sha256(JCS(params and secretParams together))
     createdAt        DateTime   @default(now()) @map("created_at") @db.Timestamptz(3) @deny('update', true)
     updatedAt        DateTime   @default(now()) @map("updated_at") @db.Timestamptz(3) @deny('update', true)
 

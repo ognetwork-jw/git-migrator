@@ -22,7 +22,7 @@ A key acts as its Actor with that Actor's role. Revoke it with `DELETE /api/v1/a
 
 | Role | May |
 |---|---|
-| `viewer` | Read everything except raw response bodies. |
+| `viewer` | Read everything except raw response bodies, Snapshot data, Analysis translations and the secret parameters of Plan items and tasks, which may hold webhook URLs with credentials (ADR-0503). `GET /api/v1/migrations/{id}/diff` shows Snapshots and the desired state redacted. |
 | `operator` | Everything a viewer may, plus analyze, run, manage tasks and Waves, decide mappings and preview naming rules. |
 | `admin` | Everything an operator may, plus naming rules, the webhook allowlist, Overlays, Actors and keys. |
 

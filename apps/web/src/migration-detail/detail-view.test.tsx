@@ -554,6 +554,30 @@ describe('[UI-022] the Overview, Tasks, Facets, Runs and Audit tabs', () => {
     expect(screen.getByText('Asked the owner')).toBeTruthy();
   });
 
+  it('[FAC-WEB-002] the webhook recreate task offers the full URL from secretParams, and without them only its display form', async () => {
+    const recreate = (secretParams: unknown) =>
+      task(1, {
+        facetKey: 'webhooks',
+        code: 'webhooks.recreate-manually',
+        params: { key: 'k', targetUrlDisplay: 'https://hooks.example/…', events: ['push'] },
+        secretParams,
+      });
+    world.tasks = [recreate({ targetUrl: 'https://hooks.example/p/SECRETPATH' })];
+    await openTasks();
+    expect(screen.getByRole('button', { name: /^Copy / })).toBeTruthy();
+    expect(document.body.textContent).toContain('SECRETPATH');
+    cleanup();
+    // What RPC returns to a viewer: secretParams is null (ADR-0503).
+    world.tasks = [recreate(null)];
+    start('viewer');
+    await ready();
+    fireEvent.click(screen.getByRole('tab', { name: /^Tasks/ }));
+    await screen.findByText('1 of 1 tasks are open.');
+    expect(screen.queryByRole('button', { name: /^Copy / })).toBeNull();
+    expect(document.body.textContent).not.toContain('SECRETPATH');
+    expect(document.body.textContent).toContain('hooks.example/…');
+  });
+
   it('[UI-022] the Runs tab lists the history with a link to each Run', async () => {
     world.runs = [run(1), run(2, { kind: 'verify', status: 'failed' })];
     start();

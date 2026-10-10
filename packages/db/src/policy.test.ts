@@ -873,6 +873,189 @@ describe('[API-012] secrets are denied for read', () => {
       });
     }
   });
+
+  describe('[FAC-WEB-002] webhook URLs that carry credentials (ADR-0503)', () => {
+    // Assembled at run time so no credential-shaped literal is committed.
+    const CREDENTIAL = ['hook', 'pass', '-', 'LEAK'].join('');
+    const url = `https://ci.example.test/notify?token=${CREDENTIAL}`;
+    const ids = { snapshot: '', analysis: '', planItem: '', task: '' };
+    const TRANSLATED_URL = '$.facets.webhooks.desired.hooks[0].url';
+
+    beforeAll(async () => {
+      const where = world.where.FacetSnapshot as { id: string };
+      const base = await privileged.facetSnapshot.findUniqueOrThrow({ where });
+      const snapshot = await privileged.facetSnapshot.create({
+        data: {
+          side: 'source',
+          endpointId: base.endpointId,
+          repositoryId: base.repositoryId,
+          facetKey: 'webhooks',
+          schemaVersion: 1,
+          data: { hooks: [{ key: 'k', url, events: ['push'] }] },
+          unreadable: [],
+          hash: 'h-webhooks',
+          fetchedAt: new Date(),
+          rawResponseIds: [],
+        },
+      });
+      const migrationId = (world.where.Migration as { id: string }).id;
+      const analysis = await privileged.analysis.create({
+        data: {
+          migrationId,
+          sourceSnapshotIds: [snapshot.id],
+          targetSnapshotIds: [],
+          readiness: 'ready',
+          translation: { facets: { webhooks: { desired: { hooks: [{ key: 'k', url }] } } } },
+        },
+      });
+      ids.snapshot = snapshot.id;
+      ids.analysis = analysis.id;
+      const display = 'https://ci.example.test/…';
+      const planItem = await privileged.planItem.create({
+        data: {
+          analysisId: analysis.id,
+          facetKey: 'webhooks',
+          kind: 'post_task',
+          code: 'webhooks.recreate-manually',
+          fieldPaths: [],
+          params: { key: 'k', targetUrlDisplay: display },
+          secretParams: { targetUrl: url },
+          order: 1,
+        },
+      });
+      const task = await privileged.manualTask.create({
+        data: {
+          migrationId,
+          facetKey: 'webhooks',
+          code: 'webhooks.recreate-manually',
+          phase: 'post',
+          origin: 'analysis',
+          params: { key: 'k', targetUrlDisplay: display },
+          secretParams: { targetUrl: url },
+          verifiable: true,
+          paramsHash: 'h-webhook-task',
+          sourcePlanItemId: planItem.id,
+        },
+      });
+      ids.planItem = planItem.id;
+      ids.task = task.id;
+    });
+
+    it('[FAC-WEB-002] a viewer reads neither Snapshot data nor an Analysis translation', async () => {
+      const snapshot = await clients.viewer.facetSnapshot.findUnique({
+        where: { id: ids.snapshot },
+      });
+      expect(snapshot?.facetKey).toBe('webhooks');
+      expect(snapshot?.data ?? null).toBeNull();
+      const selected = await clients.viewer.facetSnapshot.findMany({
+        where: { id: ids.snapshot },
+        select: { data: true },
+      });
+      expect(selected.map((s) => s.data ?? null)).toEqual([null]);
+      const analysis = await clients.viewer.analysis.findUnique({ where: { id: ids.analysis } });
+      expect(analysis?.readiness).toBe('ready');
+      expect(analysis?.translation ?? null).toBeNull();
+      const nested = await clients.viewer.migration.findMany({
+        select: { analyses: { where: { id: ids.analysis }, select: { translation: true } } },
+      });
+      expect(JSON.stringify(nested)).not.toContain(CREDENTIAL);
+    });
+
+    it('[FAC-WEB-002] a viewer cannot confirm the credential by filtering', async () => {
+      expect(
+        await clients.viewer.facetSnapshot.findMany({
+          where: { data: { path: '$.hooks[0].url', equals: url } },
+        }),
+      ).toEqual([]);
+      expect(
+        await clients.viewer.facetSnapshot.findMany({
+          where: {
+            id: ids.snapshot,
+            data: { path: '$.hooks[0].url', string_starts_with: url.slice(0, -2) },
+          },
+        }),
+      ).toEqual([]);
+      expect(
+        await clients.viewer.analysis.findMany({
+          where: {
+            id: ids.analysis,
+            translation: { path: TRANSLATED_URL, string_starts_with: url.slice(0, -2) },
+          },
+        }),
+      ).toEqual([]);
+    });
+
+    it('[FAC-WEB-002] a viewer cannot order, group or aggregate by the denied JSON fields', async () => {
+      const attempts: (() => Promise<unknown>)[] = [
+        () => clients.viewer.facetSnapshot.findMany({ orderBy: { data: 'asc' } as never }),
+        () => clients.viewer.facetSnapshot.groupBy({ by: ['data'] } as never),
+        () => clients.viewer.analysis.groupBy({ by: ['translation'] } as never),
+        () => clients.viewer.facetSnapshot.aggregate({ _max: { data: true } } as never),
+      ];
+      for (const attempt of attempts) {
+        const outcome = await attempt().then(
+          (value) => JSON.stringify(value),
+          (error: unknown) => error,
+        );
+        if (typeof outcome === 'string') expect(outcome).not.toContain(CREDENTIAL);
+        else expect(outcome).toBeInstanceOf(Error);
+      }
+    });
+
+    it('[FAC-WEB-002] a viewer reads the guidance params of a webhook task but not its secret params', async () => {
+      const task = await clients.viewer.manualTask.findUnique({ where: { id: ids.task } });
+      expect(task?.params).toEqual({ key: 'k', targetUrlDisplay: 'https://ci.example.test/…' });
+      expect(task?.secretParams ?? null).toBeNull();
+      const item = await clients.viewer.planItem.findUnique({ where: { id: ids.planItem } });
+      expect(item?.params).toMatchObject({ key: 'k' });
+      expect(item?.secretParams ?? null).toBeNull();
+      const nested = await clients.viewer.migration.findMany({
+        select: {
+          manualTasks: { select: { params: true, secretParams: true } },
+          analyses: { select: { items: { select: { params: true, secretParams: true } } } },
+        },
+      });
+      expect(JSON.stringify(nested)).not.toContain(CREDENTIAL);
+      for (const model of ['manualTask', 'planItem'] as const) {
+        const probe = await (clients.viewer[model] as unknown as AnyDelegate).findMany({
+          where: { secretParams: { path: '$.targetUrl', string_starts_with: url.slice(0, -2) } },
+        });
+        expect(probe, model).toEqual([]);
+      }
+      for (const role of ['operator', 'admin'] as const) {
+        const read = await clients[role].manualTask.findUnique({ where: { id: ids.task } });
+        expect(read?.secretParams).toEqual({ targetUrl: url });
+        const probe = await clients[role].planItem.findMany({
+          where: { secretParams: { path: '$.targetUrl', string_starts_with: url.slice(0, -2) } },
+        });
+        expect(probe.map((p) => p.id)).toEqual([ids.planItem]);
+      }
+    });
+
+    it('[FAC-WEB-002] operators and admins read the data the worker needs', async () => {
+      for (const role of ['operator', 'admin'] as const) {
+        const snapshot = await clients[role].facetSnapshot.findUnique({
+          where: { id: ids.snapshot },
+        });
+        expect(JSON.stringify(snapshot?.data)).toContain(CREDENTIAL);
+        const analysis = await clients[role].analysis.findUnique({ where: { id: ids.analysis } });
+        expect(JSON.stringify(analysis?.translation)).toContain(CREDENTIAL);
+        // The same filters a viewer is refused do match for these roles, so the viewer's empty
+        // answers above come from the policy, not from a filter that never matches.
+        const filtered = await clients[role].facetSnapshot.findMany({
+          where: { data: { path: '$.hooks[0].url', equals: url } },
+        });
+        expect(filtered.map((s) => s.id)).toEqual([ids.snapshot]);
+        const contains = await clients[role].analysis.findMany({
+          where: {
+            id: ids.analysis,
+            translation: { path: TRANSLATED_URL, string_starts_with: url.slice(0, -2) },
+          },
+        });
+        expect(contains.map((a) => a.id)).toEqual([ids.analysis]);
+      }
+    });
+  });
 });
 
 describe('[DOM-012] Snapshots and Analyses are immutable once written', () => {
