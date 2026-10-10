@@ -58,5 +58,6 @@ export function renderPipelinesDelivery(input: PipelinesDeliveryInput): Pipeline
 export const bitbucketCloudToGithubPipelinesDelivery = {
   source: 'bitbucket-cloud',
   target: 'github',
+  sourcePath: SOURCE_FILE,
   render: renderPipelinesDelivery,
 } as const;

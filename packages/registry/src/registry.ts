@@ -45,6 +45,11 @@ export interface PipelinesDeliveryResult {
 export interface PipelinesDelivery {
   readonly source: string;
   readonly target: string;
+  /**
+   * The path, in the source repository, of the pipeline file this delivery renders: the lifecycle
+   * picks that file from the source `pipelines` read, so it never names a provider file (GLO-002).
+   */
+  readonly sourcePath: string;
   render(input: PipelinesDeliveryInput): PipelinesDeliveryResult;
 }
 

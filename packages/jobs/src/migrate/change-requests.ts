@@ -14,8 +14,6 @@ import { applyWithLedger } from './facets.ts';
 import { connectSide, type MigrationContext, type MigrationServices } from './services.ts';
 import { loadRunWorld, repositoryTarget, targetOf } from './world.ts';
 
-const SOURCE_PIPELINES_FILE = 'bitbucket-pipelines.yml';
-
 /** The parity paths a framework branch adds on the target (LIF-045 target-side). */
 const branchDifference = (purpose: string) => ({
   facetKey: 'git-refs',
@@ -116,7 +114,8 @@ async function openPipelines(
     namespace: world.sourceRef.namespace,
   });
   const files = (read.data as { files?: { path: string; sha256: string }[] }).files ?? [];
-  const file = files.find((f) => f.path === SOURCE_PIPELINES_FILE) ?? files[0];
+  // The delivery names the file it renders; another file of the read is never sent in its place.
+  const file = files.find((f) => f.path === delivery.sourcePath);
   const text = file ? read.attachments?.[file.sha256] : undefined;
   if (text === undefined) {
     await ctx.runLog(

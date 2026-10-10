@@ -59,6 +59,7 @@ describe('ProviderRegistry', () => {
     const delivery = {
       source: 'a',
       target: 'b',
+      sourcePath: 'ci.yml',
       render: () => ({ purpose: 'ci', title: 't', body: 'b', files: [] }),
     };
     const reg = new ProviderRegistry({ facets, adapters: [A, B], deliveries: [delivery] });
@@ -81,6 +82,8 @@ describe('ProviderRegistry', () => {
         })
         .files.map((f) => f.path),
     ).toEqual(['.github/workflows/ci.yml', '.github/git-migrator/bitbucket-pipelines.yml']);
+    // The lifecycle picks the source file the delivery names (GLO-002).
+    expect(delivery?.sourcePath).toBe('bitbucket-pipelines.yml');
   });
 
   it('[ADP-032] rejects a duplicate adapter, capabilities for an unregistered facet and unknown lookups', () => {
