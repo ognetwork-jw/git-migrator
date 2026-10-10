@@ -287,7 +287,6 @@ describe('development environment files', () => {
     expect(fakes.environment).toMatchObject({
       FAKES_HOST: '0.0.0.0',
       FAKE_GIT_PUBLIC_URL: 'http://fakes:4030',
-      FAKE_GIT_BASE_URL: 'http://fakes:4030/source',
     });
     expect(fakes.command).toEqual(['pnpm', '--filter', '@git-migrator/provider-fakes', 'start']);
   });

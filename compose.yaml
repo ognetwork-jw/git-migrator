@@ -119,7 +119,6 @@ services:
       FAKES_HOST: 0.0.0.0
       FAKE_GIT_ROOT: /var/lib/fake-git
       FAKE_GIT_PUBLIC_URL: http://fakes:4030
-      FAKE_GIT_BASE_URL: http://fakes:4030/source
 
 volumes:
   postgres-data:
