@@ -13,12 +13,15 @@ import {
   seedBareRepo,
   startFakeGitServer,
 } from '@git-migrator/provider-fakes';
-import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
+import { afterAll, beforeAll, describe, expect, inject, it, vi } from 'vitest';
 import { isGitCommandError } from './errors.ts';
 import type { SpawnFunction } from './exec.ts';
 import { type LfsBatchClient, verifyLfsParity } from './lfs.ts';
 import type { GitQuota } from './quota.ts';
 import { GitService, type GitServiceOptions } from './service.ts';
+
+/** Wall-clock budgets scale with GM_TEST_TIME_FACTOR (ADR-0507). */
+const budget = (ms: number): number => ms * inject('timeFactor');
 
 // These tests drive the real git and git-lfs CLIs against the fake git server (TST-006, TST-013).
 vi.setConfig({ testTimeout: 90_000 });
@@ -790,7 +793,7 @@ describe('stalled remotes', () => {
     const error = await service
       .lsRemote({ url: `http://127.0.0.1:${silentPort}/stall.git`, credential })
       .catch((e: unknown) => e);
-    expect(Date.now() - started).toBeLessThan(20_000);
+    expect(Date.now() - started).toBeLessThan(budget(20_000));
     expect(isGitCommandError(error)).toBe(true);
     expect(error).toMatchObject({ code: 'transient', retryable: true });
     expect((error as Error).message).toContain('stalled');
