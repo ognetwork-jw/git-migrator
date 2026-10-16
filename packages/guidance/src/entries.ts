@@ -341,7 +341,12 @@ export const GUIDANCE: Readonly<Record<FindingCode, Guidance>> = {
   ),
 
   // change-requests
-  'change-requests.open': plain('change-requests.open', [step('change-requests.open', 1)]),
+  // The list is a step of its own: entries blank after cleaning are dropped, so it can be empty
+  // while `count` is not (ADR-0155).
+  'change-requests.open': plain('change-requests.open', [
+    step('change-requests.open', 1, { when: 'ids' }),
+    step('change-requests.open', 2),
+  ]),
 
   // extras
   'extras.wiki-not-migrated': plain('extras.wiki-not-migrated', [

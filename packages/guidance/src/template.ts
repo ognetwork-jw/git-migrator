@@ -53,9 +53,10 @@ export function missingMarker(name: string): string {
 /**
  * Characters that never belong in a guidance value: C0 and C1 controls, DEL, the Unicode line and
  * paragraph separators, and bidirectional embedding, override and isolate controls (which can make
- * a copied command read differently from how it runs).
+ * a copied command read differently from how it runs). Exported so callers that clean values for
+ * guidance (ADR-0155) can be checked against exactly this set.
  */
-function hasForbiddenCharacter(text: string): boolean {
+export function hasForbiddenCharacter(text: string): boolean {
   for (const char of text) {
     const code = char.codePointAt(0) ?? 0;
     if (code < 0x20 || (code >= 0x7f && code <= 0x9f)) return true;
