@@ -34,10 +34,46 @@ const isIn = (list: readonly string[], value: string) => list.includes(value);
 export const hasActiveRun = (runs: readonly RunSummaryRow[]): boolean =>
   runs.some((r) => r.status === 'queued' || r.status === 'running');
 
+/** True when the Migration's target writes are pinned to a place (ADR-0504). */
+const isPinned = (m: MigrationDetail): boolean =>
+  Boolean(m.targetPlacedEndpointId && m.targetPlacedNamespaceId);
+
+/**
+ * True when the pinned place is not where the Route points (the Route was retargeted): the server
+ * then names the target in the pinned Namespace (the guard's `placementOutside`, ADR-0504).
+ */
+function pinnedOutsideRoute(m: MigrationDetail): boolean {
+  if (!isPinned(m) || !m.targetPlacedNamespace) return false;
+  if (
+    m.route.targetEndpointId !== undefined &&
+    m.targetPlacedEndpointId !== m.route.targetEndpointId
+  ) {
+    return true;
+  }
+  return (
+    m.route.targetNamespaceId !== undefined &&
+    m.route.targetNamespaceId !== null &&
+    m.targetPlacedNamespaceId !== m.route.targetNamespaceId
+  );
+}
+
 /** The full name the typed confirmation must equal (LIF-043, LIF-077). `null`: nothing to name. */
 export function targetFullName(m: MigrationDetail): string | null {
   if (m.targetRepository) return m.targetRepository.fullPath;
-  return m.plannedTargetName ? `${m.route.targetNamespacePath}/${m.plannedTargetName}` : null;
+  const namespace = pinnedOutsideRoute(m)
+    ? (m.targetPlacedNamespace as { slug: string }).slug
+    : m.route.targetNamespacePath;
+  return m.plannedTargetName ? `${namespace}/${m.plannedTargetName}` : null;
+}
+
+/**
+ * True while the legacy confirmation applies: target writes of unknown place (the flag) and no
+ * pinned place. The server keys on the pin too (the guard's `placement === undefined`): after a
+ * failed or cancelled legacy rollback both stay set, and the Migration is judged by its pin
+ * (ADR-0504, ADR-0520).
+ */
+export function legacyPlacementUnknown(m: MigrationDetail): boolean {
+  return m.targetPlacementUnknown === true && !isPinned(m);
 }
 
 /** The blocker of a legacy Migration whose target writes have no recorded place (ADR-0504). */
@@ -49,7 +85,7 @@ export const PLACEMENT_UNKNOWN_BLOCKER = 'repository-settings.target-placement-u
  * open pre tasks (the guard's `effectiveReadiness` with that blocker waived, ADR-0504).
  */
 export function offeredReadiness(m: MigrationDetail): MigrationDetail['readiness'] {
-  if (m.targetPlacementUnknown !== true || m.readiness !== 'blocked') return m.readiness;
+  if (!legacyPlacementUnknown(m) || m.readiness !== 'blocked') return m.readiness;
   if (
     m.blockerCodes.length === 0 ||
     !m.blockerCodes.every((c) => c === PLACEMENT_UNKNOWN_BLOCKER)

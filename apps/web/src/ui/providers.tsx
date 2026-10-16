@@ -12,11 +12,18 @@ export const themeFor = (dark: boolean) => ({
 });
 
 /** TanStack Query, the antd theme and the antd `App` context (notifications, modals). */
-export function AppProviders({ children }: { readonly children: ReactNode }) {
+export function AppProviders({
+  children,
+  initialDark = false,
+}: {
+  readonly children: ReactNode;
+  /** The scheme of the server render and hydration (the color-scheme cookie, ADR-0520). */
+  readonly initialDark?: boolean;
+}) {
   const [queryClient] = useState(
     () => new QueryClient({ defaultOptions: { queries: { staleTime: 15_000, retry: 1 } } }),
   );
-  const dark = usePrefersDark();
+  const dark = usePrefersDark(initialDark);
   return (
     <QueryClientProvider client={queryClient}>
       <ConfigProvider theme={themeFor(dark)}>

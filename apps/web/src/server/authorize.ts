@@ -1,7 +1,7 @@
 import { headers } from 'next/headers';
 import { redirect } from 'next/navigation';
 import { type ActorResult, fetchActor } from '../api/actor.ts';
-import { signInHref } from '../auth/paths.ts';
+import { DISABLED_HREF, signInHref } from '../auth/paths.ts';
 import { canOpen, deniedHref } from '../shell/navigation.ts';
 import { getApiRuntime } from './api.ts';
 
@@ -17,6 +17,7 @@ export type PageAccess =
 export function accessFor(result: ActorResult, pathname: string): PageAccess {
   if (result.kind === 'unauthenticated') return { kind: 'redirect', to: signInHref(pathname) };
   if (result.kind === 'problem') return { kind: 'problem', code: result.code };
+  if (result.actor.disabled) return { kind: 'redirect', to: DISABLED_HREF };
   return canOpen(result.actor, pathname)
     ? { kind: 'allow' }
     : { kind: 'redirect', to: deniedHref(pathname) };

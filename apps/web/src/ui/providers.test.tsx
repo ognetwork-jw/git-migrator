@@ -1,8 +1,10 @@
 // @vitest-environment jsdom
 import { act, cleanup, render, renderHook, screen } from '@testing-library/react';
 import { theme } from 'antd';
+import { renderToString } from 'react-dom/server';
 import { afterEach, describe, expect, it } from 'vitest';
 import { installMatchMedia } from '../test-render.tsx';
+import { colorSchemeCookie, prefersDarkFromCookie } from './color-scheme.ts';
 import { AppProviders, themeFor } from './providers.tsx';
 import { usePrefersDark } from './use-prefers-dark.ts';
 
@@ -42,5 +44,41 @@ describe('themes', () => {
       </AppProviders>,
     );
     expect(screen.getByText('inside')).toBeTruthy();
+  });
+
+  it('[UI-001] the server render uses the scheme the browser reported last time', () => {
+    function Probe() {
+      return <span>{theme.useToken().token.colorBgBase}</span>;
+    }
+    const light = renderToString(
+      <AppProviders>
+        <Probe />
+      </AppProviders>,
+    );
+    const dark = renderToString(
+      <AppProviders initialDark>
+        <Probe />
+      </AppProviders>,
+    );
+    expect(light).toContain('#fff');
+    expect(dark).toContain('#000');
+  });
+
+  it('[UI-001] the OS preference is remembered in a cookie for the next first paint', () => {
+    const media = installMatchMedia(true);
+    renderHook(() => usePrefersDark());
+    expect(document.cookie).toContain('gm-color-scheme=dark');
+    act(() => media.setDark(false));
+    expect(document.cookie).toContain('gm-color-scheme=light');
+  });
+
+  it('[UI-001] only a dark cookie value asks for the dark first paint', () => {
+    expect(prefersDarkFromCookie('dark')).toBe(true);
+    expect(prefersDarkFromCookie('light')).toBe(false);
+    expect(prefersDarkFromCookie(undefined)).toBe(false);
+    expect(prefersDarkFromCookie('<script>')).toBe(false);
+    expect(colorSchemeCookie(true)).toMatch(
+      /^gm-color-scheme=dark; Path=\/; Max-Age=\d+; SameSite=Lax$/,
+    );
   });
 });

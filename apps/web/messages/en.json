@@ -17,6 +17,7 @@
     },
     "signOut": "Sign out",
     "signingOut": "Signing out",
+    "signOutFailed": "You could not be signed out, and your session is still active. Try again.",
     "loading": "Loading your account",
     "retry": "Try again",
     "failed": "Your account could not be loaded",
@@ -654,6 +655,7 @@
         "issueExpires": "Expiry (optional)",
         "issueExpiresHelp": "Leave empty for a key that does not expire.",
         "issueExpiresPast": "The expiry must be in the future.",
+        "issueTimeout": "The key was not confirmed in time. It may still have been created: check the list of keys and revoke any key you did not receive, then try again.",
         "once": {
           "title": "Copy your new API key",
           "warning": "This key is shown once. Copy it now and store it safely. It cannot be shown again; if it is lost, revoke it and create another.",
@@ -1080,11 +1082,6 @@
         "post_task": "Tasks after the Run",
         "warning": "Warnings"
       },
-      "finding": {
-        "code": "Code",
-        "facet": "Facet",
-        "paths": "Fields"
-      },
       "facet": {
         "source": "Source",
         "desired": "Desired",
@@ -1143,7 +1140,7 @@
     "strip": {
       "label": "Facets",
       "clean": "{facet}: no findings. Open the Facet.",
-      "hint": "{facet}: {count, plural, one {# finding} other {# findings}}, worst is {kind}. Open the Facet."
+      "hint": "{facet}: {count, plural, one {# finding} other {# findings}}, worst is {kind}: {reason}. Open the Facet."
     },
     "header": {
       "source": "Source",
@@ -1271,7 +1268,7 @@
         "none": "Not available.",
         "items": "{count, plural, one {# item} other {# items}}",
         "keys": "{count, plural, one {# key} other {# keys}}",
-        "more": "Show {count} more"
+        "more": "Show {count} more ({left} not shown)"
       },
       "mark": {
         "changed": "changed",
@@ -1354,7 +1351,8 @@
         "title": "Dismiss this task?",
         "ok": "Dismiss",
         "body": "A dismissed task no longer holds the repository back. You can reopen it later.",
-        "note": "Note (some tasks need one)"
+        "note": "Note (some tasks need one)",
+        "reason": "Reason (required)"
       },
       "status": {
         "open": "Open",
@@ -1365,7 +1363,8 @@
         "pre": "Before the run",
         "post": "After the run"
       },
-      "verifiable": "Checked by parity"
+      "verifiable": "Checked by parity",
+      "resolution": "This task closes by itself when the underlying data changes, for example when the mapping it names is decided. It cannot be marked done by hand; dismiss it with a reason to go on without it."
     },
     "runs": {
       "empty": "No Run has been started for this repository.",

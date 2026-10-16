@@ -333,6 +333,41 @@ describe('[UI-034] actors and API keys', () => {
     expect(await screen.findByDisplayValue(ISSUED_KEY)).toBeTruthy();
   });
 
+  it('[UI-034] [AUTH-040] a key request that hangs gives up, says the key may exist, and can be cancelled', async () => {
+    mockApi(() => undefined, { actor: ACTORS, apiKey: [] });
+    const original = globalThis.fetch;
+    vi.stubGlobal('fetch', async (input: RequestInfo | URL, init?: RequestInit) => {
+      if (String(input).endsWith('/api-keys') && init?.method === 'POST') {
+        // Never answers; only the abort ends it.
+        return new Promise<Response>((_, reject) => {
+          init.signal?.addEventListener('abort', () =>
+            reject(new DOMException('aborted', 'AbortError')),
+          );
+        });
+      }
+      return original(input, init);
+    });
+    renderWithApp(
+      <ActorProvider value={ME}>
+        <ActorsView issueTimeoutMs={200} />
+      </ActorProvider>,
+      fresh(),
+    );
+    const row = (await screen.findByText('Release bot')).closest('tr') as HTMLElement;
+    fireEvent.click(within(row).getByRole('button', { name: /expand row/i }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Create API key' }));
+    const issue = within(await screen.findByRole('dialog'));
+    fireEvent.change(issue.getByLabelText('Key name'), { target: { value: 'x' } });
+    fireEvent.click(issue.getByRole('button', { name: 'Create key' }));
+    expect(
+      await issue.findByText(/The key was not confirmed in time\. It may still have been created/),
+    ).toBeTruthy();
+    const cancel = issue.getByRole('button', { name: 'Cancel' }) as HTMLButtonElement;
+    expect(cancel.disabled).toBe(false);
+    fireEvent.click(cancel);
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+  });
+
   it('[UI-034] [API-020] revoking a key asks first and sends DELETE', async () => {
     const { calls } = mockApi(() => undefined, { actor: ACTORS, apiKey: [KEY] });
     view();

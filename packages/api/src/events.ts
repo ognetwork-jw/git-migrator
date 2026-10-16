@@ -168,7 +168,11 @@ export function createEventHub(options: EventHubOptions): EventHub {
       perOwner.set(owner, (perOwner.get(owner) ?? 0) + 1);
       // Frames wait here until the consumer asks for them (pull). On overflow the queue is replaced
       // by a single resync, which tells the client to refetch everything it missed.
-      const queue: Uint8Array[] = [FRAMES.open];
+      // A heartbeat right after `open` while the listener is up tells the client the stream is
+      // live, so it leaves polling at once; without it the client keeps polling (ADR-0520).
+      const queue: Uint8Array[] = options.listener.connected
+        ? [FRAMES.open, FRAMES.heartbeat]
+        : [FRAMES.open];
       let waiting: (() => void) | undefined;
       let readSinceTick = false;
       let idleTicks = 0;

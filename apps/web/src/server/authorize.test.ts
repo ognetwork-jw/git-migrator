@@ -93,15 +93,17 @@ describe('[AUTH-021] server-side page access', () => {
     await expect(authorizePage('/people/teams')).rejects.toThrow('authorization unavailable');
   });
 
-  it('[AUTH-021] a disabled Actor is treated like anyone without the capability', () => {
-    expect(
-      accessFor(
-        {
-          kind: 'ok',
-          actor: { id: 'a', displayName: 'A', email: null, role: 'admin', disabled: true },
-        },
-        '/people/identities',
-      ).kind,
-    ).toBe('redirect');
+  it('[AUTH-021] [AUTH-005] a disabled Actor is sent to the disabled-account page, not /denied', () => {
+    for (const path of ['/people/identities', '/', '/denied']) {
+      expect(
+        accessFor(
+          {
+            kind: 'ok',
+            actor: { id: 'a', displayName: 'A', email: null, role: 'admin', disabled: true },
+          },
+          path,
+        ),
+      ).toEqual({ kind: 'redirect', to: '/auth/error?error=actor_disabled' });
+    }
   });
 });

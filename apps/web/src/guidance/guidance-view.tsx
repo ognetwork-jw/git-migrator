@@ -45,6 +45,26 @@ export function guidanceParams(
   return merged as ParamValues;
 }
 
+/**
+ * The guidance title of a Finding as plain text (inline code marks and emphasis removed), for a
+ * hover text or an accessible name; `undefined` when the code has no guidance.
+ */
+export function guidanceTitle(
+  code: string,
+  params: unknown,
+  messages: Parameters<typeof nextIntlLookup>[0],
+): string | undefined {
+  if (!hasGuidance(code)) return undefined;
+  try {
+    const { title } = renderGuidance(code, guidanceParams(params), {
+      lookup: nextIntlLookup(messages),
+    });
+    return title.replace(/[`*_]/g, '').trim() || undefined;
+  } catch {
+    return undefined;
+  }
+}
+
 export interface GuidanceViewProps {
   /** The Finding code (`PlanItem.code` or `ManualTask.code`). */
   readonly code: string;

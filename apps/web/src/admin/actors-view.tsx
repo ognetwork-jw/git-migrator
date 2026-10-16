@@ -53,7 +53,12 @@ export function expiryFromLocal(value: string): string | undefined {
 }
 
 /** UI-034: actors (human and service), service Actor creation, disabling, and API keys. */
-export function ActorsView() {
+export function ActorsView({
+  issueTimeoutMs,
+}: {
+  /** How long a key issue may take before the dialog gives up (tests use a short one). */
+  readonly issueTimeoutMs?: number;
+} = {}) {
   const t = useTranslations('admin.actors');
   const me = useActor();
   const queryClient = useQueryClient();
@@ -92,7 +97,7 @@ export function ActorsView() {
         locale={{ emptyText: t('empty') }}
         expandable={{
           rowExpandable: (r) => r.kind === 'service',
-          expandedRowRender: (r) => <ApiKeysPanel actor={r} />,
+          expandedRowRender: (r) => <ApiKeysPanel actor={r} issueTimeoutMs={issueTimeoutMs} />,
         }}
         columns={[
           {
@@ -221,7 +226,13 @@ function CreateActorModal({ onClose }: { readonly onClose: () => void }) {
 }
 
 /** The keys of one service Actor: the list (prefix only), issue and revoke. */
-function ApiKeysPanel({ actor }: { readonly actor: ActorRow }) {
+function ApiKeysPanel({
+  actor,
+  issueTimeoutMs,
+}: {
+  readonly actor: ActorRow;
+  readonly issueTimeoutMs?: number | undefined;
+}) {
   const t = useTranslations('admin.actors.keys');
   const queryClient = useQueryClient();
   const [issuing, setIssuing] = useState(false);
@@ -311,6 +322,7 @@ function ApiKeysPanel({ actor }: { readonly actor: ActorRow }) {
       {issuing ? (
         <IssueKeyModal
           actorId={actor.id}
+          timeoutMs={issueTimeoutMs}
           onClose={() => {
             setIssuing(false);
             void queryClient.invalidateQueries({ queryKey: apiKeysKey(actor.id) });
@@ -328,9 +340,11 @@ function ApiKeysPanel({ actor }: { readonly actor: ActorRow }) {
  */
 function IssueKeyModal({
   actorId,
+  timeoutMs,
   onClose,
 }: {
   readonly actorId: string;
+  readonly timeoutMs?: number | undefined;
   readonly onClose: () => void;
 }) {
   const t = useTranslations('admin.actors.keys');
@@ -403,7 +417,9 @@ function IssueKeyModal({
     setFailure(undefined);
     try {
       // Not returned through a mutation hook: the answer stays in this component's state only.
-      setIssued(await issueApiKey(actorId, trimmed, expiresAt));
+      // Bounded, so a request that hangs gives the dialog back to the operator (Cancel works
+      // again); the key may then exist on the server, which the failure text says.
+      setIssued(await issueApiKey(actorId, trimmed, expiresAt, timeoutMs));
     } catch (error) {
       setFailure(error instanceof ApiError ? error.code : 'internal_error');
     } finally {
@@ -447,7 +463,11 @@ function IssueKeyModal({
         <Typography.Text type={expiryPast ? 'danger' : 'secondary'}>
           {expiryPast ? t('issueExpiresPast') : t('issueExpiresHelp')}
         </Typography.Text>
-        {failure ? <ErrorAlert error={new ApiError(0, failure)} /> : null}
+        {failure === 'timeout' ? (
+          <Alert type="error" showIcon role="alert" title={t('issueTimeout')} />
+        ) : failure ? (
+          <ErrorAlert error={new ApiError(0, failure)} />
+        ) : null}
       </div>
     </Modal>
   );

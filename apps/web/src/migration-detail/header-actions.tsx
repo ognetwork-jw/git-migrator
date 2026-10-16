@@ -25,6 +25,7 @@ import {
   availableActions,
   forceAdoptKind,
   type HeaderAction,
+  legacyPlacementUnknown,
   targetFullName,
 } from './rules.ts';
 
@@ -182,13 +183,28 @@ export function HeaderActions({
     if (action === 'analyze') analysis.mutate();
     else setDialog(action);
   };
-  const startPlain = (kind: DetailRunKind) =>
-    run.mutate({
-      kind,
-      ...(GIT_KINDS.includes(kind) && skipReadOnly
-        ? { options: { skipSourceReadOnly: true } }
-        : {}),
-    });
+  const runOptions = (kind: DetailRunKind) =>
+    GIT_KINDS.includes(kind) && skipReadOnly ? { options: { skipSourceReadOnly: true } } : {};
+  const startPlain = (kind: DetailRunKind) => run.mutate({ kind, ...runOptions(kind) });
+  /** The open pre-task warning and the read-only opt-out a Run offers, legacy confirmation or not. */
+  const runExtras = (kind: DetailRunKind) => (
+    <>
+      {kind === 'run_anyway' ? (
+        <Alert
+          type="warning"
+          showIcon
+          title={t('confirm.run_anyway.warning', {
+            count: migration.readinessCounts?.preTasks ?? 0,
+          })}
+        />
+      ) : null}
+      {GIT_KINDS.includes(kind) ? (
+        <Checkbox checked={skipReadOnly} onChange={(e) => setSkipReadOnly(e.target.checked)}>
+          {t('skipReadOnly')}
+        </Checkbox>
+      ) : null}
+    </>
+  );
 
   const render = ({ action, disabled }: ActionState) => (
     <Button
@@ -207,7 +223,7 @@ export function HeaderActions({
   const undoFirst = migration.sourceReadOnlyApplied;
   // Legacy target writes of unknown place: every Run on the target, and the rollback, is confirmed
   // by typing the name that names the Route's place (ADR-0504).
-  const legacy = migration.targetPlacementUnknown === true;
+  const legacy = legacyPlacementUnknown(migration);
   const legacyName = legacy ? legacyConfirmationName(migration) : null;
   const legacyKind =
     legacy && plainKind && TARGET_KINDS.includes(plainKind) ? plainKind : undefined;
@@ -243,13 +259,22 @@ export function HeaderActions({
         texts={{
           title: t('confirm.legacy.title'),
           ok: legacyKind ? t(`confirm.${legacyKind}.ok`) : '',
-          body: t('confirm.legacy.body', { name: legacyName ?? '' }),
+          body: (
+            <div className="flex flex-col gap-3">
+              <Typography.Paragraph className="m-0">
+                {t('confirm.legacy.body', { name: legacyName ?? '' })}
+              </Typography.Paragraph>
+              {legacyKind ? runExtras(legacyKind) : null}
+            </div>
+          ),
         }}
         warning={t('confirm.legacy.warning')}
         loading={run.isPending}
         error={run.error}
         errorScope="run"
-        onConfirm={(typed) => legacyKind && run.mutate({ kind: legacyKind, confirm: typed })}
+        onConfirm={(typed) =>
+          legacyKind && run.mutate({ kind: legacyKind, confirm: typed, ...runOptions(legacyKind) })
+        }
         onCancel={dismiss}
       />
 
@@ -264,23 +289,7 @@ export function HeaderActions({
               <Typography.Paragraph className="m-0">
                 {t(`confirm.${plainKind}.body`, { target: name ?? '' })}
               </Typography.Paragraph>
-              {plainKind === 'run_anyway' ? (
-                <Alert
-                  type="warning"
-                  showIcon
-                  title={t('confirm.run_anyway.warning', {
-                    count: migration.readinessCounts?.preTasks ?? 0,
-                  })}
-                />
-              ) : null}
-              {GIT_KINDS.includes(plainKind) ? (
-                <Checkbox
-                  checked={skipReadOnly}
-                  onChange={(e) => setSkipReadOnly(e.target.checked)}
-                >
-                  {t('skipReadOnly')}
-                </Checkbox>
-              ) : null}
+              {runExtras(plainKind)}
             </div>
           ) : null
         }

@@ -1,12 +1,14 @@
 'use client';
 
 import { can } from '@git-migrator/auth/capabilities';
+import { joinSecretParams } from '@git-migrator/guidance';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Alert, Button, Card, Collapse, Empty, Space, Table, Tabs, Tag, Typography } from 'antd';
 import Link from 'next/link';
 import { useTranslations } from 'next-intl';
 import { useState } from 'react';
 import { formatDateTime } from '../format.ts';
+import { GuidanceView } from '../guidance/guidance-view.tsx';
 import { ErrorAlert } from '../mapping/shared.tsx';
 import { TypedNameDialog } from '../migration-detail/dialogs.tsx';
 import { PLACEMENT_UNKNOWN_BLOCKER } from '../migration-detail/rules.ts';
@@ -21,7 +23,6 @@ import {
   type EndpointRunKind,
   endpointMigrationKey,
   type FindingKind,
-  type FindingRow,
   fetchDiff,
   fetchEndpointMigration,
   fetchFindings,
@@ -61,6 +62,21 @@ export function runKindFor(
 }
 
 /**
+ * True while the legacy confirmation applies: the flag is set and no place is pinned. The server
+ * judges a pinned Migration by its pin, even with the flag still set after a failed legacy
+ * rollback (ADR-0504, ADR-0520).
+ */
+export function endpointLegacyUnknown(m: {
+  readonly targetPlacementUnknown?: boolean;
+  readonly targetPlacedEndpointId?: string | null;
+  readonly targetPlacedNamespaceId?: string | null;
+}): boolean {
+  return (
+    m.targetPlacementUnknown === true && !(m.targetPlacedEndpointId && m.targetPlacedNamespaceId)
+  );
+}
+
+/**
  * The readiness the page offers a Run by. A legacy Migration of unknown place is blocked only by
  * the placement blocker its typed confirmation answers, so its open pre tasks decide (ADR-0504).
  */
@@ -69,8 +85,10 @@ export function offeredEndpointReadiness(m: {
   readonly blockerCodes: readonly string[];
   readonly readinessCounts: { readonly preTasks?: number } | null;
   readonly targetPlacementUnknown?: boolean;
+  readonly targetPlacedEndpointId?: string | null;
+  readonly targetPlacedNamespaceId?: string | null;
 }): string | null {
-  if (m.targetPlacementUnknown !== true || m.readiness !== 'blocked') return m.readiness;
+  if (!endpointLegacyUnknown(m) || m.readiness !== 'blocked') return m.readiness;
   if (
     m.blockerCodes.length === 0 ||
     !m.blockerCodes.every((c) => c === PLACEMENT_UNKNOWN_BLOCKER)
@@ -115,29 +133,22 @@ function FindingsTab({ analysisId }: { readonly analysisId: string | null }) {
             <Typography.Title level={5} className="mt-0">
               {t(`kind.${kind}`)} ({ofKind.length})
             </Typography.Title>
-            <Table<FindingRow>
-              rowKey="id"
-              size="small"
-              loading={findings.isLoading}
-              dataSource={ofKind}
-              pagination={false}
-              scroll={{ x: 'max-content' }}
-              columns={[
-                {
-                  title: t('finding.code'),
-                  key: 'code',
-                  render: (_: unknown, row) => (
-                    <Tag color={KIND_COLOR[row.kind as Shown]}>{row.code}</Tag>
-                  ),
-                },
-                { title: t('finding.facet'), key: 'facet', dataIndex: 'facetKey' },
-                {
-                  title: t('finding.paths'),
-                  key: 'paths',
-                  render: (_: unknown, row) => row.fieldPaths.join(', '),
-                },
-              ]}
-            />
+            <ul className="m-0 flex list-none flex-col gap-4 p-0">
+              {ofKind.map((row) => (
+                <li key={row.id} className="rounded border p-3">
+                  <div className="mb-1 flex flex-wrap items-center gap-2">
+                    <Tag color={KIND_COLOR[row.kind as Shown]}>{row.facetKey}</Tag>
+                    <code className="font-mono text-xs">{row.code}</code>
+                  </div>
+                  {/* The reusable guidance of UI-040, as on the repository detail page. */}
+                  <GuidanceView
+                    code={row.code}
+                    params={joinSecretParams(row.params, row.secretParams)}
+                    fieldPaths={row.fieldPaths}
+                  />
+                </li>
+              ))}
+            </ul>
           </section>
         );
       })}
@@ -245,6 +256,7 @@ function RunsTab({ migrationId }: { readonly migrationId: string }) {
 export function EndpointMigrationView({ routeId }: { readonly routeId: string }) {
   const t = useTranslations('endpoints.migration');
   const confirmTexts = useTranslations('migrationDetail.actions.confirm.legacy');
+  const runAnywayTexts = useTranslations('migrationDetail.actions.confirm.run_anyway');
   const [confirming, setConfirming] = useState<EndpointRunKind | undefined>(undefined);
   const actor = useActor();
   const operate = can(actor, 'operate');
@@ -279,7 +291,7 @@ export function EndpointMigrationView({ routeId }: { readonly routeId: string })
   const stale = data.analysisStaleAt !== null && new Date(data.analysisStaleAt) <= new Date();
   const kind = runKindFor(data.status, offeredEndpointReadiness(data), stale);
   // Target writes of unknown place: the Run waits for the Route's Namespace path (ADR-0504).
-  const legacyName = data.targetPlacementUnknown === true ? data.route.targetNamespacePath : null;
+  const legacyName = endpointLegacyUnknown(data) ? data.route.targetNamespacePath : null;
   const runLabel = (k: EndpointRunKind | undefined) =>
     k === 'run_anyway' ? t('action.runAnyway') : t('action.migrate');
 
@@ -346,7 +358,20 @@ export function EndpointMigrationView({ routeId }: { readonly routeId: string })
         texts={{
           title: confirmTexts('title'),
           ok: runLabel(confirming),
-          body: confirmTexts('body', { name: legacyName ?? '' }),
+          body: (
+            <div className="flex flex-col gap-3">
+              <Typography.Paragraph className="m-0">
+                {confirmTexts('body', { name: legacyName ?? '' })}
+              </Typography.Paragraph>
+              {confirming === 'run_anyway' ? (
+                <Alert
+                  type="warning"
+                  showIcon
+                  title={runAnywayTexts('warning', { count: data.readinessCounts?.preTasks ?? 0 })}
+                />
+              ) : null}
+            </div>
+          ),
         }}
         warning={confirmTexts('warning')}
         loading={start.isPending}

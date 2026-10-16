@@ -105,6 +105,22 @@ describe('AppShell', () => {
     expect(replace).not.toHaveBeenCalled();
   });
 
+  it('[UI-036] [AUTH-005] a disabled Actor leaves the shell for the disabled-account page', async () => {
+    for (const path of ['/repositories', '/denied']) {
+      cleanup();
+      hardNavigate.mockReset();
+      pathname = path;
+      mockFetch(() => reply(200, actor('admin', { disabled: true })));
+      renderWithApp(<AppShell>secret</AppShell>);
+      await waitFor(() =>
+        expect(hardNavigate).toHaveBeenCalledWith('/auth/error?error=actor_disabled'),
+      );
+      expect(replace).not.toHaveBeenCalledWith(expect.stringContaining('/denied'));
+      expect(screen.queryByText('secret')).toBeNull();
+      expect(screen.queryByRole('navigation')).toBeNull();
+    }
+  });
+
   it('[UI-010] shows the problem text and retries when the Actor cannot be loaded', async () => {
     let calls = 0;
     mockFetch(() => {
@@ -135,6 +151,36 @@ describe('AppShell', () => {
       '/api/auth/sign-out',
       expect.objectContaining({ method: 'POST' }),
     );
+  });
+
+  it('[UI-010] a failed sign-out says so and stays on the page with the session', async () => {
+    mockFetch((url) =>
+      url === '/api/auth/sign-out'
+        ? reply(500, { code: 'internal_error' })
+        : reply(200, actor('admin')),
+    );
+    renderWithApp(<AppShell>page body</AppShell>);
+    fireEvent.click(await screen.findByRole('button', { name: 'Sign out' }));
+    expect(
+      await screen.findByText(
+        'You could not be signed out, and your session is still active. Try again.',
+      ),
+    ).toBeTruthy();
+    expect(hardNavigate).not.toHaveBeenCalled();
+    expect(screen.getByRole('main').textContent).toContain('page body');
+    const button = screen.getByRole('button', { name: 'Sign out' });
+    expect(button.className).not.toContain('ant-btn-loading');
+  });
+
+  it('[UI-010] a sign-out that cannot reach the server says so too', async () => {
+    mockFetch((url) => {
+      if (url === '/api/auth/sign-out') throw new TypeError('network down');
+      return reply(200, actor('admin'));
+    });
+    renderWithApp(<AppShell>x</AppShell>);
+    fireEvent.click(await screen.findByRole('button', { name: 'Sign out' }));
+    expect(await screen.findByRole('alert')).toBeTruthy();
+    expect(hardNavigate).not.toHaveBeenCalled();
   });
 
   it('[UI-010] the menu button opens the drawer with the same navigation', async () => {

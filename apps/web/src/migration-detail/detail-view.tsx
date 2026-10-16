@@ -7,8 +7,10 @@ import Link from 'next/link';
 import { useTranslations } from 'next-intl';
 import { type ReactNode, useState } from 'react';
 import { formatDateTime } from '../format.ts';
+import { guidanceTitle } from '../guidance/guidance-view.tsx';
 import { ErrorAlert } from '../mapping/shared.tsx';
-import { facetBadges } from '../repositories/facet-strip.tsx';
+import { GUIDANCE_NAMESPACE } from '../messages.ts';
+import { FACET_ICON, facetBadges } from '../repositories/facet-strip.tsx';
 import { MigrationStatusTag, ReadinessTag } from '../repositories/tags.tsx';
 import { useActor } from '../shell/actor-context.tsx';
 import { useLiveTopics } from '../shell/live-topics.tsx';
@@ -52,6 +54,7 @@ function FacetJump({
 }) {
   const t = useTranslations('migrationDetail.strip');
   const tKind = useTranslations('migrationDetail.findingKind');
+  const guidance = useTranslations(GUIDANCE_NAMESPACE);
   const badges = facetBadges(migration.latestAnalysis);
   if (badges.length === 0) return null;
   return (
@@ -64,6 +67,11 @@ function FacetJump({
                 facet: badge.facetKey,
                 count: badge.count,
                 kind: tKind(badge.worst),
+                // UI-022: the hover text gives the reason, the worst finding's title (or its code).
+                reason: badge.reason
+                  ? (guidanceTitle(badge.reason.code, badge.reason.params, guidance) ??
+                    badge.reason.code)
+                  : '',
               });
         return (
           <li key={badge.facetKey}>
@@ -76,6 +84,7 @@ function FacetJump({
             >
               <Tag
                 color={badge.worst === null ? 'success' : FACET_COLOR[badge.worst]}
+                icon={FACET_ICON[badge.worst ?? 'clean']}
                 className="me-0"
               >
                 {badge.facetKey}
@@ -86,6 +95,21 @@ function FacetJump({
       })}
     </ul>
   );
+}
+
+/**
+ * The Wave choices: the loaded Waves (the first 200 by name), plus the Migration's own Wave when it
+ * is not among them, so the selector names it instead of showing its raw id.
+ */
+export function waveOptions(
+  loaded: readonly { readonly id: string; readonly name: string }[],
+  current: MigrationDetail['wave'],
+): { value: string; label: string }[] {
+  const options = loaded.map((w) => ({ value: w.id, label: w.name }));
+  if (current && !loaded.some((w) => w.id === current.id)) {
+    options.push({ value: current.id, label: current.name });
+  }
+  return options;
 }
 
 function WaveField({
@@ -116,7 +140,7 @@ function WaveField({
         placeholder={t('noWave')}
         loading={waves.isLoading || change.isPending}
         value={migration.waveId ?? undefined}
-        options={(waves.data ?? []).map((w) => ({ value: w.id, label: w.name }))}
+        options={waveOptions(waves.data ?? [], migration.wave)}
         onChange={(value: string | undefined) => change.mutate(value ?? null)}
       />
       {change.isError ? <ActionError error={change.error} scope="wave" /> : null}
@@ -228,7 +252,14 @@ function Header({
  * `migration:<id>` over the shell's live connection (JOB-060), so a Run or a task change refreshes
  * every tab.
  */
-export function MigrationDetailView({ id }: { readonly id: string }) {
+export function MigrationDetailView({
+  id,
+  resolutionTasks = [],
+}: {
+  readonly id: string;
+  /** Tasks the data resolves, which cannot be marked done (LIF-006; from the server's registry). */
+  readonly resolutionTasks?: readonly string[];
+}) {
   const t = useTranslations('migrationDetail');
   const actor = useActor();
   const operator = can(actor, 'operate');
@@ -294,6 +325,7 @@ export function MigrationDetailView({ id }: { readonly id: string }) {
                 migrationId={m.id}
                 operator={can(actor, 'manageTasks')}
                 targetName={targetFullName(m)}
+                resolutionTasks={resolutionTasks}
               />
             ),
           },

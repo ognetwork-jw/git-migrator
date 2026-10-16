@@ -40,6 +40,12 @@ export function signInHref(pathname: string, search = ''): string {
   return next === DEFAULT_LANDING ? '/signin' : `/signin?next=${encodeURIComponent(next)}`;
 }
 
+/**
+ * Where a disabled Actor is sent (AUTH-005): the auth error page, outside the shell, which says the
+ * account is disabled. `/denied` would show the full navigation and blame the role.
+ */
+export const DISABLED_HREF = '/auth/error?error=actor_disabled';
+
 /** The `auth.error.<code>` key to show for `?error=`; unknown or malformed codes show `unknown`. */
 export function resolveAuthErrorCode(
   code: string | null | undefined,

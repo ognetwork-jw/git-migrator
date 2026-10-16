@@ -10,9 +10,9 @@ import { Alert, Button, Descriptions, Input, Modal, Select, Space, Table, Typogr
 import Link from 'next/link';
 import { useTranslations } from 'next-intl';
 import { useState } from 'react';
-import { useLiveInvalidation } from '../live/index.ts';
 import type { IdentityRef } from '../mapping/api.ts';
 import { ErrorAlert } from '../mapping/shared.tsx';
+import { useLiveTopics } from '../shell/live-topics.tsx';
 import {
   approveBatch,
   batchKey,
@@ -40,10 +40,7 @@ export function BatchView({ batchId }: { readonly batchId: string }) {
   // The count and token the operator is shown are frozen when the dialog opens.
   const [approving, setApproving] = useState<{ count: number; token: string }>();
   const [revoking, setRevoking] = useState<Item>();
-  useLiveInvalidation({
-    topics: invitationTopics([`invitation:${batchId}`]),
-    queryKeysFor: () => [invitationsKey],
-  });
+  useLiveTopics(invitationTopics([`invitation:${batchId}`]), () => [invitationsKey]);
 
   const query = useInfiniteQuery({
     queryKey: batchKey(batchId, status),

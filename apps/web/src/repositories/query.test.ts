@@ -83,7 +83,6 @@ describe('[UI-021] the repositories query runs on the server', () => {
 
   it('[UI-021] the Facet badge strip has one badge per Facet: by its worst finding, or clean when it only has steps', () => {
     const badges = facetBadges({
-      createdAt: '2026-10-01T00:00:00Z',
       items: [
         { facetKey: 'refs', kind: 'step' },
         { facetKey: 'hooks', kind: 'warning' },
@@ -101,7 +100,6 @@ describe('[UI-021] the repositories query runs on the server', () => {
     // A clean Analysis still names its Facets.
     expect(
       facetBadges({
-        createdAt: '2026-10-01T00:00:00Z',
         items: [{ facetKey: 'refs', kind: 'step' }],
       }),
     ).toEqual([{ facetKey: 'refs', worst: null, count: 0 }]);

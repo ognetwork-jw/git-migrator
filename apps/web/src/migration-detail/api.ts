@@ -40,6 +40,10 @@ export interface MigrationDetail {
   readonly targetCreatedByFramework: boolean;
   /** Legacy target writes whose place no evidence shows: every Run asks for a typed confirmation (ADR-0504). */
   readonly targetPlacementUnknown?: boolean;
+  /** Where the framework wrote the target (the pin, ADR-0504); null before the first write. */
+  readonly targetPlacedEndpointId?: string | null;
+  readonly targetPlacedNamespaceId?: string | null;
+  readonly targetPlacedNamespace?: { readonly slug: string } | null;
   readonly sourceReadOnlyApplied: boolean;
   readonly analysisStaleAt: string | null;
   readonly verifiedAt: string | null;
@@ -52,6 +56,8 @@ export interface MigrationDetail {
   readonly route: {
     readonly id: string;
     readonly targetNamespacePath: string;
+    readonly targetEndpointId?: string;
+    readonly targetNamespaceId?: string | null;
     readonly sourceEndpoint: { readonly displayName: string };
     readonly targetEndpoint: { readonly displayName: string };
   };
@@ -184,6 +190,9 @@ export const fetchMigration = async (id: string): Promise<MigrationDetail | null
         waveId: true,
         targetCreatedByFramework: true,
         targetPlacementUnknown: true,
+        targetPlacedEndpointId: true,
+        targetPlacedNamespaceId: true,
+        targetPlacedNamespace: { select: { slug: true } },
         sourceReadOnlyApplied: true,
         analysisStaleAt: true,
         verifiedAt: true,
@@ -193,6 +202,8 @@ export const fetchMigration = async (id: string): Promise<MigrationDetail | null
           select: {
             id: true,
             targetNamespacePath: true,
+            targetEndpointId: true,
+            targetNamespaceId: true,
             sourceEndpoint: { select: { displayName: true } },
             targetEndpoint: { select: { displayName: true } },
           },

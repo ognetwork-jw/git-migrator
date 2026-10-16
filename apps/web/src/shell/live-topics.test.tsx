@@ -61,6 +61,20 @@ describe('[JOB-060] one live connection per page', () => {
     });
   });
 
+  it('[JOB-060] the first load opens exactly one stream, already with the page topics', async () => {
+    renderWithApp(
+      <LiveTopicsProvider>
+        <Page fetcher={async () => 'x'} />
+      </LiveTopicsProvider>,
+    );
+    await waitFor(() => expect(open()).toHaveLength(1));
+    await new Promise((resolve) => setTimeout(resolve, 250));
+    expect(FakeEventSource.instances).toHaveLength(1);
+    expect(FakeEventSource.instances[0]?.url).toBe(
+      '/api/v1/events?topics=list%3Amigrations,list%3Aruns,quota',
+    );
+  });
+
   it('[JOB-060] an event on a page topic refetches the page queries', async () => {
     let calls = 0;
     const fetcher = async () => `call ${++calls}`;
@@ -126,9 +140,10 @@ describe('[JOB-060] one live connection per page', () => {
     for (let i = 0; i < 4; i++) fireEvent.click(screen.getByRole('button', { name: 'flip' }));
     await waitFor(() => expect(open()).toHaveLength(1));
     await new Promise((resolve) => setTimeout(resolve, 250));
-    // The first stream opens at once; the flicker adds at most one more, never two at a time.
+    // The first stream opens at once with the page topics; the flicker settles back to the same
+    // topic set, so no second stream is opened.
     expect(open()).toHaveLength(1);
-    expect(FakeEventSource.instances.length).toBeLessThanOrEqual(2);
+    expect(FakeEventSource.instances).toHaveLength(1);
   });
 
   it('[JOB-060] a burst of events refetches a view once', async () => {

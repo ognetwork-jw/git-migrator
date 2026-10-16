@@ -47,7 +47,7 @@ const fresh = (): World => ({
   responses: {},
 });
 
-function start(role: Actor['role'] = 'operator') {
+function start(role: Actor['role'] = 'operator', resolutionTasks: readonly string[] = []) {
   installMatchMedia();
   // The rows are read when a request arrives, so a test can change the world after rendering.
   const rows = {
@@ -76,7 +76,7 @@ function start(role: Actor['role'] = 'operator') {
   calls = api.calls;
   return renderWithApp(
     <ActorProvider value={actor(role)}>
-      <MigrationDetailView id="m1" />
+      <MigrationDetailView id="m1" resolutionTasks={resolutionTasks} />
     </ActorProvider>,
     new QueryClient({ defaultOptions: { queries: { retry: false } } }),
   );
@@ -136,6 +136,17 @@ describe('[UI-022] the repository detail header', () => {
         data: { waveId: 'w1' },
       });
     });
+  });
+
+  it('[UI-022] the Wave selector names a Wave beyond the loaded choices', async () => {
+    world.migration = migration({ waveId: 'w9', wave: { id: 'w9', name: 'Wave nine' } });
+    start();
+    await ready();
+    const select = screen
+      .getByRole('combobox', { name: 'Wave' })
+      .closest('.ant-select') as HTMLElement;
+    expect(within(select).getByText('Wave nine')).toBeTruthy();
+    expect(within(select).queryByText('w9')).toBeNull();
   });
 
   it('[LIF-021] says when the analysis is out of date', async () => {
@@ -393,6 +404,50 @@ describe('[UI-022] the Overview, Tasks, Facets, Runs and Audit tabs', () => {
     expect(await screen.findByText(/has not been analyzed yet/)).toBeTruthy();
   });
 
+  it('[UI-022] a Facet badge names its worst finding in the hover text', async () => {
+    start();
+    await ready();
+    const badge = screen.getByRole('button', { name: /^secrets: / });
+    expect(badge.getAttribute('title')).toBe(
+      'secrets: 1 finding, worst is Tasks after the run: Set secret values. Open the Facet.',
+    );
+    // A code without guidance is named by its code.
+    cleanup();
+    world.migration = migration({
+      latestAnalysis: {
+        id: 'a1',
+        createdAt: '2026-10-01T10:00:00.000Z',
+        items: [
+          {
+            id: 'x',
+            facetKey: 'hooks',
+            kind: 'blocker',
+            code: 'hooks.unknown-code',
+            fieldPaths: [],
+            params: {},
+            order: 1,
+          },
+        ],
+      },
+    });
+    start();
+    await ready();
+    expect(screen.getByRole('button', { name: /^hooks: / }).getAttribute('title')).toContain(
+      'worst is Blockers: hooks.unknown-code.',
+    );
+  });
+
+  it('[UI-001] a Facet badge shows its severity as an icon, not only as a color', async () => {
+    start();
+    await ready();
+    const strip = screen.getByRole('list', { name: 'Facets' });
+    const icon = (facet: RegExp) =>
+      within(strip).getByRole('button', { name: facet }).querySelector('.anticon')?.className;
+    expect(icon(/^secrets: /)).toContain('anticon-clock-circle');
+    expect(icon(/^branch-rules: /)).toContain('anticon-warning');
+    expect(icon(/^git-refs: /)).toContain('anticon-check-circle');
+  });
+
   it('[UI-022] clicking a Facet badge opens that Facet in the Facets tab', async () => {
     start();
     await ready();
@@ -465,6 +520,45 @@ describe('[UI-022] the Overview, Tasks, Facets, Runs and Audit tabs', () => {
     expect(screen.queryByRole('button', { name: /^Revoke/ })).toBeNull();
   });
 
+  it('[UI-022] long fidelity and parity tables are paged, and rows sharing a path both show', async () => {
+    const many = Array.from({ length: 120 }, (_, i) => ({
+      path: `/rules[pattern=r${String(i).padStart(3, '0')}]/restrictPushes`,
+      fidelity: 'lossy',
+      accepted: false as const,
+      policyKey: 'branch-rules.x',
+    }));
+    const diffs = Array.from({ length: 70 }, (_, i) => ({
+      path: i < 2 ? '/same' : `/d${String(i).padStart(3, '0')}`,
+      source: i,
+      target: -i,
+    }));
+    world.diff = diff([
+      diffFacet({
+        decisions: many,
+        parity: { status: 'different', checkedAt: '2026-10-01T10:00:00.000Z', diffs, excluded: [] },
+      }),
+    ]);
+    await openFacets();
+    const fidelity = screen.getByRole('region', { name: 'Field fidelity' });
+    expect(within(fidelity).getAllByText(/^\/rules\[pattern=r/)).toHaveLength(50);
+    expect(within(fidelity).getByRole('listitem', { name: '3' })).toBeTruthy();
+    const parity = screen.getByRole('region', { name: 'Parity' });
+    expect(within(parity).getAllByText('/same')).toHaveLength(2);
+    expect(within(parity).getAllByRole('button', { name: 'Accept' })).toHaveLength(50);
+  });
+
+  it('[UI-022] "show more" in a JSON tree adds the next entries, not all of them', async () => {
+    const big = Object.fromEntries(Array.from({ length: 250 }, (_, i) => [`k${i}`, i]));
+    world.diff = diff([diffFacet({ source: big, desired: big, target: big })]);
+    await openFacets();
+    const source = screen.getByRole('region', { name: 'Source' });
+    expect(within(source).getAllByText(/^k\d+: /)).toHaveLength(100);
+    fireEvent.click(within(source).getByRole('button', { name: 'Show 100 more (150 not shown)' }));
+    expect(within(source).getAllByText(/^k\d+: /)).toHaveLength(200);
+    fireEvent.click(within(source).getByRole('button', { name: 'Show 50 more (50 not shown)' }));
+    expect(within(source).getAllByText(/^k\d+: /)).toHaveLength(250);
+  });
+
   it('[UI-022] the Facets tab says when there is nothing to compare', async () => {
     world.diff = { ...diff(), facets: [] };
     start();
@@ -487,6 +581,32 @@ describe('[UI-022] the Overview, Tasks, Facets, Runs and Audit tabs', () => {
     expect(screen.getByRole('button', { name: /^Copy / })).toBeTruthy();
     fireEvent.click(screen.getByRole('button', { name: 'Mark done' }));
     await waitFor(() => expect(posted('/api/v1/migrations/m1/tasks/t1/done')).toHaveLength(1));
+  });
+
+  it('[LIF-006] a resolution task offers no Mark done, says why, and is dismissed only with a reason', async () => {
+    world.tasks = [
+      task(1, {
+        facetKey: 'access-control',
+        code: 'access-control.unmapped-principal',
+        phase: 'pre',
+        verifiable: false,
+        params: {},
+      }),
+    ];
+    start('operator', ['access-control access-control.unmapped-principal']);
+    await ready();
+    fireEvent.click(screen.getByRole('tab', { name: /^Tasks/ }));
+    expect(
+      await screen.findByText(/closes by itself when the underlying data changes/),
+    ).toBeTruthy();
+    expect(screen.queryByRole('button', { name: 'Mark done' })).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: 'Dismiss' }));
+    const dialog = within(await screen.findByRole('dialog'));
+    const ok = dialog.getByRole('button', { name: 'Dismiss' }) as HTMLButtonElement;
+    expect(ok.disabled).toBe(true);
+    fireEvent.change(dialog.getByRole('textbox'), { target: { value: 'Retired account' } });
+    fireEvent.click(ok);
+    await waitFor(() => expect(posted('/api/v1/migrations/m1/tasks/t1/dismiss')).toHaveLength(1));
   });
 
   it('[LIF-006] dismiss asks for a note and posts it; reopen posts reopen', async () => {
@@ -635,6 +755,39 @@ describe('[LIF-077] a legacy Migration of unknown place confirms the Route place
     expect(link.getAttribute('href')).toBe('/runs/run-new');
   });
 
+  it('[LIF-077] after a failed legacy rollback (flag and pin set) the page follows the pin, as the server does', async () => {
+    world.migration = legacy({
+      targetPlacedEndpointId: 'e-target',
+      targetPlacedNamespaceId: 'ns-old',
+      targetPlacedNamespace: { slug: 'old-org' },
+      route: {
+        id: 'r1',
+        targetNamespacePath: 'acme-org',
+        targetEndpointId: 'e-target',
+        targetNamespaceId: 'ns-new',
+        sourceEndpoint: { displayName: 'Source main' },
+        targetEndpoint: { displayName: 'Target main' },
+      },
+    });
+    world.runs = [run(1, { kind: 'rollback', status: 'failed', hasMutations: true })];
+    start();
+    await ready();
+    // The placement blocker is no longer waived: no Run is offered until the next Analysis.
+    expect(screen.queryByRole('button', { name: 'Migrate' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Run anyway' })).toBeNull();
+    // The rollback names the target in the pinned Namespace, not in the Route's new one.
+    click('Roll back');
+    expect(dialog().queryByText(/type acme-org\/plat-api to confirm it/)).toBeNull();
+    const input = dialog().getByRole('textbox');
+    fireEvent.change(input, { target: { value: 'old-org/plat-api' } });
+    fireEvent.click(dialog().getByRole('button', { name: 'Roll back' }));
+    await waitFor(() => expect(posted('/api/v1/migrations/m1/runs')).toHaveLength(1));
+    expect(bodyOf(posted('/api/v1/migrations/m1/runs')[0])).toEqual({
+      kind: 'rollback',
+      confirm: 'old-org/plat-api',
+    });
+  });
+
   it('[LIF-043] with open pre tasks it offers Run anyway, confirmed the same way', async () => {
     world.migration = legacy({ readinessCounts: { blockers: 1, preTasks: 2, postTasks: 0 } });
     start();
@@ -647,6 +800,23 @@ describe('[LIF-077] a legacy Migration of unknown place confirms the Route place
     expect(bodyOf(posted('/api/v1/migrations/m1/runs')[0])).toEqual({
       kind: 'run_anyway',
       confirm: 'acme-org/plat-api',
+    });
+  });
+
+  it('[LIF-070] the legacy confirmation keeps the open pre-task warning and the read-only opt-out', async () => {
+    world.migration = legacy({ readinessCounts: { blockers: 1, preTasks: 2, postTasks: 0 } });
+    start();
+    await ready();
+    click('Run anyway');
+    expect(dialog().getByText('2 open tasks will not be done by the Run.')).toBeTruthy();
+    fireEvent.click(dialog().getByRole('checkbox'));
+    fireEvent.change(dialog().getByRole('textbox'), { target: { value: 'acme-org/plat-api' } });
+    fireEvent.click(dialog().getByRole('button', { name: 'Run anyway' }));
+    await waitFor(() => expect(posted('/api/v1/migrations/m1/runs')).toHaveLength(1));
+    expect(bodyOf(posted('/api/v1/migrations/m1/runs')[0])).toEqual({
+      kind: 'run_anyway',
+      confirm: 'acme-org/plat-api',
+      options: { skipSourceReadOnly: true },
     });
   });
 

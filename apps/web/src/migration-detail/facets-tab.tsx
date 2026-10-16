@@ -38,6 +38,14 @@ const PARITY_COLOR: Record<string, string | undefined> = {
   unverifiable: 'default',
 };
 
+/** Rows per page of the fidelity, parity and Expected Difference tables (a Facet may have thousands). */
+export const TABLE_PAGE = 50;
+const paged = { pageSize: TABLE_PAGE, hideOnSinglePage: true, showSizeChanger: false } as const;
+
+/** Rows with a key that stays unique when two rows share a path. */
+const keyed = <T extends { readonly path: string }>(rows: readonly T[]) =>
+  rows.map((row, index) => ({ ...row, key: `${index}:${row.path}` }));
+
 const shown = (value: unknown): string => {
   const text = scalarText(value);
   return text.length > 200 ? `${text.slice(0, 200)}…` : text;
@@ -114,9 +122,8 @@ function FacetPanel({
         ) : (
           <Table
             size="small"
-            pagination={false}
-            rowKey="path"
-            dataSource={decisions}
+            pagination={paged}
+            dataSource={keyed(decisions)}
             columns={[
               {
                 title: t('column.path'),
@@ -161,9 +168,8 @@ function FacetPanel({
             {parity.diffs.length > 0 ? (
               <Table
                 size="small"
-                pagination={false}
-                rowKey="path"
-                dataSource={[...parity.diffs]}
+                pagination={paged}
+                dataSource={keyed(parity.diffs)}
                 columns={[
                   {
                     title: t('column.path'),
@@ -212,7 +218,7 @@ function FacetPanel({
         ) : (
           <Table
             size="small"
-            pagination={false}
+            pagination={paged}
             rowKey="id"
             dataSource={[...facet.expectedDifferences]}
             columns={[

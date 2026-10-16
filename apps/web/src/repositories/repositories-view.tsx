@@ -67,9 +67,9 @@ const initialFilters = (): FilterState => {
 const MAX_HIDDEN_CHECK = 100;
 
 export interface RepositoriesViewProps {
-  /** Opens the list on this Route (for links from the dashboard). */
   /** Rows per page (default 50, UI-021); tests use a small page. */
   readonly pageSize?: number;
+  /** Opens the list on this Route (for links from the dashboard). */
   readonly initialRouteId?: string;
   /** Opens the list with these filters instead of the defaults. */
   readonly initialFilters?: Partial<FilterState>;

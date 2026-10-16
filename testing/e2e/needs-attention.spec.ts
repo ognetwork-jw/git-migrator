@@ -12,7 +12,7 @@ import { expectLiveStayedSse, signIn, watchLive } from './harness/ui.ts';
  * watches the status change. The steps are one ordered scenario sharing one signed-in page.
  *
  * "Complete a task" is covered by dismiss: the only task of this fixture is a resolution task,
- * which the server refuses to mark done (ADR-0485). LIF-043's strict options and typed
+ * which the server refuses to mark done and the page does not offer to (ADR-0485, ADR-0520). LIF-043's strict options and typed
  * confirmation are covered at the API level by `packages/api/src/runs.test.ts` (T-074).
  */
 
@@ -92,7 +92,7 @@ test('[TST-021] [UI-022] signs in, refreshes the inventory and finds the reposit
   await expect(page.getByRole('heading', { name: 'Repository' })).toBeVisible();
 });
 
-test('[TST-021] [UI-022] the Tasks tab lists the open pre task, and a resolution task cannot be marked done', async () => {
+test('[TST-021] [UI-022] the Tasks tab lists the open pre task, and a resolution task offers no Mark done', async () => {
   await page.getByRole('tab', { name: /^Tasks/ }).click();
   await expect(page.getByText('1 of 1 tasks are open.')).toBeVisible();
   await expect(page.locator('.ant-collapse-header code', { hasText: TASK_CODE })).toBeVisible();
@@ -118,12 +118,10 @@ test('[TST-021] [UI-022] the Tasks tab lists the open pre task, and a resolution
     'Asked the repository owner.',
   );
 
-  // [LIF-006] The task is resolved by an Identity Mapping, so the server refuses "done" (422) and
-  // the page says so in its own words instead of changing the task.
-  await page.getByRole('button', { name: 'Mark done' }).click();
-  await expect(
-    page.getByRole('alert').filter({ hasText: 'cannot be marked done by hand' }),
-  ).toBeVisible();
+  // [LIF-006] The task is resolved by an Identity Mapping, so the server refuses "done": the page
+  // knows the completion mode up front, offers no "Mark done" and says why (ADR-0520).
+  await expect(page.getByText(/closes by itself when the underlying data changes/)).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Mark done' })).toHaveCount(0);
   await expect(page.getByText('1 of 1 tasks are open.')).toBeVisible();
 });
 

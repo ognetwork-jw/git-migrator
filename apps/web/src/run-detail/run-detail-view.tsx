@@ -15,19 +15,23 @@ import { useActor } from '../shell/actor-context.tsx';
 import { useLiveTopics } from '../shell/live-topics.tsx';
 import {
   fetchLogAfter,
+  fetchLogTail,
   fetchMutations,
   fetchRun,
   fetchSteps,
   LOG_MAX_LINES,
+  LOG_OVERLAP_MS,
   LOG_PAGE,
   logKey,
   type MutationRow,
+  mergeLog,
   mutationsKey,
   type RunLogRow,
   type RunStepRow,
   runKey,
   runRootKey,
   stepsKey,
+  uuid7Floor,
 } from './api.ts';
 import { LogViewer } from './log-viewer.tsx';
 
@@ -52,9 +56,9 @@ const RUN_COLOR: Record<string, string | undefined> = {
 };
 
 /**
- * The lines of a Run's log. The first fetch reads the log from the start; every live `run.log`
- * event fetches only what is new (the ids are time ordered), and the page keeps the newest
- * {@link LOG_MAX_LINES} lines.
+ * The lines of a Run's log. The first fetch reads only the newest {@link LOG_MAX_LINES} lines,
+ * from the end. Every live `run.log` event re-reads the last {@link LOG_OVERLAP_MS} before the
+ * newest line and what follows, and merges by id, so a line committed late is not skipped.
  */
 export function useRunLog(runId: string) {
   const cache = useRef<{ runId: string; rows: readonly RunLogRow[]; dropped: boolean }>({
@@ -67,13 +71,23 @@ export function useRunLog(runId: string) {
     structuralSharing: false,
     queryFn: async () => {
       if (cache.current.runId !== runId) cache.current = { runId, rows: [], dropped: false };
-      let rows = cache.current.rows;
-      for (;;) {
-        const page = await fetchLogAfter(runId, rows[rows.length - 1]?.id);
-        rows = [...rows, ...page];
-        if (page.length < LOG_PAGE) break;
+      let { rows, dropped } = cache.current;
+      const newest = rows[rows.length - 1];
+      if (newest === undefined) {
+        const tail = await fetchLogTail(runId, LOG_MAX_LINES);
+        rows = tail.rows;
+        dropped = dropped || tail.truncated;
+      } else {
+        let cursor = uuid7Floor(newest.id, LOG_OVERLAP_MS) ?? newest.id;
+        const pages: RunLogRow[][] = [];
+        for (;;) {
+          const page = await fetchLogAfter(runId, cursor);
+          pages.push(page);
+          if (page.length < LOG_PAGE) break;
+          cursor = (page[page.length - 1] as RunLogRow).id;
+        }
+        rows = mergeLog(rows, pages.flat());
       }
-      let dropped = cache.current.dropped;
       if (rows.length > LOG_MAX_LINES) {
         rows = rows.slice(rows.length - LOG_MAX_LINES);
         dropped = true;

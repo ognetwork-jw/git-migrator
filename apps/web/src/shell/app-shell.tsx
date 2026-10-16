@@ -2,7 +2,7 @@
 
 import { LogoutOutlined, MenuOutlined } from '@ant-design/icons';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { Button, Drawer, Result, Spin, Tag, Typography } from 'antd';
+import { Alert, Button, Drawer, Result, Spin, Tag, Typography } from 'antd';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { useTranslations } from 'next-intl';
@@ -10,7 +10,7 @@ import { type ReactNode, useEffect, useState } from 'react';
 import { ACTOR_QUERY_KEY, fetchActor } from '../api/actor.ts';
 import { signOut } from '../auth/client.ts';
 import { hardNavigate } from '../auth/navigate.ts';
-import { signInHref } from '../auth/paths.ts';
+import { DISABLED_HREF, signInHref } from '../auth/paths.ts';
 import { ActorProvider } from './actor-context.tsx';
 import { LiveStatus } from './live-status.tsx';
 import { LiveTopicsProvider } from './live-topics.tsx';
@@ -39,16 +39,21 @@ export function AppShell({ children }: { readonly children: ReactNode }) {
   const queryClient = useQueryClient();
   const [menuOpen, setMenuOpen] = useState(false);
   const [signingOut, setSigningOut] = useState(false);
+  const [signOutFailed, setSignOutFailed] = useState(false);
   const query = useQuery({ queryKey: ACTOR_QUERY_KEY, queryFn: () => fetchActor() });
   const result = query.data;
   const actor = result?.kind === 'ok' ? result.actor : undefined;
   const unauthenticated = result?.kind === 'unauthenticated';
-  const denied = actor !== undefined && pathname !== DENIED_PATH && !canOpen(actor, pathname);
+  // A disabled Actor (AUTH-005) is not "denied" a page: it may use none, so it leaves the shell.
+  const disabled = actor?.disabled === true;
+  const denied =
+    actor !== undefined && !disabled && pathname !== DENIED_PATH && !canOpen(actor, pathname);
 
   useEffect(() => {
     if (unauthenticated) router.replace(signInHref(pathname, window.location.search));
+    else if (disabled) hardNavigate(DISABLED_HREF);
     else if (denied) router.replace(deniedHref(pathname));
-  }, [unauthenticated, denied, router, pathname]);
+  }, [unauthenticated, disabled, denied, router, pathname]);
 
   if (result?.kind === 'problem' || query.isError) {
     const code = result?.kind === 'problem' ? result.code : 'not_ready';
@@ -68,7 +73,7 @@ export function AppShell({ children }: { readonly children: ReactNode }) {
     );
   }
 
-  if (actor === undefined || denied) {
+  if (actor === undefined || disabled || denied) {
     return (
       <Centered>
         <div role="status" className="flex flex-col items-center gap-3">
@@ -81,7 +86,14 @@ export function AppShell({ children }: { readonly children: ReactNode }) {
 
   const onSignOut = async () => {
     setSigningOut(true);
-    await signOut();
+    setSignOutFailed(false);
+    // A refused or failed sign-out leaves the session alive: say so and stay, rather than show a
+    // signed-out page to someone who is still signed in (AUTH-004).
+    if (!(await signOut())) {
+      setSigningOut(false);
+      setSignOutFailed(true);
+      return;
+    }
     queryClient.clear();
     hardNavigate(SIGN_IN_PATH);
   };
@@ -129,6 +141,16 @@ export function AppShell({ children }: { readonly children: ReactNode }) {
                 </Button>
               </div>
             </header>
+            {signOutFailed ? (
+              <Alert
+                type="error"
+                showIcon
+                banner
+                closable
+                onClose={() => setSignOutFailed(false)}
+                title={t('signOutFailed')}
+              />
+            ) : null}
             <main id="main" tabIndex={-1} className="flex-1 p-4 outline-none sm:p-6">
               {children}
             </main>

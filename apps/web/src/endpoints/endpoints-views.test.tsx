@@ -7,7 +7,12 @@ import type { Actor } from '../api/actor.ts';
 import { ActorProvider } from '../shell/actor-context.tsx';
 import { LiveTopicsProvider } from '../shell/live-topics.tsx';
 import { installMatchMedia, renderWithApp } from '../test-render.tsx';
-import { EndpointMigrationView, runKindFor } from './endpoint-migration-view.tsx';
+import {
+  EndpointMigrationView,
+  endpointLegacyUnknown,
+  offeredEndpointReadiness,
+  runKindFor,
+} from './endpoint-migration-view.tsx';
 import { EndpointsView, migrationHref } from './endpoints-view.tsx';
 
 vi.setConfig({ testTimeout: 30_000 });
@@ -293,6 +298,13 @@ describe('[UI-026] endpoint migration', () => {
     expect(screen.getAllByText('Run anyway').length).toBe(2);
   });
 
+  it('[UI-026] [UI-040] each finding shows its guidance, as on the repository page', async () => {
+    renderWith(<EndpointMigrationView routeId="r1" />);
+    const post = await screen.findByRole('region', { name: 'Tasks after the Run' });
+    expect(await within(post).findByText('Approve invitations')).toBeTruthy();
+    expect(post.querySelector('[data-guidance="members.approve-invitations"]')).not.toBeNull();
+  });
+
   it('[UI-026] an operator analyzes, and starts a Run anyway when readiness needs attention', async () => {
     renderWith(<EndpointMigrationView routeId="r1" />);
     await screen.findByText('Route Source to Target (acme)');
@@ -339,6 +351,23 @@ describe('[UI-026] endpoint migration', () => {
     expect(await screen.findByText('Run queued.')).toBeTruthy();
   });
 
+  it('[LIF-077] [UI-026] a legacy Run anyway still warns of the open pre tasks it leaves', async () => {
+    migration = {
+      ...MIGRATION,
+      readiness: 'blocked',
+      blockerCodes: ['repository-settings.target-placement-unknown'],
+      readinessCounts: { blockers: 1, preTasks: 3 },
+      targetPlacementUnknown: true,
+    };
+    renderWith(<EndpointMigrationView routeId="r1" />);
+    await screen.findByText('Route Source to Target (acme)');
+    fireEvent.click(screen.getByRole('button', { name: 'Run anyway' }));
+    const dialog = within(await screen.findByRole('dialog'));
+    expect(dialog.getByText('3 open tasks will not be done by the Run.')).toBeTruthy();
+    // Endpoint Runs lock no source repository, so there is no read-only opt-out to offer.
+    expect(dialog.queryByRole('checkbox')).toBeNull();
+  });
+
   it('[LIF-005] [UI-026] a legacy endpoint migration with another blocker offers no Run', async () => {
     migration = {
       ...MIGRATION,
@@ -352,6 +381,20 @@ describe('[UI-026] endpoint migration', () => {
     expect((screen.getByRole('button', { name: 'Migrate' }) as HTMLButtonElement).disabled).toBe(
       true,
     );
+  });
+
+  it('[LIF-077] [UI-026] with the flag and a pin both set, the legacy confirmation no longer applies', () => {
+    const pinned = {
+      readiness: 'blocked',
+      blockerCodes: ['repository-settings.target-placement-unknown'],
+      readinessCounts: { preTasks: 0 },
+      targetPlacementUnknown: true,
+      targetPlacedEndpointId: 'e1',
+      targetPlacedNamespaceId: 'ns1',
+    };
+    expect(endpointLegacyUnknown(pinned)).toBe(false);
+    expect(offeredEndpointReadiness(pinned)).toBe('blocked');
+    expect(offeredEndpointReadiness({ ...pinned, targetPlacedNamespaceId: null })).toBe('ready');
   });
 
   it('[UI-026] a viewer sees the page without the actions', async () => {
