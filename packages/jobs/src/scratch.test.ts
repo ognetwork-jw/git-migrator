@@ -1,7 +1,8 @@
 import { existsSync } from 'node:fs';
-import { mkdir, mkdtemp, rm, symlink, utimes, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, readdir, rm, symlink, utimes, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { ASKPASS_DIR_PREFIX, GitService } from '@git-migrator/git';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   checkScratchSpace,
@@ -150,6 +151,62 @@ describe('scratch cleanup', () => {
     expect(await cleanScratch({ root })).toEqual(['target']);
     expect(existsSync(join(root, 'link'))).toBe(false); // dangling now, but never removed by us
     expect(existsSync(join(root, 'file'))).toBe(true);
+  });
+
+  it('[ADP-071] [JOB-015] removes credential directories a killed process left, at the root and in job directories', async () => {
+    const atRoot = join(root, `${ASKPASS_DIR_PREFIX}dead`);
+    const job = join(root, 'run-1', 'job-1');
+    const inJob = join(job, `${ASKPASS_DIR_PREFIX}dead`);
+    const fresh = join(root, `${ASKPASS_DIR_PREFIX}fresh`);
+    for (const d of [atRoot, inJob, fresh]) await mkdir(d, { recursive: true });
+    await writeFile(join(inJob, 'credential'), 'bot\npw\n');
+    await age(atRoot, 60 * 60_000);
+    await age(inJob, 60 * 60_000);
+    await age(job, 60 * 60_000);
+    await age(join(root, 'run-1'), 60 * 60_000);
+    const removed = await cleanScratch({ root });
+    expect(removed).toContain(`${ASKPASS_DIR_PREFIX}dead`);
+    expect(removed).toContain(join('run-1', 'job-1', `${ASKPASS_DIR_PREFIX}dead`));
+    expect(existsSync(atRoot)).toBe(false);
+    expect(existsSync(inJob)).toBe(false);
+    expect(existsSync(job)).toBe(true); // the Run's own data waits for the 24 h rule
+    expect(existsSync(fresh)).toBe(true);
+  });
+
+  it('[ADP-071] [JOB-015] never removes the credential directory of a command still running, however old', async () => {
+    let entered!: () => void;
+    const inside = new Promise<void>((resolve) => {
+      entered = resolve;
+    });
+    let release!: (error: Error) => void;
+    const held = new Promise<never>((_, reject) => {
+      release = reject;
+    });
+    const service = new GitService({
+      scratchDir: root,
+      quota: {
+        acquire: () => {
+          entered();
+          return held;
+        },
+      },
+    });
+    const running = service
+      .lsRemote({
+        url: 'https://example.com/r.git',
+        credential: { username: 'bot', password: 'pw-0123456789-secret' },
+      })
+      .catch(() => undefined);
+    await inside;
+    const [name] = (await readdir(root)).filter((n) => n.startsWith(ASKPASS_DIR_PREFIX));
+    expect(name).toBeDefined();
+    const live = join(root, name as string);
+    await age(live, 2 * SCRATCH_MAX_AGE_MS);
+    expect(await cleanScratch({ root })).toEqual([]);
+    expect(existsSync(join(live, 'credential'))).toBe(true);
+    release(new Error('done'));
+    await running;
+    expect(existsSync(live)).toBe(false);
   });
 
   it('[JOB-015] treats a missing root as nothing to clean', async () => {

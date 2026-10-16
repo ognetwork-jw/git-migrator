@@ -12,7 +12,7 @@ Internal dependencies (ARC-012, checked by `pnpm lint`): @git-migrator/core, @gi
 - `connection.ts`: `migrateBullmqSchema` is DATA-030 step 4; `bullmqPoolSize` is the JOB-014 formula (see `docs/deployment.md`).
 - `telemetry.ts`: `bullmq-otel` traces for every Queue and Worker (DEP-050).
 - `leader.ts`: `LeaderElection` with `pg_try_advisory_lock` (ARC-023). `schedules.ts`: `desiredSchedulers`, `reconcileSchedulers`, `SchedulerManager` (JOB-050).
-- `maintenance.ts`: handlers for `maintenance.prune` (`QuotaService.prune()` plus hourly `retention.ts`), `maintenance.scratch-cleanup`, `maintenance.run-reaper`. No scheduled job is a placeholder any more: `drift.sweep` has its processor in `drift/` (T-089, ADR-0212).
+- `maintenance.ts`: handlers for `maintenance.prune` (`QuotaService.prune()` plus hourly `retention.ts`), `maintenance.scratch-cleanup` (`cleanScratch` in `scratch.ts`: Run directories older than 24 h, after the stale credential directories through `sweepStaleCredentialFiles`, ADP-071), `maintenance.run-reaper`. No scheduled job is a placeholder any more: `drift.sweep` has its processor in `drift/` (T-089, ADR-0212).
 - `run-leases.ts`, `reaper.ts`: Run lease claim, renew, release and `keepRunLease`; pending markers that carry the awaited job's deduplication id; `reapRuns`, which counts a dead resume or hand-off job toward the bound (LIF-046). The Run executor uses `keepRunLease` (with `startQueued`) and `handOffRun` (with `delayMs`).
 - `scratch.ts`: size class, disk precheck, per-Run scratch directory, cleanup (JOB-015).
 - `provider-wiring.ts`: `RawCaptureSink` over `RawResponse`, `ProviderTelemetry` over `MetricRecorders` and the tracer, and `createProviderEnvironment` for the adapter host (ADR-0190).

@@ -23,7 +23,7 @@ A denied quota acquire throws `AdapterError` `rate_limited` with `retryAt` befor
 
 A credential reaches git only through `GIT_ASKPASS`. For each operation the package writes a script and a `credential` file (mode 0600, in a 0700 directory) under the scratch directory and removes both afterwards. The credential is never in argv (a declared secret in argv aborts the command), never in a remote URL (URLs with userinfo are refused), never in `.git/config` and not in the child's environment. The script answers only for the origin of the URL the command was given, so a redirect to another host gets nothing. `HOME` is a private directory, `credential.helper` is reset, prompts are off, and only `http(s)` transports are allowed. Error text and logs are scrubbed with the adapter-sdk scrubbers, and secrets shorter than `MIN_SECRET_LENGTH` are refused. The remotes git-lfs needs are given through `GIT_CONFIG_*` in the child's environment (`origin` for the source, `gm-target` for the target).
 
-Further guards: LFS commands pin the endpoint to the remote's own `<url>/info/lfs` through `GIT_CONFIG_*` (a `.lfsconfig` in the repository cannot redirect them), URLs are normalised before they reach git, and `sweepStaleCredentialFiles(scratchDir)` removes credential directories that a SIGKILL orphaned: it skips every session this process still has open and only removes directories older than `olderThanMs` (default 10 minutes). That assumes a per-pod scratch volume (JOB-015); a shared volume would need owner tokens. T-028's scratch cleanup should call it.
+Further guards: LFS commands pin the endpoint to the remote's own `<url>/info/lfs` through `GIT_CONFIG_*` (a `.lfsconfig` in the repository cannot redirect them), URLs are normalised before they reach git, and `sweepStaleCredentialFiles(scratchDir)` removes credential directories that a SIGKILL orphaned: it skips every session this process still has open and only removes directories older than `olderThanMs` (default 10 minutes). That assumes a per-pod scratch volume (JOB-015); a shared volume would need owner tokens. The live sessions are keyed by their directory name, so a sweep that names the scratch directory by another path (relative, symlinked) still skips them. The jobs runtime's scratch cleanup (`cleanScratch`) calls it for the scratch root and for every job directory.
 
 ## Stalled remotes
 
@@ -39,7 +39,7 @@ Git and git-lfs get low-speed and dial timeouts through the environment. Remote 
 
 ## JOB-015
 
-The jobs runtime (T-028, `checkScratchSpace`) owns the per-Run scratch directory, the free-space check, the 10 minute delay and the counter. This package supplies the numbers: `scratchNeededBytes({ sizeBytes, lfsBytes })` (`ceil(sizeBytes x 2.2) + lfsBytes`), `mirror().sizeBytes` and `lfsBytes(listLfsObjects(dir))`. T-028's precheck consumes `scratchNeededBytes`; the orchestrator wires the two at T-034.
+The jobs runtime (T-028, `checkScratchSpace`) owns the per-Run scratch directory, the free-space check, the 10 minute delay and the counter. This package supplies the numbers: `scratchNeededBytes({ sizeBytes, lfsBytes })` (`ceil(sizeBytes x 2.2) + lfsBytes`), `mirror().sizeBytes` and `lfsBytes(listLfsObjects(dir))`. The jobs runtime's `estimateScratchNeed`, which feeds `checkScratchSpace`, delegates to `scratchNeededBytes`.
 
 ## Tests
 
