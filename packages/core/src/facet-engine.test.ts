@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, inject, it } from 'vitest';
 import {
   type CompareContext,
   compareFacet,
@@ -19,6 +19,9 @@ import {
   translateAll,
   translateFacet,
 } from './index.ts';
+
+/** Wall-clock budgets scale with GM_TEST_TIME_FACTOR (ADR-0507). */
+const budget = (ms: number): number => ms * inject('timeFactor');
 
 // -- two synthetic, provider-neutral facets (defined in tests only) -------------------------------
 
@@ -1266,8 +1269,8 @@ describe('[FAC-005] review round 1 hardening', () => {
     );
     expect(c?.diffs.length).toBeGreaterThan(0);
     expect(c?.masked.length).toBeGreaterThan(0);
-    expect(Date.now() - started).toBeLessThan(10_000);
-  });
+    expect(Date.now() - started).toBeLessThan(budget(10_000));
+  }, 60_000);
 });
 
 describe('[ADP-031] the translate context carries plain JSON only (T-012 follow-up)', () => {
