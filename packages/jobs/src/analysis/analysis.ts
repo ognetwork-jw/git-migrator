@@ -5,15 +5,17 @@
  * so quota and raw capture apply (ADP-060). Decisions: docs/adr/0310-analysis-processor.md,
  * 0311-analysis-route-index.md.
  */
-import type {
-  EndpointConnection,
-  FacetRead,
-  FacetTarget,
-  GitClient,
-  NamespaceRef,
-  ProviderHttpClient,
-  RepositoryRecord,
-  RepositoryRef,
+import {
+  type AdapterError,
+  type EndpointConnection,
+  type FacetRead,
+  type FacetTarget,
+  type GitClient,
+  isAdapterError,
+  type NamespaceRef,
+  type ProviderHttpClient,
+  type RepositoryRecord,
+  type RepositoryRef,
 } from '@git-migrator/adapter-sdk';
 import type { Config } from '@git-migrator/config';
 import {
@@ -50,7 +52,7 @@ import {
   TARGET_OUTSIDE_ROUTE,
   TARGET_PLACEMENT_UNKNOWN,
 } from '../run/placement.ts';
-import type { JobHandlers } from '../runtime.ts';
+import { delayJob, giveBackJob, type JobHandlers } from '../runtime.ts';
 import {
   collectPrincipals,
   deployKeysOf,
@@ -1006,26 +1008,75 @@ async function recordCalls(pool: pg.Pool, routeId: string, calls: number, log: L
   }
 }
 
+/** What `markAttempt` replaced, so a shutdown can put it back (ADR-0312). */
+interface AttemptMark {
+  readonly count: number;
+  readonly failedAt: Date | null;
+  readonly retryAt: Date | null;
+  /** `staleGeneration` when the attempt started: a stale mark since then lifted the backoff. */
+  readonly generation: string;
+}
+
 /**
  * Records the attempt before it runs (ADR-0312): count + 1, failed now, retry after the capped
  * backoff, all on the database clock. A success clears it, so what stays is exactly a job that
  * failed or whose worker died (a deterministic crash backs off like any other failure). Only the
- * first attempt of a job counts; BullMQ's own retries of it do not add to the count.
+ * first attempt of a job counts; BullMQ's own retries of it do not add to the count. Returns what
+ * it replaced, or `undefined` when the write failed.
  */
-async function markAttempt(pool: pg.Pool, migrationId: string, log: Logger): Promise<void> {
+async function markAttempt(
+  pool: pg.Pool,
+  migrationId: string,
+  log: Logger,
+): Promise<AttemptMark | undefined> {
   try {
-    await pool.query(
-      `UPDATE app.migration
-          SET analysis_failure_count = analysis_failure_count + 1,
+    const result = await pool.query<{
+      count: number;
+      failed_at: Date | null;
+      retry_at: Date | null;
+      generation: string;
+    }>(
+      `WITH old AS (
+         SELECT id, analysis_failure_count, analysis_failed_at, analysis_retry_at
+           FROM app.migration WHERE id = $1 FOR UPDATE
+       )
+       UPDATE app.migration m
+          SET analysis_failure_count = m.analysis_failure_count + 1,
               analysis_failed_at = clock_timestamp(),
               analysis_retry_at = clock_timestamp()
-                + LEAST($2::float8 * power(2, analysis_failure_count), $3::float8)
+                + LEAST($2::float8 * power(2, m.analysis_failure_count), $3::float8)
                   * interval '1 millisecond'
-        WHERE id = $1`,
+         FROM old
+        WHERE m.id = old.id
+        RETURNING old.analysis_failure_count AS count, old.analysis_failed_at AS failed_at,
+                  old.analysis_retry_at AS retry_at, m.stale_generation::text AS generation`,
       [migrationId, FAILURE_BACKOFF_BASE_MS, FAILURE_BACKOFF_CAP_MS],
+    );
+    const row = result.rows[0];
+    return (
+      row && {
+        count: row.count,
+        failedAt: row.failed_at,
+        retryAt: row.retry_at,
+        generation: row.generation,
+      }
     );
   } catch (error) {
     log.warn({ err: error, migrationId }, 'could not record the analysis attempt');
+    return undefined;
+  }
+}
+
+/** `staleGeneration` now, for an attempt `markAttempt` did not record (a BullMQ retry). */
+async function currentGeneration(pool: pg.Pool, migrationId: string): Promise<string | undefined> {
+  try {
+    const result = await pool.query<{ generation: string }>(
+      'SELECT stale_generation::text AS generation FROM app.migration WHERE id = $1',
+      [migrationId],
+    );
+    return result.rows[0]?.generation;
+  } catch {
+    return undefined;
   }
 }
 
@@ -1039,8 +1090,8 @@ export async function recordAnalysisFailure(
   migrationId: string,
   log: Logger,
 ): Promise<void> {
-  await markAttempt(pool, migrationId, log);
-  await restampFailure(pool, migrationId, log);
+  const mark = await markAttempt(pool, migrationId, log);
+  await restampFailure(pool, migrationId, log, mark?.generation);
 }
 
 /** A Migration that needs no Analysis (missing, retired) must not stay marked as failing. */
@@ -1053,8 +1104,18 @@ async function clearAttempt(pool: pg.Pool, migrationId: string): Promise<void> {
   );
 }
 
-/** The backoff after a failure that has just been counted, measured from now (database clock). */
-async function restampFailure(pool: pg.Pool, migrationId: string, log: Logger): Promise<void> {
+/**
+ * The backoff after a failure that has just been counted, measured from now (database clock).
+ * With `generation`, only while no stale mark came since the attempt started: a mark lifts the
+ * backoff (a configuration fix is tried at once), and a failure of the attempt that was already
+ * running must not put it back.
+ */
+async function restampFailure(
+  pool: pg.Pool,
+  migrationId: string,
+  log: Logger,
+  generation?: string,
+): Promise<void> {
   try {
     await pool.query(
       `UPDATE app.migration
@@ -1062,41 +1123,58 @@ async function restampFailure(pool: pg.Pool, migrationId: string, log: Logger): 
               analysis_retry_at = clock_timestamp()
                 + LEAST($2::float8 * power(2, GREATEST(analysis_failure_count - 1, 0)), $3::float8)
                   * interval '1 millisecond'
-        WHERE id = $1 AND analysis_failure_count > 0`,
-      [migrationId, FAILURE_BACKOFF_BASE_MS, FAILURE_BACKOFF_CAP_MS],
+        WHERE id = $1 AND analysis_failure_count > 0
+          AND ($4::bigint IS NULL OR stale_generation = $4::bigint)`,
+      [migrationId, FAILURE_BACKOFF_BASE_MS, FAILURE_BACKOFF_CAP_MS, generation ?? null],
     );
   } catch (error) {
     log.warn({ err: error, migrationId }, 'could not record the analysis failure');
   }
 }
 
-/** A shutdown is not a failure: takes the attempt that was recorded at the start back. */
-async function undoAttempt(pool: pg.Pool, migrationId: string, log: Logger): Promise<void> {
+/**
+ * A shutdown or a quota delay is not a failure: takes back the attempt recorded at the start and
+ * restores the marker it replaced. A stale mark since then lifted the backoff, which stays lifted.
+ */
+async function undoAttempt(
+  pool: pg.Pool,
+  migrationId: string,
+  mark: AttemptMark,
+  log: Logger,
+): Promise<void> {
   try {
     await pool.query(
       `UPDATE app.migration
           SET analysis_failure_count = GREATEST(analysis_failure_count - 1, 0),
-              analysis_failed_at = CASE WHEN analysis_failure_count <= 1 THEN NULL ELSE analysis_failed_at END,
-              analysis_retry_at = CASE WHEN analysis_failure_count <= 1 THEN NULL ELSE analysis_retry_at END
+              analysis_failed_at = CASE WHEN stale_generation = $2::bigint THEN $3::timestamptz
+                                        ELSE analysis_failed_at END,
+              analysis_retry_at = CASE WHEN stale_generation = $2::bigint THEN $4::timestamptz
+                                       ELSE analysis_retry_at END
         WHERE id = $1`,
-      [migrationId],
+      [migrationId, mark.generation, mark.failedAt, mark.retryAt],
     );
   } catch (error) {
     log.warn({ err: error, migrationId }, 'could not undo the analysis attempt');
   }
 }
 
+const isRateLimited = (error: unknown): error is AdapterError & { retryAt: Date } =>
+  isAdapterError(error) && error.code === 'rate_limited' && error.retryAt instanceof Date;
+
 /**
  * The `analysis.migration` handler (JOB-020). A fault that retrying cannot fix (`AnalysisError`)
  * fails the job without further attempts. The attempt is recorded before it runs (a dying worker
  * leaves it), restamped when the job's last attempt fails so the backoff runs from the failure and
- * not from the start, and taken back on a shutdown.
+ * not from the start, unless a stale mark came meanwhile. A shutdown gives the job back and a
+ * quota denial delays it until `retryAt` (JOB-044), neither spending an attempt: the recorded
+ * attempt is taken back, and the job's next run records it again.
  */
 export function analysisHandlers(deps: AnalysisDeps): JobHandlers {
   return {
     'analysis.migration': async ({ migrationId }, ctx) => {
       const counted = (ctx.job.attemptsMade ?? 0) === 0;
-      if (counted) await markAttempt(deps.appPool, migrationId, ctx.log);
+      const mark = counted ? await markAttempt(deps.appPool, migrationId, ctx.log) : undefined;
+      const generation = mark?.generation ?? (await currentGeneration(deps.appPool, migrationId));
       try {
         const result = await runAnalysis(deps, migrationId, {
           shutdown: ctx.shutdown,
@@ -1107,12 +1185,16 @@ export function analysisHandlers(deps: AnalysisDeps): JobHandlers {
         return result;
       } catch (error) {
         if (error instanceof AnalysisInterruptedError) {
-          if (counted) await undoAttempt(deps.appPool, migrationId, ctx.log);
-          throw error;
+          if (mark) await undoAttempt(deps.appPool, migrationId, mark, ctx.log);
+          return giveBackJob(ctx, error);
+        }
+        if (isRateLimited(error) && ctx.token !== undefined) {
+          if (mark) await undoAttempt(deps.appPool, migrationId, mark, ctx.log);
+          return delayJob(ctx, error.retryAt, error);
         }
         const attempts = ctx.job.opts?.attempts ?? 1;
         const final = error instanceof AnalysisError || (ctx.job.attemptsMade ?? 0) + 1 >= attempts;
-        if (final) await restampFailure(deps.appPool, migrationId, ctx.log);
+        if (final) await restampFailure(deps.appPool, migrationId, ctx.log, generation);
         if (error instanceof AnalysisError) throw new UnrecoverableError(error.message);
         throw error;
       }

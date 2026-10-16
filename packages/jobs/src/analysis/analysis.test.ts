@@ -1,9 +1,10 @@
+import { AdapterError } from '@git-migrator/adapter-sdk';
 import { sha256Hex } from '@git-migrator/core';
 import { markAnalysesStale } from '@git-migrator/db';
 import { createTestDatabase, type TestDatabase } from '@git-migrator/db/testing';
 import { createLogger } from '@git-migrator/observability';
 import { createBuiltinRegistry } from '@git-migrator/registry';
-import { UnrecoverableError } from 'bullmq';
+import { DelayedError, UnrecoverableError, WaitingError } from 'bullmq';
 import pg from 'pg';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { type EndpointConnector, unmeteredGitQuota } from '../inventory/connector.ts';
@@ -941,7 +942,106 @@ describe('robustness (ADR-0310, ADR-0312)', () => {
     await expect(handlerOf(deps)({ migrationId: m.id }, ctx)).rejects.toBeInstanceOf(
       AnalysisInterruptedError,
     );
-    expect((await migrationRow(m.id)).analysisFailureCount).toBe(2);
+    // The earlier failure's marker is restored exactly, not cleared or left as this attempt's.
+    expect(await migrationRow(m.id)).toMatchObject({
+      analysisFailureCount: 2,
+      analysisFailedAt: earlier,
+      analysisRetryAt: earlier,
+    });
+  });
+
+  it("[JOB-020] an interrupted first attempt is given back unspent, so the job's next run is counted", async () => {
+    const w = await seedWorld();
+    const m = await seedMigration(w);
+    setReads({ 'deploy-keys': { data: { keys: [] } } });
+    const stop = new AbortController();
+    stop.abort();
+    const givenBack: string[] = [];
+    const job = {
+      attemptsMade: 0,
+      opts: { attempts: 3 },
+      moveToWait: async (token: string) => {
+        givenBack.push(token);
+      },
+    };
+    const ctx = { ...(ctxFor(0) as object), shutdown: stop.signal, job, token: 'tok' } as never;
+    await expect(handlerOf(deps)({ migrationId: m.id }, ctx)).rejects.toBeInstanceOf(WaitingError);
+    expect(givenBack).toEqual(['tok']);
+    expect((await migrationRow(m.id)).analysisFailureCount).toBe(0);
+    // The job runs again with its attempts unchanged: that run records its attempt.
+    const dies: EndpointConnector = {
+      gitQuota: () => unmeteredGitQuota,
+      connect: async () => {
+        throw new Error('worker died');
+      },
+    };
+    await expect(
+      handlerOf({ ...deps, connector: dies })({ migrationId: m.id }, ctxFor(job.attemptsMade)),
+    ).rejects.toThrow('worker died');
+    expect((await migrationRow(m.id)).analysisFailureCount).toBe(1);
+  });
+
+  it('[JOB-044] a quota denial delays the job until retryAt with its token and takes the attempt back', async () => {
+    const w = await seedWorld();
+    const m = await seedMigration(w);
+    setReads({ 'deploy-keys': { data: { keys: [] } } });
+    const retryAt = new Date(Date.now() + 120_000);
+    const limited: EndpointConnector = {
+      gitQuota: () => unmeteredGitQuota,
+      connect: async () => {
+        throw new AdapterError({
+          code: 'rate_limited',
+          provider: 'test',
+          message: 'Quota limit',
+          retryAt,
+        });
+      },
+    };
+    const delayed: Array<[number, string]> = [];
+    const job = {
+      attemptsMade: 0,
+      opts: { attempts: 3 },
+      moveToDelayed: async (at: number, token: string) => {
+        delayed.push([at, token]);
+      },
+    };
+    const ctx = { ...(ctxFor(0) as object), job, token: 'tok' } as never;
+    await expect(
+      handlerOf({ ...deps, connector: limited })({ migrationId: m.id }, ctx),
+    ).rejects.toBeInstanceOf(DelayedError);
+    expect(delayed).toEqual([[retryAt.getTime(), 'tok']]);
+    expect(await migrationRow(m.id)).toMatchObject({
+      analysisFailureCount: 0,
+      analysisFailedAt: null,
+      analysisRetryAt: null,
+    });
+  });
+
+  it('[JOB-020] a stale mark during the last attempt keeps the backoff lifted when that attempt fails', async () => {
+    const w = await seedWorld();
+    const m = await seedMigration(w);
+    setReads({ 'deploy-keys': { data: { keys: [] } } });
+    const fixedMeanwhile: EndpointConnector = {
+      gitQuota: () => unmeteredGitQuota,
+      connect: async () => {
+        // An operator fixes the configuration while the attempt runs: the mark lifts the backoff.
+        await markAnalysesStale(t.db.privileged, { ids: [m.id] });
+        throw new Error('failed with the old configuration');
+      },
+    };
+    await expect(
+      handlerOf({ ...deps, connector: fixedMeanwhile })({ migrationId: m.id }, ctxFor(0, 1)),
+    ).rejects.toThrow('old configuration');
+    expect(await migrationRow(m.id)).toMatchObject({
+      analysisFailureCount: 1,
+      analysisFailedAt: null,
+      analysisRetryAt: null,
+    });
+    // The same on a retry that markAttempt did not record.
+    await expect(
+      handlerOf({ ...deps, connector: fixedMeanwhile })({ migrationId: m.id }, ctxFor(2, 3)),
+    ).rejects.toThrow('old configuration');
+    expect((await migrationRow(m.id)).analysisRetryAt).toBeNull();
   });
 
   it('[JOB-020] a skipped Analysis does not leave the Migration marked as failing', async () => {
