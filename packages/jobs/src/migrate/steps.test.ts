@@ -366,6 +366,29 @@ describe('[LIF-046] the name lock around the target repository', () => {
     }
   });
 
+  it('[LIF-046] a long wait adds one abort listener, not one per poll, and removes it', async () => {
+    let polls = 0;
+    const client = {
+      // Busy for 20 polls, then free.
+      query: async () => ({ rows: [{ ok: ++polls > 20 }] }),
+      release: () => undefined,
+    };
+    const pool = { connect: async () => client } as never;
+    const abort = new AbortController();
+    const added = vi.spyOn(abort.signal, 'addEventListener');
+    const removed = vi.spyOn(abort.signal, 'removeEventListener');
+    await expect(
+      withSessionLock(pool, 'k-listeners', async () => 'ran', {
+        signal: abort.signal,
+        pollMs: 1,
+      }),
+    ).resolves.toBe('ran');
+    expect(polls).toBeGreaterThan(20);
+    expect(added).toHaveBeenCalledTimes(1);
+    expect(removed).toHaveBeenCalledTimes(1);
+    expect(removed.mock.calls[0]?.[1]).toBe(added.mock.calls[0]?.[1]);
+  });
+
   it('[LIF-046] a connection whose unlock failed is destroyed, not returned to the pool, and the outcome of the work is kept', async () => {
     const released: unknown[] = [];
     const client = {
