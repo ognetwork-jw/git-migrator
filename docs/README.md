@@ -61,6 +61,6 @@ pnpm dev                 # web on :3000 and the worker
 pnpm lint && pnpm typecheck && pnpm test
 ```
 
-`pnpm test` runs the unit project. Most of its suites use a throw-away PostgreSQL database (ADR-0123). `pnpm test:integration` runs the integration tier (`testing/integration`, ADR-0475) and needs the PostgreSQL and the provider fakes, which it starts itself.
+`pnpm test` runs the unit project. Most of its suites use a throw-away PostgreSQL database (ADR-0123). `pnpm test:integration` runs the integration tier (`testing/integration`, ADR-0475) and needs the PostgreSQL and the provider fakes, which it starts itself. On a slow or shared machine, set `GM_TEST_TIME_FACTOR` (for example `3`) to multiply the tests' default timeouts and wall-clock budgets (ADR-0507).
 
 The test profile (`secretspec` profile `test`) uses the fake values in the committed [`.env.test`](../.env.test) and the throwaway key `testing/fixtures/fake-github-app.pem` (ADR-0069). Nothing in it reaches a real provider (TST-006).

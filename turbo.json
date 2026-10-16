@@ -28,7 +28,8 @@
       ]
     },
     "test": {
-      "dependsOn": ["^build"]
+      "dependsOn": ["^build"],
+      "passThroughEnv": ["GM_TEST_TIME_FACTOR"]
     }
   }
 }

@@ -1,5 +1,7 @@
+/// <reference path="./tools/vitest-context.d.ts" />
 import { configDefaults, defineConfig } from 'vitest/config';
 import { INTEGRATION_INCLUDE, INTEGRATION_ONLY, UNIT_INCLUDE } from './tools/test-globs.ts';
+import { parseTimeFactor } from './tools/test-timing.ts';
 
 /**
  * Unit tier (TST-001). Per-package coverage thresholds follow TST-005 and are expressed as glob
@@ -9,6 +11,9 @@ const lines80 = { lines: 80 };
 const apps = { lines: 60 };
 const pure = { lines: 90, branches: 90 };
 
+/** Multiplies the default timeouts and every wall-clock budget in the tests (ADR-0507). */
+const timeFactor = parseTimeFactor(process.env.GM_TEST_TIME_FACTOR);
+
 export default defineConfig({
   test: {
     passWithNoTests: true,
@@ -17,6 +22,9 @@ export default defineConfig({
         test: {
           name: 'unit',
           include: UNIT_INCLUDE,
+          provide: { timeFactor },
+          testTimeout: 5000 * timeFactor,
+          hookTimeout: 10_000 * timeFactor,
           // The Phase-1 scenario is slow and runs only in the integration project (ADR-0475).
           exclude: [...configDefaults.exclude, ...INTEGRATION_ONLY],
         },
@@ -27,8 +35,9 @@ export default defineConfig({
         test: {
           name: 'integration',
           include: INTEGRATION_INCLUDE,
-          testTimeout: 120_000,
-          hookTimeout: 180_000,
+          provide: { timeFactor },
+          testTimeout: 120_000 * timeFactor,
+          hookTimeout: 180_000 * timeFactor,
         },
       },
     ],
