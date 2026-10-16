@@ -62,6 +62,28 @@ describe('inventory', () => {
     expect(await h.conn.inventory.getRepository(h.repo('missing'))).toBeNull();
   });
 
+  it('[LIF-077] getRepository keeps a repository whose owner login changed but whose owner id is the organization (a renamed organization), and drops one under another owner id (a transfer)', async () => {
+    let owner: { login: string; id?: number } | undefined;
+    const h = await setup({
+      intercept: async (r) => {
+        if (r.method !== 'GET' || !new URL(r.url).pathname.endsWith('/repos/acme/app'))
+          return undefined;
+        const res = await h.fake.app.fetch(r);
+        const body = (await res.json()) as { owner: Record<string, unknown> };
+        if (owner) body.owner = { ...body.owner, ...owner };
+        return reply(res.status, body);
+      },
+    });
+    h.fake.state.addRepository('acme', { name: 'app', private: true, files: FILES });
+    // The name answers under the organization's new login; the owner id is unchanged.
+    owner = { login: 'acme-renamed' };
+    const kept = await h.conn.inventory.getRepository(h.repo('app'));
+    expect(kept?.name).toBe('app');
+    // Same name, another owner id: the repository left the organization.
+    owner = { login: 'someone-else', id: 987654321 };
+    expect(await h.conn.inventory.getRepository(h.repo('app'))).toBeNull();
+  });
+
   it('[JOB-030] lists members then outside collaborators as identities with public data', async () => {
     const h = await setup();
     const s = h.fake.state;

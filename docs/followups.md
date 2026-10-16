@@ -302,7 +302,7 @@ These are unresolved review findings (review loops that hit the 5-round cap) and
 | 2026-10-09 | T-089 | — | MINOR | repository-settings.left-in-place guidance always shows all three steps (team, grant, repository) regardless of what was left (T-089 r3 spec) |  | open |
 | 2026-10-09 | T-089 | — | MINOR | packages/guidance README 'Parameter kinds' omits the new entries kind (and flag) (T-089 r4 spec) |  | open |
 | 2026-10-09 | T-089 | — | MINOR | rollback left-in-place: MAX_LEFT=20 truncates the listed entries while the count reports all; add '(first 20 shown)' (T-089 r4 spec) |  | open |
-| 2026-10-09 | T-089 | — | MINOR | adapter-github getRepository login-mismatch/id-match branch (renamed org) only covered by integration tests; add a unit test (T-089 r5 spec) |  | open |
+| 2026-10-09 | T-089 | — | MINOR | ~~adapter-github getRepository login-mismatch/id-match branch (renamed org) only covered by integration tests; add a unit test (T-089 r5 spec)~~ |  | resolved (claude/followups-adapters) |
 | 2026-10-09 | T-089 | — | MINOR | rollback writeToTarget sends a sub-resource write's not_found (environment PUT, collaborator PUT, team-grant PUT) to moved() -> misleading target-unreadable guidance; re-check repo identity first or make those writes ignoreGone-aware (T-089 r5 adversarial) |  | open |
 | 2026-10-09 | T-089 | — | MINOR | No operator path to accept a repository or branch rule that a rollback left in place (repository-settings.left-in-place); ADR-0465 |  | open |
 | 2026-10-09 | T-089 | — | MINOR | Trimmed GitHub OpenAPI description lacks GET /orgs/{org}/teams/{slug}/teams and the team DELETE, so the fake's replies to them are not schema-validated |  | open |
