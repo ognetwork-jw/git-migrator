@@ -105,6 +105,22 @@ describe('AppShell', () => {
     expect(replace).not.toHaveBeenCalled();
   });
 
+  it('[UI-036] [AUTH-005] a disabled Actor leaves the shell for the disabled-account page', async () => {
+    for (const path of ['/repositories', '/denied']) {
+      cleanup();
+      hardNavigate.mockReset();
+      pathname = path;
+      mockFetch(() => reply(200, actor('admin', { disabled: true })));
+      renderWithApp(<AppShell>secret</AppShell>);
+      await waitFor(() =>
+        expect(hardNavigate).toHaveBeenCalledWith('/auth/error?error=actor_disabled'),
+      );
+      expect(replace).not.toHaveBeenCalledWith(expect.stringContaining('/denied'));
+      expect(screen.queryByText('secret')).toBeNull();
+      expect(screen.queryByRole('navigation')).toBeNull();
+    }
+  });
+
   it('[UI-010] shows the problem text and retries when the Actor cannot be loaded', async () => {
     let calls = 0;
     mockFetch(() => {

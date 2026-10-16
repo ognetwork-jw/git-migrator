@@ -10,7 +10,7 @@ import { type ReactNode, useEffect, useState } from 'react';
 import { ACTOR_QUERY_KEY, fetchActor } from '../api/actor.ts';
 import { signOut } from '../auth/client.ts';
 import { hardNavigate } from '../auth/navigate.ts';
-import { signInHref } from '../auth/paths.ts';
+import { DISABLED_HREF, signInHref } from '../auth/paths.ts';
 import { ActorProvider } from './actor-context.tsx';
 import { LiveStatus } from './live-status.tsx';
 import { LiveTopicsProvider } from './live-topics.tsx';
@@ -44,12 +44,16 @@ export function AppShell({ children }: { readonly children: ReactNode }) {
   const result = query.data;
   const actor = result?.kind === 'ok' ? result.actor : undefined;
   const unauthenticated = result?.kind === 'unauthenticated';
-  const denied = actor !== undefined && pathname !== DENIED_PATH && !canOpen(actor, pathname);
+  // A disabled Actor (AUTH-005) is not "denied" a page: it may use none, so it leaves the shell.
+  const disabled = actor?.disabled === true;
+  const denied =
+    actor !== undefined && !disabled && pathname !== DENIED_PATH && !canOpen(actor, pathname);
 
   useEffect(() => {
     if (unauthenticated) router.replace(signInHref(pathname, window.location.search));
+    else if (disabled) hardNavigate(DISABLED_HREF);
     else if (denied) router.replace(deniedHref(pathname));
-  }, [unauthenticated, denied, router, pathname]);
+  }, [unauthenticated, disabled, denied, router, pathname]);
 
   if (result?.kind === 'problem' || query.isError) {
     const code = result?.kind === 'problem' ? result.code : 'not_ready';
@@ -69,7 +73,7 @@ export function AppShell({ children }: { readonly children: ReactNode }) {
     );
   }
 
-  if (actor === undefined || denied) {
+  if (actor === undefined || disabled || denied) {
     return (
       <Centered>
         <div role="status" className="flex flex-col items-center gap-3">
