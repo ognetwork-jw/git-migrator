@@ -1,5 +1,5 @@
 import { type BucketSpec, bucketKey } from '@git-migrator/quota';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, inject, it, vi } from 'vitest';
 import { AdapterError } from './errors.ts';
 import { isTestEnvironment } from './host-allowlist.ts';
 import {
@@ -12,6 +12,9 @@ import {
 } from './http.ts';
 import { noopLogger } from './logger.ts';
 import { paginateCursor, paginateLinks, parseLinkHeader } from './pagination.ts';
+
+/** Wall-clock budgets scale with GM_TEST_TIME_FACTOR (ADR-0507). */
+const budget = (ms: number): number => ms * inject('timeFactor');
 
 const KEY = bucketKey('ep', 'acct', 'core');
 const BUCKET: BucketSpec = { key: KEY, limit: 100, windowSeconds: 3600 };
@@ -102,7 +105,7 @@ describe('Link parsing and pagination hardening', () => {
       parseLinkHeader(`<u>;${' ;'.repeat(8000)}`);
       best = Math.min(best, performance.now() - started);
     }
-    expect(best).toBeLessThan(50);
+    expect(best).toBeLessThan(budget(50));
   });
 
   it('[ADP-060] still reads rel values with quoted commas and several relations', () => {

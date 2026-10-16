@@ -1,5 +1,5 @@
 import { bucketKey } from '@git-migrator/quota';
-import { describe, expect, it, vi } from 'vitest';
+import { describe, expect, inject, it, vi } from 'vitest';
 import { ProviderHttpClient, type QuotaGate } from './http.ts';
 import { noopLogger } from './logger.ts';
 import {
@@ -13,6 +13,9 @@ import {
 
 const MB = 1024 * 1024;
 
+/** Wall-clock budgets scale with GM_TEST_TIME_FACTOR (ADR-0507). */
+const budget = (ms: number): number => ms * inject('timeFactor');
+
 /** Best of three, so a busy machine does not turn a linear scan into a flaky failure. */
 function timed(run: () => unknown): number {
   let best = Number.POSITIVE_INFINITY;
@@ -24,25 +27,57 @@ function timed(run: () => unknown): number {
   return best;
 }
 
+/** Linear time gives about 4 for four times the input; quadratic gives about 16. */
+const MAX_GROWTH = 10;
+
+/**
+ * Times `scrub` on an input of a quarter of `size` and on one of `size`. Both measurements see the
+ * same load, so their ratio says whether the scan is linear even on a busy machine. The pair is
+ * measured again (three times at most) while it looks too slow, so one stall is not a failure
+ * (ADR-0507).
+ */
+function growth(make: (size: number) => string, size: number, scrub: (text: string) => unknown) {
+  const small = make(size / 4);
+  const large = make(size);
+  let ratio = Number.POSITIVE_INFINITY;
+  let largeMs = Number.POSITIVE_INFINITY;
+  for (let i = 0; i < 3 && (ratio >= MAX_GROWTH || largeMs >= budget(500)); i++) {
+    const smallMs = timed(() => scrub(small));
+    const pairLargeMs = timed(() => scrub(large));
+    // A floor keeps sub-millisecond timer noise on the small input from inflating the ratio.
+    ratio = Math.min(ratio, pairLargeMs / Math.max(smallMs, 0.5));
+    largeMs = Math.min(largeMs, pairLargeMs);
+  }
+  return { ratio, largeMs };
+}
+
 describe('redaction runs in linear time', () => {
-  const hostile: [string, string][] = [
-    ['jwt prefix repeat', 'eyJ-'.repeat(MB / 4)],
-    ['jwt dots', 'eyJaaaaa.'.repeat(MB / 9)],
-    ['bearer repeat', 'Bearer '.repeat(MB / 7)],
-    ['bearer spaces', `Bearer${' '.repeat(MB)}`],
-    ['basic repeat', 'Basic a'.repeat(MB / 7)],
-    ['token run', 'a'.repeat(MB)],
-    ['key begin repeat', '-----BEGIN PRIVATE KEY-----'.repeat(MB / 27)],
-    ['key begin spaces', `-----BEGIN ${'A '.repeat(MB / 2)}`],
-    ['userinfo repeat', 'http://a:'.repeat(MB / 9)],
-    ['userinfo long', `http://${'a'.repeat(MB)}`],
-    ['dashes', '-'.repeat(MB)],
-    ['dots', '.'.repeat(MB)],
+  const hostile: [string, (size: number) => string][] = [
+    ['jwt prefix repeat', (n) => 'eyJ-'.repeat(n / 4)],
+    ['jwt dots', (n) => 'eyJaaaaa.'.repeat(n / 9)],
+    ['bearer repeat', (n) => 'Bearer '.repeat(n / 7)],
+    ['bearer spaces', (n) => `Bearer${' '.repeat(n)}`],
+    ['basic repeat', (n) => 'Basic a'.repeat(n / 7)],
+    ['token run', (n) => 'a'.repeat(n)],
+    ['key begin repeat', (n) => '-----BEGIN PRIVATE KEY-----'.repeat(n / 27)],
+    ['key begin spaces', (n) => `-----BEGIN ${'A '.repeat(n / 2)}`],
+    ['userinfo repeat', (n) => 'http://a:'.repeat(n / 9)],
+    ['userinfo long', (n) => `http://${'a'.repeat(n)}`],
+    ['dashes', (n) => '-'.repeat(n)],
+    ['dots', (n) => '.'.repeat(n)],
   ];
 
-  it.each(hostile)('[ADP-061] a 1 MB %s input is scrubbed in under 100 ms', (_name, text) => {
-    expect(timed(() => stripText(text, { secrets: ['secret-value'] }))).toBeLessThan(100);
-  });
+  it.each(hostile)(
+    '[ADP-061] a 1 MB %s input is scrubbed in linear time, within 500 ms',
+    (_name, make) => {
+      const { ratio, largeMs } = growth(make, MB, (text) =>
+        stripText(text, { secrets: ['secret-value'] }),
+      );
+      expect(ratio).toBeLessThan(MAX_GROWTH);
+      expect(largeMs).toBeLessThan(budget(500));
+    },
+    30_000,
+  );
 
   it('[ADP-061] cuts text over the scan limit before scanning', () => {
     const out = stripText('a'.repeat(3 * MB));
