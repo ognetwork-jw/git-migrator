@@ -50,16 +50,25 @@ jobs:
         with:
           # The substituter and key are copied from the tagged flake's nixConfig (raw.githubusercontent.com
           # cachix/devenv v2.4.0 flake.nix), so the daemon trusts the devenv cache for every user (ADR-0136).
+          # cachix.cachix.org is kept because that nixConfig lists it, and --accept-flake-config would add
+          # it anyway; ADR-0136 records it as an accepted risk.
           extra_nix_config: |
             experimental-features = nix-command flakes
             extra-substituters = https://devenv.cachix.org https://cachix.cachix.org
             extra-trusted-public-keys = devenv.cachix.org-1:w1cLUi8dv3hnoSPGAuibQv+f9TZLr6cv/Hm9XgU50cw= cachix.cachix.org-1:eWNHQldwUO7G2VkjpnjDbWwy4KQ/HNxht7H4SSoMckM=
 
-      # The CLI is pinned to the v2.4.0 tag (the version ADR-0066 verified with). --accept-flake-config
-      # applies the tagged flake's own nixConfig too.
+      # Every devenv*.nix file must at least parse before anything is installed. This is the only
+      # check of the Nix syntax outside a full `devenv test`; the string tests in
+      # tools/dev-environment.test.ts do not evaluate Nix (ADR-0136).
+      - name: Parse the devenv Nix files
+        run: nix-instantiate --parse devenv.nix > /dev/null
+
+      # The CLI is pinned to the commit of the v2.4.0 tag (the version ADR-0066 verified with), so a
+      # moved tag cannot change what runs. Tag v2.4.0 = b904dcb51fe48c30db250038241507f60752f222;
+      # bump both together. --accept-flake-config applies the pinned flake's own nixConfig too.
       - name: Install devenv
         run: |
-          nix profile install --accept-flake-config github:cachix/devenv/v2.4.0
+          nix profile install --accept-flake-config github:cachix/devenv/b904dcb51fe48c30db250038241507f60752f222
           echo "$HOME/.nix-profile/bin" >> "$GITHUB_PATH"
 
       - name: Check the devenv version
