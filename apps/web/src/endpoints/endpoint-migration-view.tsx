@@ -256,6 +256,7 @@ function RunsTab({ migrationId }: { readonly migrationId: string }) {
 export function EndpointMigrationView({ routeId }: { readonly routeId: string }) {
   const t = useTranslations('endpoints.migration');
   const confirmTexts = useTranslations('migrationDetail.actions.confirm.legacy');
+  const runAnywayTexts = useTranslations('migrationDetail.actions.confirm.run_anyway');
   const [confirming, setConfirming] = useState<EndpointRunKind | undefined>(undefined);
   const actor = useActor();
   const operate = can(actor, 'operate');
@@ -357,7 +358,20 @@ export function EndpointMigrationView({ routeId }: { readonly routeId: string })
         texts={{
           title: confirmTexts('title'),
           ok: runLabel(confirming),
-          body: confirmTexts('body', { name: legacyName ?? '' }),
+          body: (
+            <div className="flex flex-col gap-3">
+              <Typography.Paragraph className="m-0">
+                {confirmTexts('body', { name: legacyName ?? '' })}
+              </Typography.Paragraph>
+              {confirming === 'run_anyway' ? (
+                <Alert
+                  type="warning"
+                  showIcon
+                  title={runAnywayTexts('warning', { count: data.readinessCounts?.preTasks ?? 0 })}
+                />
+              ) : null}
+            </div>
+          ),
         }}
         warning={confirmTexts('warning')}
         loading={start.isPending}

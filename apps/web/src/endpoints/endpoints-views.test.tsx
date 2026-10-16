@@ -351,6 +351,23 @@ describe('[UI-026] endpoint migration', () => {
     expect(await screen.findByText('Run queued.')).toBeTruthy();
   });
 
+  it('[LIF-077] [UI-026] a legacy Run anyway still warns of the open pre tasks it leaves', async () => {
+    migration = {
+      ...MIGRATION,
+      readiness: 'blocked',
+      blockerCodes: ['repository-settings.target-placement-unknown'],
+      readinessCounts: { blockers: 1, preTasks: 3 },
+      targetPlacementUnknown: true,
+    };
+    renderWith(<EndpointMigrationView routeId="r1" />);
+    await screen.findByText('Route Source to Target (acme)');
+    fireEvent.click(screen.getByRole('button', { name: 'Run anyway' }));
+    const dialog = within(await screen.findByRole('dialog'));
+    expect(dialog.getByText('3 open tasks will not be done by the Run.')).toBeTruthy();
+    // Endpoint Runs lock no source repository, so there is no read-only opt-out to offer.
+    expect(dialog.queryByRole('checkbox')).toBeNull();
+  });
+
   it('[LIF-005] [UI-026] a legacy endpoint migration with another blocker offers no Run', async () => {
     migration = {
       ...MIGRATION,

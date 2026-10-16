@@ -803,6 +803,23 @@ describe('[LIF-077] a legacy Migration of unknown place confirms the Route place
     });
   });
 
+  it('[LIF-070] the legacy confirmation keeps the open pre-task warning and the read-only opt-out', async () => {
+    world.migration = legacy({ readinessCounts: { blockers: 1, preTasks: 2, postTasks: 0 } });
+    start();
+    await ready();
+    click('Run anyway');
+    expect(dialog().getByText('2 open tasks will not be done by the Run.')).toBeTruthy();
+    fireEvent.click(dialog().getByRole('checkbox'));
+    fireEvent.change(dialog().getByRole('textbox'), { target: { value: 'acme-org/plat-api' } });
+    fireEvent.click(dialog().getByRole('button', { name: 'Run anyway' }));
+    await waitFor(() => expect(posted('/api/v1/migrations/m1/runs')).toHaveLength(1));
+    expect(bodyOf(posted('/api/v1/migrations/m1/runs')[0])).toEqual({
+      kind: 'run_anyway',
+      confirm: 'acme-org/plat-api',
+      options: { skipSourceReadOnly: true },
+    });
+  });
+
   it('[LIF-077] Resync and Rollback ask for the same name and send it as confirm', async () => {
     world.migration = legacy({ status: 'partial' });
     world.runs = [run(1)];
