@@ -4,8 +4,11 @@ import { useTranslations } from 'next-intl';
 import { useState } from 'react';
 import { entriesOf, isContainer, type JsonMark, markEntry, scalarText } from './json-diff.ts';
 
-/** Entries of one object shown before the rest hides behind a control (large Facets stay usable). */
-const MAX_ENTRIES = 100;
+/**
+ * Entries of one object shown at first, and added by each "show more", so a large Facet never puts
+ * all of its entries in the page at once.
+ */
+export const MAX_ENTRIES = 100;
 /** Levels expanded when the tree first shows. */
 const OPEN_DEPTH = 1;
 
@@ -28,7 +31,7 @@ function MarkText({ mark }: { readonly mark: JsonMark }) {
 function TreeNode({ name, value, other, hasOther, mark, depth }: NodeProps) {
   const t = useTranslations('migrationDetail.facets');
   const [open, setOpen] = useState(depth < OPEN_DEPTH);
-  const [all, setAll] = useState(false);
+  const [limit, setLimit] = useState(MAX_ENTRIES);
   if (!isContainer(value)) {
     return (
       <li className="list-none">
@@ -40,7 +43,7 @@ function TreeNode({ name, value, other, hasOther, mark, depth }: NodeProps) {
     );
   }
   const entries = entriesOf(value);
-  const shown = all ? entries : entries.slice(0, MAX_ENTRIES);
+  const shown = entries.slice(0, limit);
   const summary = Array.isArray(value)
     ? t('tree.items', { count: entries.length })
     : t('tree.keys', { count: entries.length });
@@ -77,9 +80,12 @@ function TreeNode({ name, value, other, hasOther, mark, depth }: NodeProps) {
               <button
                 type="button"
                 className="cursor-pointer border-0 bg-transparent p-0 text-xs underline"
-                onClick={() => setAll(true)}
+                onClick={() => setLimit((current) => current + MAX_ENTRIES)}
               >
-                {t('tree.more', { count: entries.length - shown.length })}
+                {t('tree.more', {
+                  count: Math.min(MAX_ENTRIES, entries.length - shown.length),
+                  left: entries.length - shown.length,
+                })}
               </button>
             </li>
           ) : null}

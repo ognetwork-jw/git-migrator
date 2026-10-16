@@ -1273,7 +1273,7 @@
         "none": "Not available.",
         "items": "{count, plural, one {# item} other {# items}}",
         "keys": "{count, plural, one {# key} other {# keys}}",
-        "more": "Show {count} more"
+        "more": "Show {count} more ({left} not shown)"
       },
       "mark": {
         "changed": "changed",

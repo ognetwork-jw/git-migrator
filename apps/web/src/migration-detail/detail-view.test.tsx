@@ -465,6 +465,45 @@ describe('[UI-022] the Overview, Tasks, Facets, Runs and Audit tabs', () => {
     expect(screen.queryByRole('button', { name: /^Revoke/ })).toBeNull();
   });
 
+  it('[UI-022] long fidelity and parity tables are paged, and rows sharing a path both show', async () => {
+    const many = Array.from({ length: 120 }, (_, i) => ({
+      path: `/rules[pattern=r${String(i).padStart(3, '0')}]/restrictPushes`,
+      fidelity: 'lossy',
+      accepted: false as const,
+      policyKey: 'branch-rules.x',
+    }));
+    const diffs = Array.from({ length: 70 }, (_, i) => ({
+      path: i < 2 ? '/same' : `/d${String(i).padStart(3, '0')}`,
+      source: i,
+      target: -i,
+    }));
+    world.diff = diff([
+      diffFacet({
+        decisions: many,
+        parity: { status: 'different', checkedAt: '2026-10-01T10:00:00.000Z', diffs, excluded: [] },
+      }),
+    ]);
+    await openFacets();
+    const fidelity = screen.getByRole('region', { name: 'Field fidelity' });
+    expect(within(fidelity).getAllByText(/^\/rules\[pattern=r/)).toHaveLength(50);
+    expect(within(fidelity).getByRole('listitem', { name: '3' })).toBeTruthy();
+    const parity = screen.getByRole('region', { name: 'Parity' });
+    expect(within(parity).getAllByText('/same')).toHaveLength(2);
+    expect(within(parity).getAllByRole('button', { name: 'Accept' })).toHaveLength(50);
+  });
+
+  it('[UI-022] "show more" in a JSON tree adds the next entries, not all of them', async () => {
+    const big = Object.fromEntries(Array.from({ length: 250 }, (_, i) => [`k${i}`, i]));
+    world.diff = diff([diffFacet({ source: big, desired: big, target: big })]);
+    await openFacets();
+    const source = screen.getByRole('region', { name: 'Source' });
+    expect(within(source).getAllByText(/^k\d+: /)).toHaveLength(100);
+    fireEvent.click(within(source).getByRole('button', { name: 'Show 100 more (150 not shown)' }));
+    expect(within(source).getAllByText(/^k\d+: /)).toHaveLength(200);
+    fireEvent.click(within(source).getByRole('button', { name: 'Show 50 more (50 not shown)' }));
+    expect(within(source).getAllByText(/^k\d+: /)).toHaveLength(250);
+  });
+
   it('[UI-022] the Facets tab says when there is nothing to compare', async () => {
     world.diff = { ...diff(), facets: [] };
     start();
