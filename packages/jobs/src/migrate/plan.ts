@@ -74,6 +74,13 @@ const FIXED: Readonly<Record<string, () => StepDefinition<MigrationServices>>> =
   [SOURCE_READ_ONLY_STEP]: () => sourceReadOnlyStep('migration'),
 };
 
+/** Steps whose fatal failure can leave protection rules lifted (step 3a and the pushes). */
+const PROTECTION_LIFTED_ON_FAILURE: ReadonlySet<string> = new Set([
+  'target.lift-protection',
+  'git.push-lfs',
+  'git.push-refs',
+]);
+
 /** Keys of the Steps this task implements, in LIF-040 order. */
 export const IMPLEMENTED_STEP_KEYS: readonly string[] = Object.keys(FIXED);
 
@@ -145,8 +152,9 @@ export function createMigrationPlanner(services: MigrationServices): RunPlanner<
         const fixed = FIXED[item.code];
         const extra = services.extraSteps?.get(item.code);
         let def = facet ? facetApplyStep(facet) : fixed ? fixed() : extra;
-        // A Step that fails for good after step 3a lifted rules names them (LIF-049, ADR-0380).
-        if (def && (item.code === 'git.push-lfs' || item.code === 'git.push-refs')) {
+        // A Step that fails for good after step 3a lifted rules names them (LIF-049, ADR-0380),
+        // and so does step 3a itself when it fails after deleting some of them.
+        if (def && PROTECTION_LIFTED_ON_FAILURE.has(item.code)) {
           def = { ...def, onFailed: warnIfProtectionLifted };
         }
         defs.push(def ?? unimplementedStep(item.code));

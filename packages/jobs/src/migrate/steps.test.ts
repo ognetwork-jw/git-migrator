@@ -5,7 +5,7 @@ import { afterApply, applyWithLedger } from './facets.ts';
 import { MirrorRegistry } from './mirror.ts';
 import { createMigrationPlanner } from './plan.ts';
 import { chooseDefaultBranch } from './push.ts';
-import { branchesAboutToChange } from './repository.ts';
+import { branchesAboutToChange, warnIfProtectionLifted } from './repository.ts';
 import {
   type MigrationContext,
   MigrationLinks,
@@ -141,6 +141,34 @@ describe('[LIF-040] the Steps of a migration Run', () => {
     await expect(none[0]?.run({} as never)).rejects.toMatchObject({
       code: 'run.analysis_missing',
     });
+  });
+
+  it('[LIF-049] a fatal failure in step 3a itself, or in a push after it, names the lifted protection rules', async () => {
+    const world = await seedBasics(t.db.privileged);
+    const analysis = await t.db.privileged.analysis.create({
+      data: { migrationId: world.migrationId, readiness: 'ready', translation: {} },
+    });
+    const codes = ['target.lift-protection', 'git.push-lfs', 'git.push-refs', 'preflight'];
+    for (const [order, code] of codes.entries()) {
+      await t.db.privileged.planItem.create({
+        data: {
+          analysisId: analysis.id,
+          kind: 'step',
+          code,
+          facetKey: 'framework',
+          fieldPaths: [],
+          params: {},
+          order,
+        },
+      });
+    }
+    const planner = createMigrationPlanner({ db: t.db.privileged } as unknown as MigrationServices);
+    const steps = await planner.steps({
+      run: { analysisId: analysis.id },
+      migration: { scope: 'repository' },
+    } as never);
+    const withTask = steps.filter((s) => s.onFailed === warnIfProtectionLifted).map((s) => s.key);
+    expect(withTask).toEqual(['target.lift-protection', 'git.push-lfs', 'git.push-refs']);
   });
 
   it('[LIF-040] a Run with no Analysis plans one fatal Step that fails with run.analysis_missing', async () => {
