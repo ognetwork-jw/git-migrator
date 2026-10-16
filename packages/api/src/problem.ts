@@ -27,6 +27,7 @@ export const PROBLEMS = {
   readiness_required: { status: 422, title: 'Readiness does not allow this Run' },
   confirmation_required: { status: 422, title: 'Typed confirmation required' },
   too_many_streams: { status: 429, title: 'Too many open event streams' },
+  too_many_requests: { status: 429, title: 'Too many requests' },
   not_ready: { status: 503, title: 'Not ready' },
   busy: { status: 503, title: 'Busy, try again shortly' },
   internal_error: { status: 500, title: 'Internal server error' },
@@ -99,7 +100,7 @@ export function problemCodeForStatus(status: number): ProblemCode {
     case 422:
       return 'validation_failed';
     case 429:
-      return 'too_many_streams';
+      return 'too_many_requests';
     case 503:
       return 'not_ready';
     default:

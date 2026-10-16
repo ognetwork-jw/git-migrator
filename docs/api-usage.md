@@ -103,6 +103,7 @@ Branch on `code`, never on `title` or `detail`. A 422 `validation_failed` also l
 | `unsupported_media_type` | 415 | Not `application/json`. |
 | `validation_failed` | 422 | The body or query is invalid; see `errors`. |
 | `too_many_streams` | 429 | Too many open event streams; honour `Retry-After`. |
+| `too_many_requests` | 429 | Any other 429; wait and retry, honouring `Retry-After` when present. |
 | `internal_error` | 500 | A server fault. The body never carries internal detail; report the time and the request. |
 | `not_ready` | 503 | The server is starting up, the queue or database is unreachable, or a service this endpoint needs is not configured. Retry after the `Retry-After` seconds, with backoff. |
 
