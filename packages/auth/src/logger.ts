@@ -19,12 +19,15 @@ const REDACTED_EMAIL = '[REDACTED]';
 export const MAX_LOGGED_TEXT = 4096;
 /** Characters a cut could split a token or an address on: the cut backs off over them. */
 const WORD_CHAR = /[^\s"'<>()[\],;:]/;
-const MAX_BACK_OFF = 256;
 const MAX_DEPTH = 6;
 /** The number of values one log call writes at most, so shared or huge structures stay cheap. */
 const MAX_VALUES = 500;
-/** An error `code` that is an identifier, not a credential: short, without token punctuation. */
-const ERROR_CODE = /^[A-Za-z0-9_.-]{1,32}$/;
+/**
+ * An error `code` that is an identifier, not a credential: an SQLSTATE (`23505`, `42P01`), an
+ * upper-case identifier (`ECONNREFUSED`, `ERR_INVALID_ARG_TYPE`) or a number. Lower- and mixed-case
+ * values never qualify, so a token-like `code` stays redacted.
+ */
+const ERROR_CODE = /^(?:[0-9A-Z]{5}|[A-Z][A-Z0-9_]{1,40}|[0-9]{1,10})$/;
 
 /** Email addresses are personal data and are not covered by the shared redaction rules. */
 export function scrubEmails(text: string): string {
@@ -32,14 +35,15 @@ export function scrubEmails(text: string): string {
 }
 
 /**
- * Cuts `text` to MAX_LOGGED_TEXT. The cut backs off over a run of address or token characters, so
- * no half address or half token is left for the patterns to miss.
+ * Cuts `text` to MAX_LOGGED_TEXT. The cut backs off over the whole run of address or token
+ * characters it would split, however long, so no half address or half token (such as a signed
+ * token's header and part of its payload) is left for the patterns to miss. The back-off is
+ * bounded by MAX_LOGGED_TEXT.
  */
 function truncate(text: string): string {
   if (text.length <= MAX_LOGGED_TEXT) return text;
   let cut = MAX_LOGGED_TEXT;
-  const floor = cut - MAX_BACK_OFF;
-  while (cut > floor && WORD_CHAR.test(text.charAt(cut - 1))) cut -= 1;
+  while (cut > 0 && WORD_CHAR.test(text.charAt(cut - 1))) cut -= 1;
   return `${text.slice(0, cut)}[truncated ${text.length - cut} chars]`;
 }
 

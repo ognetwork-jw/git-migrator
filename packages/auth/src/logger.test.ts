@@ -50,6 +50,54 @@ describe('Better Auth logger adapter (DEP-050)', () => {
     expect(msg).toContain('[truncated ');
   });
 
+  it('[DEP-050] a cut never leaves part of a long token behind, whatever its length', () => {
+    const { log, parsed } = capture();
+    // Built at run time from an obviously fake payload, so no token-shaped literal is committed.
+    const part = (value: object) => Buffer.from(JSON.stringify(value)).toString('base64url');
+    const head = part({ alg: 'none', typ: 'fake' });
+    const body = part({ email: 'fake.user@example.test', pad: 'p'.repeat(600) });
+    const token = `${head}.${body}.fake-signature`;
+    expect(token.length).toBeGreaterThan(800);
+    // The cut lands deep inside the token's payload, more than 256 characters after its start.
+    const lead = 'x '.repeat((MAX_LOGGED_TEXT - 400) / 2);
+    log.log('info', `${lead}${token} trailing`, { field: `${lead}${token}` });
+    const line = parsed()[0];
+    for (const text of [line?.msg ?? '', JSON.stringify(line?.args)]) {
+      expect(text).not.toContain(head.slice(0, 12));
+      expect(text).not.toContain(body.slice(0, 12));
+      expect(text).toContain('[truncated ');
+    }
+  });
+
+  it('[DEP-050] errorKind keeps only upper-case, numeric and SQLSTATE codes', () => {
+    const kinds = (code: unknown) => {
+      const { log, parsed } = capture();
+      log.log('error', 'failed', Object.assign(new Error('x'), { code }));
+      return parsed()[0]?.err?.errorKind;
+    };
+    for (const code of [
+      '23505',
+      '42P01',
+      'ECONNREFUSED',
+      'ERR_INVALID_ARG_TYPE',
+      'UND_ERR_SOCKET',
+    ]) {
+      expect(kinds(code), code).toBe(code);
+    }
+    expect(kinds(404)).toBe('404');
+    for (const code of [
+      'abcDEF123ghiJKL456mnoPQR789stuVW',
+      'invalid_grant',
+      'fake-code-value',
+      'a.b.c',
+      'E',
+      `E${'A'.repeat(41)}`,
+      '',
+    ]) {
+      expect(kinds(code), code).toBeUndefined();
+    }
+  });
+
   it('[DEP-050] a non-string message is logged and never throws', () => {
     const { log, parsed } = capture();
     expect(() => log.log('warn', 42 as unknown as string)).not.toThrow();

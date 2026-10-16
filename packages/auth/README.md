@@ -10,13 +10,13 @@ Internal dependencies (ARC-012): `@git-migrator/db`, `@git-migrator/config`, `@g
 |---|---|
 | `createAuth(options)` | Builds Better Auth: Entra (`microsoft` provider with the configured tenant, scopes `openid profile email`), 8 h sessions refreshed after 1 h, `HttpOnly`/`SameSite=Lax` cookies (`Secure` on https), no account linking, optional email and password for test sign-in. Aborts when test sign-in is enabled in production. |
 | `AuthService.handle(request)` | Serves `/api/auth/*`. The Hono mount MUST use it and not `auth.handler`: it carries the validated role from the profile gate to the session hook, and an Entra sign-in is denied without it. |
-| `migrateAuthSchema(connectionString)` | DATA-030 step 3: creates the Better Auth tables in schema `auth` through the library's own migrator on a pool with `search_path=auth`. Idempotent. |
+| `migrateAuthSchema(connectionString, logger?)` | DATA-030 step 3: creates the Better Auth tables in schema `auth` through the library's own migrator on a pool with `search_path=auth`. Idempotent. Better Auth's output goes through `logger` (via `betterAuthLogger`). |
 | `resolveRole(mappings, method, claims)` | AUTH-010: highest mapped role wins, no match is `undefined`. |
 | `provisionMappedActor`, `linkTestActor` | AUTH-005 and AUTH-012: create or update the Actor behind a session. |
 | `seedTestSignInUsers`, `createCredentialUser` | AUTH-012: the Better Auth users of the seeded test Actors. Used by `pnpm db:seed`. |
 | `assertTestSignInAllowed(config, env)` | The production guard. |
 | `DISABLED_PATHS`, `DISABLED_PATH_PREFIXES`, `MAX_AUTH_BODY_BYTES` | The Better Auth routes answered with 404 (ADR-0170), and the body size above which `handle` answers 413. `/sign-in/social` accepts only `provider`, `callbackURL`, `errorCallbackURL` and `newUserCallbackURL`. |
-| `betterAuthLogger`, `scrubEmails` | DEP-050: Better Auth's output as JSON through the application logger, with every string cut to 4 KiB and email addresses removed in linear time. It never throws. |
+| `betterAuthLogger`, `scrubEmails` | DEP-050: Better Auth's output as JSON through the application logger, with every string cut to 4 KiB (the cut drops the whole token or address run it would split) and email addresses removed in linear time. An error `code` is kept as `errorKind` only when it is an SQLSTATE, an upper-case identifier or a number. It never throws. |
 | `AUTH_ERROR_CODES` | The `error` values of a denied sign-in redirect (`<publicUrl>/auth/error?error=<code>`). Their texts are `auth.error.*` in `apps/web/messages/en.json`. |
 
 ## Sign-in flow
