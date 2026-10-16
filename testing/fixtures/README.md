@@ -8,12 +8,12 @@ curl -XPOST :4020/__reset -d '{"fixture":"world"}'   # GitHub: members, target l
 curl -XPOST :4010/__reset -d '{"fixture":"world"}'   # Bitbucket: rebuilds the git source side too
 ```
 
-In code: `startWorldFakes(options)` (same options as `startFakes`, the world fixture registered on both fakes), `resetWorld(fakes)`, or `worldFixtures(getGit)` for `createFakeBitbucket({ fixtures })` / `createFakeGitHub({ fixtures })`. Pure data (identities, repositories, expectations, `WORLD_ROUTE`, `WORLD_LIMITS`) is in `world-spec.ts`.
+In code: `startWorldFakes(options)` (same options as `startFakes`, the world fixture registered on both fakes) and `resetWorld(fakes)`. The unwrapped fixture registry (`worldFixtures` in `src/world.ts`) is not exported: without the wrapping below it leaks the `acme/*` source repositories, their LFS objects and the 1 MiB target limits across resets. Pure data (identities, repositories, expectations, `WORLD_ROUTE`, `WORLD_LIMITS`) is in `world-spec.ts`.
 
 Things to know:
 
 - The Bitbucket `world` fixture is async (it seeds git). While it runs, and after a failed build until the next successful reset, the fake Bitbucket answers 503 on REST and `/__state`; the control plane keeps working and resets queue in call order (ADR-0130). The git server is **not** gated: await `reset()` (or the `/__reset` response) before touching it. Reset GitHub first when doing both, as `resetWorld` does.
-- The GitHub `world` fixture sets the REST `maxBlobBytes` and the git `target` limits (`WORLD_LIMITS`, 1 MiB each). With `startWorldFakes`, every fixture is wrapped: any Bitbucket reset (`empty` too) removes the `acme/*` source repositories and their LFS objects, and any GitHub reset restores the `target` limits to the configured ones (defaults 100 MiB / 2 GiB). Plain `worldFixtures()` used with `startFakes` does not clean.
+- The GitHub `world` fixture sets the REST `maxBlobBytes` and the git `target` limits (`WORLD_LIMITS`, 1 MiB each). With `startWorldFakes`, every fixture is wrapped: any Bitbucket reset (`empty` too) removes the `acme/*` source repositories and their LFS objects, and any GitHub reset restores the `target` limits to the configured ones (defaults 100 MiB / 2 GiB).
 - The world creates no GitHub repositories, so no branch protection is involved and `fake.syncPolicy()` is not needed. A scenario that seeds a target repository with rules must call it after seeding (provider-fakes README).
 - Source data is deterministic: two resets give identical commit ids.
 - The Route the expectations assume (`WORLD_ROUTE`): default `acceptLossy`, auto-confirm by email, webhook allowlist `https://hooks.acme.example/**`, default naming. Every branch offers the `merge_commit` and `squash` strategies only (ADR-0130).

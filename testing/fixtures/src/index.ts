@@ -8,7 +8,5 @@ export {
   type SeededWorld,
   seedSourceGit,
   seedSpecFor,
-  type WorldFixtures,
-  worldFixtures,
 } from './world.ts';
 export * from './world-spec.ts';

@@ -13,6 +13,9 @@ import { fakePublicKey } from './world.ts';
 import { WORLD_WORKSPACE as W, WORLD_LIMITS, WORLD_REPOSITORIES } from './world-spec.ts';
 import { renderExpectationTable } from './world-table.ts';
 
+// biome-ignore lint/suspicious/noExplicitAny: response bodies are inspected loosely in tests
+type Loose = any;
+
 const BB_AUTH = `Basic ${Buffer.from('operator@test.local:fake-bitbucket-api-token').toString('base64')}`;
 let fakes: RunningFakes;
 /** Arguments of every `setLimits('target', …)` call, to observe which limits are in force. */
@@ -22,7 +25,7 @@ const lastTargetLimits = () => targetLimits[targetLimits.length - 1];
 const bbUrl = (path: string) => `http://127.0.0.1:${fakes.bitbucket.port}/2.0${path}`;
 const bb = async (path: string) => {
   const res = await fetch(bbUrl(path), { headers: { Authorization: BB_AUTH } });
-  return { status: res.status, body: (await res.json()) as any };
+  return { status: res.status, body: (await res.json()) as Loose };
 };
 const bareOf = (slug: string) => fakes.git?.repoDir('source', `${W}/${slug}`) ?? '';
 const git = async (slug: string, ...args: string[]) =>
@@ -53,7 +56,7 @@ describe('fixture world', () => {
   it('[TST-012] /__reset world builds every repository in its project with git data', async () => {
     const list = await bb(`/repositories/${W}?pagelen=100`);
     expect(list.status).toBe(200);
-    const bySlug = new Map<string, any>(list.body.values.map((r: any) => [r.slug, r]));
+    const bySlug = new Map<string, Loose>(list.body.values.map((r: Loose) => [r.slug, r]));
     expect(bySlug.size).toBe(WORLD_REPOSITORIES.length);
     for (const r of WORLD_REPOSITORIES) {
       expect(bySlug.get(r.slug)?.project.key, r.key).toBe(r.project);
@@ -62,7 +65,7 @@ describe('fixture world', () => {
       );
     }
     const projects = await bb(`/workspaces/${W}/projects`);
-    expect(projects.body.values.map((p: any) => p.key).sort()).toEqual([
+    expect(projects.body.values.map((p: Loose) => p.key).sort()).toEqual([
       'DATA',
       'KEYS',
       'OPS',
@@ -84,12 +87,12 @@ describe('fixture world', () => {
 
     const base = `/repositories/${W}/auto-ok`;
     const restr = (await bb(`${base}/branch-restrictions`)).body.values;
-    expect(restr.map((r: any) => r.kind).sort()).toEqual(['delete', 'force']);
-    expect(restr.every((r: any) => r.users.length === 0 && r.groups.length === 0)).toBe(true);
+    expect(restr.map((r: Loose) => r.kind).sort()).toEqual(['delete', 'force']);
+    expect(restr.every((r: Loose) => r.users.length === 0 && r.groups.length === 0)).toBe(true);
     expect((await bb(`${base}/deploy-keys`)).body.values).toHaveLength(1);
     const vars = (await bb(`${base}/pipelines_config/variables`)).body.values;
-    expect(vars.map((v: any) => v.key)).toContain('E2E_VAR');
-    expect(vars.some((v: any) => v.secured)).toBe(false);
+    expect(vars.map((v: Loose) => v.key)).toContain('E2E_VAR');
+    expect(vars.some((v: Loose) => v.secured)).toBe(false);
     expect((await bb(`${base}/environments`)).body.values).toHaveLength(1);
     expect((await bb(`${base}/permissions-config/users`)).body.values).toHaveLength(0);
     expect((await bb(`${base}/permissions-config/groups`)).body.values).toHaveLength(0);
@@ -110,9 +113,9 @@ describe('fixture world', () => {
     expect((await bb(`${r('with-grants')}/permissions-config/users`)).body.values).toHaveLength(2);
     const push = (await bb(`${r('with-grants')}/branch-restrictions`)).body.values[0];
     expect(push.kind).toBe('push');
-    expect(push.groups.map((g: any) => g.slug)).toEqual(['platform-team']);
+    expect(push.groups.map((g: Loose) => g.slug)).toEqual(['platform-team']);
     const vars = (await bb(`${r('with-secrets')}/pipelines_config/variables`)).body.values;
-    expect(vars.filter((v: any) => v.secured)).toHaveLength(1);
+    expect(vars.filter((v: Loose) => v.secured)).toHaveLength(1);
     expect((await bb(`${r('open-pr')}/pullrequests?state=OPEN`)).body.values).toHaveLength(1);
     expect((await bb(`${r('unmapped-user')}/permissions-config/users`)).body.values).toHaveLength(
       1,
@@ -130,11 +133,11 @@ describe('fixture world', () => {
       'pipe:',
     );
     const hooks = (await bb(`${r('hooks')}/hooks`)).body.values;
-    expect(hooks.map((h: any) => h.url).sort()).toEqual([
+    expect(hooks.map((h: Loose) => h.url).sort()).toEqual([
       'https://hooks.acme.example/ci',
       'https://thirdparty.example/hooks/bitbucket',
     ]);
-    expect(hooks.find((h: any) => h.url.startsWith('https://thirdparty')).secret_set).toBe(true);
+    expect(hooks.find((h: Loose) => h.url.startsWith('https://thirdparty')).secret_set).toBe(true);
     const k1 = (await bb(`/workspaces/${W}/projects/KEYS/deploy-keys`)).body.values;
     expect(k1).toHaveLength(1);
     expect(k1[0].key).toBe(fakePublicKey('shared-project-key'));
