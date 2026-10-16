@@ -1,6 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import { createFakeBitbucket, type FakeBitbucket, type FakeBitbucketOptions } from './app.ts';
+import { classify, type LimitConfig } from './rate-limit.ts';
 import { REQUIRED_SCOPES, SCOPES_NOT_IN_SPEC, toTemplate } from './scopes.ts';
 import { validateAgainstSpec } from './spec-validation.ts';
 
@@ -968,6 +969,44 @@ describe('[JOB-043] rate limits: 429 at the documented limits, never any rate-li
     expect((await get(fake, '/2.0/repositories/acme/auto-ok')).res.status).toBe(429);
   });
 
+  it('[JOB-043] a HEAD of a raw file is counted like its GET (raw-files and repository-data)', async () => {
+    const { fake } = clocked({ limits: { limits: { 'raw-files': 1, 'repository-data': 5 } } });
+    const raw = '/2.0/repositories/acme/auto-ok/src/main/src/a.txt';
+    const head = await fake.app.request(raw, { method: 'HEAD', headers: HEADERS });
+    expect(head.status).toBe(200);
+    expect((await get(fake, raw)).res.status).toBe(429);
+  });
+
+  it('[JOB-043] only the documented properties locations are app-properties, not src or downloads paths', () => {
+    expect(classify('GET', '/2.0/repositories/acme/app/src/main/properties/app/key')).toEqual([
+      'raw-files',
+      'repository-data',
+    ]);
+    expect(classify('GET', '/2.0/repositories/acme/app/downloads/properties/app/key')).toEqual([
+      'raw-files',
+      'repository-data',
+    ]);
+    expect(classify('GET', '/2.0/workspaces/acme/projects/properties/app/key')).toEqual([
+      'repository-data',
+    ]);
+    expect(classify('PUT', '/2.0/users/u/properties/app/key')).toEqual(['app-properties']);
+  });
+
+  it('[TST-010] constructor and programmatic reset limit options are validated like /__config', async () => {
+    expect(() =>
+      createFakeBitbucket({ limits: { limits: { bogus: 1 } as unknown as LimitConfig['limits'] } }),
+    ).toThrow(/Unknown limit category 'bogus'/);
+    expect(() => createFakeBitbucket({ limits: { limits: { 'raw-files': -1 } } })).toThrow(
+      /Invalid limit for 'raw-files'/,
+    );
+    expect(() => createFakeBitbucket({ limits: { windowMs: 0 } })).toThrow(/windowMs/);
+    const fake = createFakeBitbucket();
+    expect(() => fake.reset('empty', { limits: { windowMs: Number.NaN } })).toThrow(/windowMs/);
+    expect(() =>
+      fake.reset('empty', { limits: { limits: { webhooks: Number.POSITIVE_INFINITY } } }),
+    ).toThrow(/Invalid limit for 'webhooks'/);
+  });
+
   it('[JOB-043] /properties/** is app-properties', async () => {
     const { fake } = clocked({ limits: { limits: { 'app-properties': 1, 'repository-data': 0 } } });
     const p = '/2.0/repositories/acme/auto-ok/properties/app/key';
@@ -1157,6 +1196,20 @@ describe('[TST-010] API token scopes and workspace access', () => {
       (await get(project.fake, '/2.0/repositories/acme/auto-ok/deploy-keys', project.headers)).res
         .status,
     ).toBe(403);
+  });
+
+  it('[TST-010] HEAD needs the scopes of the GET it mirrors', async () => {
+    const { fake, headers } = withScopes(READ_ONLY);
+    const res = await fake.app.request('/2.0/repositories/acme/auto-ok/branch-restrictions', {
+      method: 'HEAD',
+      headers,
+    });
+    expect(res.status).toBe(403);
+    const ok = await fake.app.request('/2.0/repositories/acme/auto-ok', {
+      method: 'HEAD',
+      headers,
+    });
+    expect(ok.status).toBe(200);
   });
 
   it('[TST-010] scopes do not imply each other: write or admin does not grant read', async () => {

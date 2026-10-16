@@ -42,7 +42,7 @@ No rate-limit headers are ever sent (also no `Retry-After`). A request over the 
 | `raw-files` | `src/**` file downloads (also counted in `repository-data`, granted atomically; directory listings are `repository-data` only) | 5000 |
 | `app-properties` | `/properties/**` | 2000 |
 
-The `git` group (60,000/h) belongs to the git server of T-040, not to this REST fake. Unauthenticated requests are not counted. A request rejected with 429 records nothing. Configure per test:
+The `git` group (60,000/h) belongs to the git server of T-040, not to this REST fake. `app-properties` covers only the documented properties locations (repository, commit, pull request and user `properties/{app}/{key}`); a `src` or `downloads` path that happens to contain `properties` stays a raw file. Limit options are validated wherever they enter (constructor, `reset()`, `/__reset`, `/__config`): unknown categories, negative or non-finite limits and a non-positive `windowMs` are refused (`400` on the control plane, a thrown `LimitConfigError` in code). Unauthenticated requests are not counted. A request rejected with 429 records nothing. Configure per test:
 
 ```ts
 createFakeBitbucket({ limits: { limits: { 'repository-data': 3 }, windowMs: 1000 }, now: fakeClock })
@@ -57,7 +57,8 @@ curl -XPOST :4010/__reset  -d '{"fixture":"empty","limits":{"repository-data":3}
 ### Authorization
 
 - **Scopes.** A credential may carry `scopes` (`credentials: [{ email, token, scopes: ['read:repository:bitbucket'] }]`); without it every scope is granted. Each route requires the scopes of its operation's `x-atlassian-oauth2-scopes` in the saved OpenAPI document (`src/bitbucket/scopes.ts`, cross-checked by a test; issues and the `src` root are assumed, as in the provider doc). Scopes do not imply each other (`write:` or `admin:` does not grant `read:`); when several are listed all are required. Missing scopes give `403` with `{"type":"error","error":{"message":"Your credentials lack one or more required privilege scopes.","detail":{"granted":[…],"required":[…]}}}`. Admin-only endpoints: branch restrictions (even `GET`), repository `PUT`, `pipelines_config`, repository deploy keys and branching-model settings need `admin:repository:bitbucket`; project deploy keys and project branching-model settings need `admin:project:bitbucket`.
-- **Workspace access.** An account that is not a member of a workspace gets `403` on every `/2.0/**` and `/1.0/groups` call for it (unknown workspaces stay `404`; `/2.0/user` needs no membership). Fixtures must add the credential accounts: `state.addCredentialMembers('acme')`.
+- **Workspace access.** An account that is not a member of a workspace gets `403` on every `/2.0/**` and `/1.0/groups` call for it (unknown workspaces stay `404`; `/2.0/user` needs no membership). Fixtures must add the credential accounts: `state.addCredentialMembers('acme')`. Public repositories are not modelled: a non-member gets this `403` even for a repository with `is_private: false`, where Bitbucket would let any account read it (the adapters always work as a workspace member, which the live e2e preconditions check).
+- **HEAD** is served by the `GET` route and is scope-checked and counted (including `raw-files`) as that `GET`.
 
 ### Control plane (no auth)
 
