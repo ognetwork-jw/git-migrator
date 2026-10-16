@@ -290,12 +290,16 @@ describe('teams', () => {
       body: { name: 'child', parent_team_id: parent.body.id },
     });
     await w.call('POST', '/orgs/acme/teams', { body: { name: 'other' } });
-    // The child teams of a team (not in the trimmed OpenAPI description either).
-    const children = await w.call('GET', '/orgs/acme/teams/parent/teams');
+    const children = await w.spec(
+      '/orgs/{org}/teams/{team_slug}/teams',
+      'get',
+      '/orgs/acme/teams/parent/teams',
+      {},
+      200,
+    );
     expect(children.body.map((t: { slug: string }) => t.slug)).toEqual(['child']);
     expect((await w.call('GET', '/orgs/acme/teams/other/teams')).body).toEqual([]);
-    // The trimmed OpenAPI description carries only GET for this path, so the reply is not validated.
-    expect((await w.call('DELETE', '/orgs/acme/teams/parent')).status).toBe(204);
+    await w.spec('/orgs/{org}/teams/{team_slug}', 'delete', '/orgs/acme/teams/parent', {}, 204);
     const left = await w.call('GET', '/orgs/acme/teams');
     expect(left.body.map((t: { slug: string }) => t.slug)).toEqual(['other']);
     expect((await w.call('DELETE', '/orgs/acme/teams/parent')).status).toBe(404);

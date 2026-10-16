@@ -5203,6 +5203,99 @@
      "category": "teams",
      "subcategory": "teams"
     }
+   },
+   "delete": {
+    "summary": "Delete a team",
+    "description": "To delete a team, the authenticated user must be an organization owner or team maintainer.\n\nIf you are an organization owner, deleting a parent team will delete all of its child teams as well.\n\n> [!NOTE]\n> You can also specify a team by `org_id` and `team_id` using the route `DELETE /organizations/{org_id}/team/{team_id}`.",
+    "tags": [
+     "teams"
+    ],
+    "operationId": "teams/delete-in-org",
+    "externalDocs": {
+     "description": "API method documentation",
+     "url": "https://docs.github.com/rest/teams/teams#delete-a-team"
+    },
+    "parameters": [
+     {
+      "$ref": "#/components/parameters/org"
+     },
+     {
+      "$ref": "#/components/parameters/team-slug"
+     }
+    ],
+    "responses": {
+     "204": {
+      "description": "Response"
+     },
+     "422": {
+      "$ref": "#/components/responses/enterprise_team_unsupported"
+     }
+    },
+    "x-github": {
+     "githubCloudOnly": false,
+     "enabledForGitHubApps": true,
+     "category": "teams",
+     "subcategory": "teams"
+    }
+   }
+  },
+  "/orgs/{org}/teams/{team_slug}/teams": {
+   "get": {
+    "summary": "List child teams",
+    "description": "Lists the child teams of the team specified by `{team_slug}`.\n\n> [!NOTE]\n> You can also specify a team by `org_id` and `team_id` using the route `GET /organizations/{org_id}/team/{team_id}/teams`.",
+    "tags": [
+     "teams"
+    ],
+    "operationId": "teams/list-child-in-org",
+    "externalDocs": {
+     "description": "API method documentation",
+     "url": "https://docs.github.com/rest/teams/teams#list-child-teams"
+    },
+    "parameters": [
+     {
+      "$ref": "#/components/parameters/org"
+     },
+     {
+      "$ref": "#/components/parameters/team-slug"
+     },
+     {
+      "$ref": "#/components/parameters/per-page"
+     },
+     {
+      "$ref": "#/components/parameters/page"
+     }
+    ],
+    "responses": {
+     "200": {
+      "description": "if child teams exist",
+      "content": {
+       "application/json": {
+        "schema": {
+         "type": "array",
+         "items": {
+          "$ref": "#/components/schemas/team"
+         }
+        },
+        "examples": {
+         "response-if-child-teams-exist": {
+          "$ref": "#/components/examples/team-items-response-if-child-teams-exist"
+         }
+        }
+       }
+      },
+      "headers": {
+       "Link": {
+        "$ref": "#/components/headers/link"
+       }
+      }
+     }
+    },
+    "x-github": {
+     "githubCloudOnly": false,
+     "enabledForGitHubApps": true,
+     "category": "teams",
+     "subcategory": "teams"
+    }
    }
   },
   "/orgs/{org}/outside_collaborators": {
@@ -24622,6 +24715,38 @@
      }
     ]
    },
+   "team-items-response-if-child-teams-exist": {
+    "value": [
+     {
+      "id": 2,
+      "node_id": "MDQ6VGVhbTI=",
+      "url": "https://api.github.com/teams/2",
+      "name": "Original Roster",
+      "slug": "original-roster",
+      "description": "Started it all.",
+      "privacy": "closed",
+      "notification_setting": "notifications_enabled",
+      "permission": "admin",
+      "members_url": "https://api.github.com/teams/2/members{/member}",
+      "repositories_url": "https://api.github.com/teams/2/repos",
+      "parent": {
+       "id": 1,
+       "node_id": "MDQ6VGVhbTE=",
+       "url": "https://api.github.com/teams/1",
+       "html_url": "https://github.com/orgs/github/teams/justice-league",
+       "name": "Justice League",
+       "slug": "justice-league",
+       "description": "A great team.",
+       "privacy": "closed",
+       "notification_setting": "notifications_enabled",
+       "permission": "admin",
+       "members_url": "https://api.github.com/teams/1/members{/member}",
+       "repositories_url": "https://api.github.com/teams/1/repos"
+      },
+      "html_url": "https://github.com/orgs/rails/teams/core"
+     }
+    ]
+   },
    "team-member-items": {
     "value": [
      {
@@ -24957,6 +25082,9 @@
       }
      }
     }
+   },
+   "enterprise_team_unsupported": {
+    "description": "Unprocessable entity if you attempt to modify an enterprise team at the organization level."
    },
    "forbidden": {
     "description": "Forbidden",
