@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   demoteDuplicateConfirmations,
   EMAIL_CONFIDENCE,
+  indexGroupTargets,
   indexTargets,
   LOGIN_CONFIDENCE,
   type MatchIdentity,
@@ -161,6 +162,26 @@ describe('group matching', () => {
       status: 'unmapped',
       targetGroupId: null,
     });
+  });
+
+  it('[AUTH-050] matches against an index of target groups by lower-cased slug, first group winning', () => {
+    const index = indexGroupTargets([
+      { id: 'a', slug: 'Platform-Team' },
+      { id: 'b', slug: 'platform-team' },
+      { id: 'c', slug: 'other' },
+    ]);
+    expect(index.size).toBe(2);
+    expect(matchGroup('PLATFORM-team', index)).toEqual({ status: 'suggested', targetGroupId: 'a' });
+    expect(matchGroup('missing', index)).toEqual({ status: 'unmapped', targetGroupId: null });
+    // The index answers by key lookup: many sources against many targets stay linear.
+    const many = indexGroupTargets(
+      Array.from({ length: 20_000 }, (_, i) => ({ id: `t${i}`, slug: `team-${i}` })),
+    );
+    let hits = 0;
+    for (let i = 0; i < 20_000; i++) {
+      if (matchGroup(`TEAM-${i}`, many).status === 'suggested') hits++;
+    }
+    expect(hits).toBe(20_000);
   });
 });
 

@@ -180,20 +180,38 @@ export const sameMapping = (a: MappingFields, b: MappingFields): boolean =>
   a.method === b.method &&
   a.confidence === b.confidence;
 
+/** Target groups by lower-cased slug, built once per Route; the first group in input order wins. */
+export type GroupTargetIndex = ReadonlyMap<string, string>;
+
+export function indexGroupTargets(
+  targets: readonly { readonly id: string; readonly slug: string }[],
+): GroupTargetIndex {
+  const index = new Map<string, string>();
+  for (const t of targets) {
+    const key = t.slug.toLowerCase();
+    if (!index.has(key)) index.set(key, t.id);
+  }
+  return index;
+}
+
 /**
  * Group Mapping flow (AUTH-050, last paragraph): a target team with the same slug (compared
  * case-insensitively) is `suggested`; otherwise the team is planned
- * for creation and the mapping stays `unmapped` with its planned slug.
+ * for creation and the mapping stays `unmapped` with its planned slug. Pass an index from
+ * `indexGroupTargets` when matching many sources against the same targets.
  */
 export function matchGroup(
   sourceSlug: string,
-  targets: readonly { readonly id: string; readonly slug: string }[],
+  targets: readonly { readonly id: string; readonly slug: string }[] | GroupTargetIndex,
 ):
   | { readonly status: 'suggested'; readonly targetGroupId: string }
   | { readonly status: 'unmapped'; readonly targetGroupId: null } {
-  const key = sourceSlug.toLowerCase();
-  const hit = targets.find((t) => t.slug.toLowerCase() === key);
-  return hit
-    ? { status: 'suggested', targetGroupId: hit.id }
+  const index =
+    targets instanceof Map
+      ? (targets as GroupTargetIndex)
+      : indexGroupTargets(targets as readonly { readonly id: string; readonly slug: string }[]);
+  const hit = index.get(sourceSlug.toLowerCase());
+  return hit !== undefined
+    ? { status: 'suggested', targetGroupId: hit }
     : { status: 'unmapped', targetGroupId: null };
 }

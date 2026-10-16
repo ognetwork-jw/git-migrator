@@ -27,6 +27,7 @@ import type { JobHandlers } from '../runtime.ts';
 import type { EndpointConnector } from './connector.ts';
 import {
   demoteDuplicateConfirmations,
+  indexGroupTargets,
   indexTargets,
   type MappingFields,
   matchGroup,
@@ -942,11 +943,14 @@ export async function runInventory(
     // What the Analysis's group resolver makes of a mapping: no row and `unmapped` are both a team
     // that is missing, `suggested` is a team that still needs an operator (ADR-0310).
     const resolves = (status: string | undefined) => (status === 'suggested' ? 'S' : 'M');
-    for (const source of sources) {
+    const index = indexGroupTargets(targets);
+    for (const [i, source] of sources.entries()) {
       checkpoint();
+      // A big directory must not hold the event loop (BullMQ lock renewal, health endpoint).
+      if (i > 0 && i % YIELD_EVERY === 0) await yieldToEventLoop();
       const existing = bySource.get(source.id);
       if (existing && !REMATCHABLE_STATUSES.has(existing.status)) continue;
-      const next = matchGroup(source.slug, targets);
+      const next = matchGroup(source.slug, index);
       if (!existing) {
         toCreate.push({ sourceGroupId: source.id, plannedSlug: source.slug, ...next });
         changed++;
