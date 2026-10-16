@@ -1,4 +1,6 @@
-import { expect, type Page, test } from '@playwright/test';
+import { type BrowserContext, expect, type Page, test } from '@playwright/test';
+import { TEST_PASSWORD } from '../harness/constants.ts';
+import { signIn } from '../harness/ui.ts';
 
 type Role = 'viewer' | 'operator' | 'admin';
 
@@ -8,8 +10,50 @@ const ACTORS: Record<Role, { id: string; displayName: string; email: string }> =
   admin: { id: 'a-admin', displayName: 'Ada Admin', email: 'ada@example.test' },
 };
 
-/** The API is mocked: the page only needs `GET /api/v1/me`. */
+/** Every item of the main navigation, in order: an Admin may use them all (UI-010). */
+const ADMIN_NAV = [
+  'Dashboard',
+  'Repositories',
+  'Waves',
+  'Endpoints',
+  'Identity mapping',
+  'Team mapping',
+  'Invitations',
+  'Naming rules',
+  'Webhook allowlist',
+  'Overlays',
+  'Capability matrix',
+  'Actors and API keys',
+  'Audit log',
+];
+
+const FIXED_NOW = new Date('2026-01-15T09:30:00Z');
+
+/** The seeded Admin's session cookies, signed in once per run: sign-in is rate-limited. */
+let session: Awaited<ReturnType<BrowserContext['cookies']>> | undefined;
+
+async function adminSession(page: Page) {
+  if (session === undefined) {
+    // A page of its own, so the page under test starts from a fresh load like every other test.
+    const signInPage = await page.context().newPage();
+    await signIn(signInPage, 'admin@test.local');
+    session = await page.context().cookies();
+    await signInPage.close();
+  } else {
+    await page.context().addCookies(session);
+  }
+}
+
+/**
+ * The browser's view of the Actor. A signed-in role first signs in for real as the seeded Admin, so
+ * the server-side page gate lets every page through, then the browser is told it is `role`: the
+ * shell draws that role's navigation and redirects as it would for it. Signed out, nothing is
+ * signed in and the server gate redirects as well.
+ */
 async function mockApi(page: Page, role: Role | 'signed-out') {
+  if (role !== 'signed-out') await adminSession(page);
+  // Pages that show the time ("Updated …") draw the same text on every run.
+  await page.clock.setFixedTime(FIXED_NOW);
   await page.route('**/api/v1/me', (route) => {
     if (role === 'signed-out') {
       return route.fulfill({
@@ -56,8 +100,30 @@ async function fakeEventSource(page: Page) {
   });
 }
 
+/**
+ * Whether the browser has DejaVu Sans: a text set in it measures differently from the same text in
+ * two unlike generic fonts. Without it every screenshot falls back to another face and fails.
+ */
+async function hasScreenshotFont(page: Page): Promise<boolean> {
+  return page.evaluate(() => {
+    const context = document.createElement('canvas').getContext('2d');
+    if (!context) return false;
+    const width = (font: string) => {
+      context.font = `32px ${font}`;
+      return context.measureText('mmmmmmmmmmlli WQ@#').width;
+    };
+    return ['monospace', 'serif'].every(
+      (generic) => width(`'DejaVu Sans', ${generic}`) !== width(generic),
+    );
+  });
+}
+
 /** Fixed fonts and no motion, so the screenshots do not depend on the machine. */
 async function freeze(page: Page) {
+  expect(
+    await hasScreenshotFont(page),
+    'The visual baselines are drawn in DejaVu Sans; install it (fonts-dejavu-core) to compare.',
+  ).toBe(true);
   await page.addStyleTag({
     content: `*, *::before, *::after {
       font-family: 'DejaVu Sans', sans-serif !important;
@@ -138,6 +204,9 @@ test.describe('shell', () => {
       await mockApi(page, 'admin');
       await open(page, '/');
       await expect(page.getByRole('status').filter({ hasText: 'Live' })).toBeVisible();
+      // A missing item is a small share of the pixels, so the screenshot alone cannot catch it.
+      const nav = page.getByRole('navigation', { name: 'Main navigation' });
+      await expect(nav.getByRole('link')).toHaveText(ADMIN_NAV);
       await expect(page).toHaveScreenshot(`shell-admin-${scheme}.png`);
     });
   }
@@ -228,17 +297,13 @@ test.describe('sign-in and denied pages', () => {
   });
 
   test('[UI-036] test sign-in posts the credentials and follows next', async ({ page }) => {
-    await mockApi(page, 'signed-out');
-    let body: unknown;
-    await page.route('**/api/auth/sign-in/email', (route) => {
-      body = route.request().postDataJSON();
-      return route.fulfill({ status: 200, contentType: 'application/json', body: '{}' });
-    });
+    // A real sign-in of a seeded Actor: the server gate of `/waves` needs the session it sets.
+    const posted = page.waitForRequest('**/api/auth/sign-in/email');
     await open(page, '/signin?next=%2Fwaves');
     await page.getByLabel('Email').fill('operator@test.local');
-    await page.getByLabel('Password').fill('not-a-real-password');
+    await page.getByLabel('Password').fill(TEST_PASSWORD);
     await page.getByRole('button', { name: 'Sign in', exact: true }).click();
-    await expect.poll(() => body).toMatchObject({ email: 'operator@test.local' });
+    expect((await posted).postDataJSON()).toMatchObject({ email: 'operator@test.local' });
     await expect(page).toHaveURL(/\/waves$/);
   });
 
