@@ -450,6 +450,33 @@ describe('GraphQL error classes', () => {
     ).rejects.toMatchObject({ code: 'invalid' });
   });
 
+  it('[ADP-060] an untyped validation or parse error with no data stays invalid for a read', async () => {
+    const bodies = [
+      // A query naming a field the server does not have (an older server version).
+      {
+        data: null,
+        errors: [
+          {
+            message:
+              "Field 'bypassForcePushAllowances' doesn't exist on type 'BranchProtectionRule'",
+            locations: [{ line: 1, column: 20 }],
+            extensions: { code: 'undefinedField', typeName: 'BranchProtectionRule' },
+          },
+        ],
+      },
+      // A parse error: no data key at all, only a location.
+      { errors: [{ message: 'Parse error on "}" (RCURLY)', locations: [{ line: 1, column: 9 }] }] },
+    ];
+    for (const body of bodies) {
+      const h = await setup({
+        intercept: (r) => (r.url.endsWith('/graphql') ? reply(200, body) : undefined),
+      });
+      await expect(
+        new Gh(h.conn.http).graphql('query { viewer { login } }', {}),
+      ).rejects.toMatchObject({ code: 'invalid' });
+    }
+  });
+
   it('[ADP-060] a typed GraphQL error keeps its class', async () => {
     const h = await setup({
       intercept: (r) =>

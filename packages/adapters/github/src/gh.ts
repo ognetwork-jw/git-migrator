@@ -174,7 +174,7 @@ export class Gh {
   async graphql<T = Json>(query: string, variables: Json, mutation = false): Promise<T> {
     const res = await this.http.request<{
       data?: T | null;
-      errors?: { type?: string; message?: string }[];
+      errors?: GraphqlError[];
     }>({
       ...this.#base(),
       method: 'POST',
@@ -187,15 +187,18 @@ export class Gh {
     const errors = res.body?.errors;
     const noData = !res.body?.data;
     if (errors && errors.length > 0) {
-      const first = errors[0] as { type?: string; message?: string };
+      const first = errors[0] as GraphqlError;
       const type = String(first.type ?? '').toUpperCase();
       // An untyped error with no data is what a provider timeout looks like: a read may retry it.
+      // A validation or parse error names a query location or carries `extensions.code`
+      // (e.g. `undefinedField` on an older server); retrying it cannot help.
+      const malformed = first.locations !== undefined || first.extensions?.code !== undefined;
       const code =
         type === 'FORBIDDEN'
           ? 'forbidden'
           : type === 'NOT_FOUND'
             ? 'not_found'
-            : type === '' && noData && !mutation
+            : type === '' && noData && !mutation && !malformed
               ? 'transient'
               : 'invalid';
       throw new AdapterError({
@@ -215,6 +218,13 @@ export class Gh {
     }
     return data;
   }
+}
+
+interface GraphqlError {
+  type?: string;
+  message?: string;
+  locations?: unknown;
+  extensions?: { code?: unknown };
 }
 
 export const repoPath = (owner: string, repo: string): string =>
