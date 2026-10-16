@@ -1,4 +1,5 @@
-import { useSyncExternalStore } from 'react';
+import { useEffect, useSyncExternalStore } from 'react';
+import { colorSchemeCookie } from './color-scheme.ts';
 
 const QUERY = '(prefers-color-scheme: dark)';
 
@@ -15,9 +16,20 @@ const snapshot = (): boolean =>
   window.matchMedia(QUERY).matches;
 
 /**
- * True when the OS asks for the dark theme (UI-001). The server and the first client render use the
- * light theme, so hydration matches; the dark theme applies right after.
+ * True when the OS asks for the dark theme (UI-001). The server render and hydration use
+ * `initialDark`, the scheme the browser reported on its last visit (a cookie, ADR-0520), so a
+ * returning visitor's first paint is already dark; the OS preference applies right after and is
+ * remembered for the next visit.
  */
-export function usePrefersDark(): boolean {
-  return useSyncExternalStore(subscribe, snapshot, () => false);
+export function usePrefersDark(initialDark = false): boolean {
+  const dark = useSyncExternalStore(subscribe, snapshot, () => initialDark);
+  useEffect(() => {
+    try {
+      // biome-ignore lint/suspicious/noDocumentCookie: a display preference read by the server render
+      document.cookie = colorSchemeCookie(dark);
+    } catch {
+      // Cookies may be blocked; the first paint is then light, as before.
+    }
+  }, [dark]);
+  return dark;
 }
