@@ -15,7 +15,7 @@
 import type { DomainEvent, EventType } from '@git-migrator/core';
 import { type Db, publishEventIn } from '@git-migrator/db';
 import type { Logger } from '@git-migrator/observability';
-import { reconcileLateWrite } from './late.ts';
+import { reconcileLateNotApplied, reconcileLateWrite } from './late.ts';
 import { RunLeaseLostError, type Tx } from './types.ts';
 
 export type { Tx };
@@ -103,16 +103,23 @@ export async function ledgerTransaction<T>(
       const countBefore = runFinished ? await countMutations(tx, runId) : 0;
       const value = await fn(tx);
       if (runFinished) {
+        const late = {
+          runId,
+          migrationId: first.migration_id,
+          runStatus: run.status,
+          hadMutations: run.hasMutations,
+          now,
+          log: options.log,
+        };
         // Any record added to a finished Run is late; confirming an intent adds none.
         if ((await countMutations(tx, runId)) > countBefore) {
-          await reconcileLateWrite(tx, {
-            runId,
-            migrationId: first.migration_id,
-            runStatus: run.status,
-            hadMutations: run.hasMutations,
-            now,
-            log: options.log,
-          });
+          await reconcileLateWrite(tx, late);
+        } else if (run.hasMutations && !(await lockRun(tx, runId))?.hasMutations) {
+          // A late `not_applied` left the Run with no Mutation (LIF-002).
+          const settled = await tx.$queryRaw<{ id: string }[]>`
+            SELECT id FROM app.mutation WHERE run_id = ${runId} AND state = 'not_applied'
+            ORDER BY updated_at DESC, seq DESC LIMIT 1`;
+          await reconcileLateNotApplied(tx, { ...late, mutationId: settled[0]?.id ?? null });
         }
       }
       return { retry: false as const, value };
