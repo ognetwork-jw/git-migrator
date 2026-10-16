@@ -27,7 +27,7 @@ LIF-020 lists what an Analysis does but not how its pieces meet: which client wr
 - **Expected Differences** the Analysis records are inserted with `INSERT ... ON CONFLICT DO NOTHING` against a partial unique index over the active `lossy_accepted` and `unreadable_defaulted` records, so concurrent Analyses cannot repeat one.
 - **Events (JOB-060).** In the same transaction, `migration.updated` for the Migration, and `task.updated` for up to 25 created, reopened or dismissed tasks.
 - **LIF-022.** `analyzeForRun(deps, migrationId, ...)` re-analyzes inline on the interactive pool when `needsReanalysis` (no Analysis, stale, or older than `schedules.runRequiresAnalysisWithin`) and returns `{ reanalyzed, before, after, worsened }`; `worsened` means `readinessWorsened(before, after)` and tells the Run executor (T-070) to abort with `readiness_changed`.
-- **Git.** The `git-refs` driver needs `GitClient.lsRemote`. The worker passes `createAnalysisGitClient` (a `GitService` without quota pre-acquire). One unit per Analysis in a bucket of 60,000 per hour is not charged because the host cannot name an adapter's git bucket; follow-up with the credential-selection hook of ADR-0281.
+- **Git.** The `git-refs` driver needs `GitClient.lsRemote`. The worker passes `createAnalysisGitClient` (a `GitService` without quota pre-acquire). Amended (follow-up row 213): the Analysis wraps it per connection with `meteredGitClient`, so each ls-remote pre-acquires its unit in the git bucket the adapter declares for the connection's credential (`GitAccess.quota`, through `EndpointConnector.gitQuota`); an adapter that declares none is not metered (ADR-0380). The Parity Check does the same.
 
 ## Alternatives
 

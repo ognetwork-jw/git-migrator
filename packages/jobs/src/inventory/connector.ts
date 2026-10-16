@@ -4,11 +4,11 @@ import {
   type EndpointConnection,
   type GitClient,
   type ProviderHttpEnvironment,
+  type QuotaGate,
   type QuotaPool,
 } from '@git-migrator/adapter-sdk';
 import type { Config } from '@git-migrator/config';
-import { createGitQuota, type GitQuota } from '@git-migrator/git';
-import { bucketKey } from '@git-migrator/quota';
+import { createGitQuota, GIT_UNITS, type GitQuota } from '@git-migrator/git';
 import type { ProviderRegistry } from '@git-migrator/registry';
 
 type Env = Readonly<Record<string, string | undefined>>;
@@ -26,11 +26,51 @@ export interface ConnectOptions {
 export interface EndpointConnector {
   connect(endpointId: string, options: ConnectOptions): Promise<EndpointConnection>;
   /**
-   * Pre-acquires units in the `git` bucket of the credential `connect` selects for the Endpoint
-   * (JOB-041, JOB-043), for git commands the jobs run themselves (a mirror clone). A denial throws
-   * `rate_limited` with `retryAt`. Absent in test connectors: git commands then run unmetered.
+   * Pre-acquires units in the `git` bucket the adapter declared for the connection's credential
+   * (`GitAccess.quota`, JOB-041, JOB-043), for git commands the jobs run themselves (a mirror
+   * clone, the `git-refs` ls-remote of an Analysis). A denial throws `rate_limited` with
+   * `retryAt`. A connection whose adapter declares no git bucket belongs to a provider that does
+   * not meter git over HTTPS (ADR-0380): its quota grants every request.
    */
-  gitQuota?(endpointId: string, options: Pick<ConnectOptions, 'pool'>): GitQuota;
+  gitQuota(
+    connection: Pick<EndpointConnection, 'git'>,
+    options: Pick<ConnectOptions, 'pool'>,
+  ): GitQuota;
+}
+
+/** The quota of git commands that nothing meters (ADR-0380). */
+export const unmeteredGitQuota: GitQuota = { acquire: async () => undefined };
+
+/** A `GitQuota` over the bucket a connection declared, or `unmeteredGitQuota` when it declared none. */
+export function gitQuotaOf(
+  gate: Pick<QuotaGate, 'acquire'>,
+  connection: Pick<EndpointConnection, 'git'>,
+  pool: QuotaPool,
+  now?: () => Date,
+): GitQuota {
+  const spec = connection.git.quota;
+  if (!spec) return unmeteredGitQuota;
+  return createGitQuota({
+    gate,
+    bucketKey: spec.key,
+    limit: spec.limit,
+    windowSeconds: spec.windowSeconds,
+    pool,
+    ...(now ? { now } : {}),
+  });
+}
+
+/**
+ * Wraps a `GitClient` so every ls-remote first pre-acquires its unit in `quota` (JOB-041). The inner
+ * client must not meter again.
+ */
+export function meteredGitClient(inner: GitClient, quota: GitQuota): GitClient {
+  return {
+    async lsRemote(request) {
+      await quota.acquire(GIT_UNITS.lsRemote);
+      return inner.lsRemote(request);
+    },
+  };
 }
 
 export interface EndpointConnectorOptions {
@@ -146,22 +186,11 @@ export function createEndpointConnector(options: EndpointConnectorOptions): Endp
         context,
       );
     },
-    gitQuota(endpointId, { pool }) {
-      const { entry, accountKey } = select(endpointId);
-      const overrides = entry.quota.overrides as Readonly<Record<string, number>> | undefined;
-      return createGitQuota({
-        gate: options.environment.quota,
-        bucketKey: bucketKey(endpointId, accountKey, 'git'),
-        limit: overrides?.git ?? GIT_BUCKET_LIMIT,
-        windowSeconds: 3600,
-        pool,
-      });
+    gitQuota(connection, { pool }) {
+      return gitQuotaOf(options.environment.quota, connection, pool);
     },
   };
 }
-
-/** JOB-043: the `git` bucket allows 60,000 requests an hour unless `quota.overrides.git` says otherwise. */
-const GIT_BUCKET_LIMIT = 60_000;
 
 /**
  * The `GitClient` for jobs that never touch git transport (inventory). It refuses every call, so a

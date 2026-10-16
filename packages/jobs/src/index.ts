@@ -64,7 +64,10 @@ export {
   createEndpointConnector,
   type EndpointConnector,
   type EndpointConnectorOptions,
+  gitQuotaOf,
+  meteredGitClient,
   noGitClient,
+  unmeteredGitQuota,
 } from './inventory/connector.ts';
 export {
   type InventoryDeps,

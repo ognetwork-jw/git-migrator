@@ -247,6 +247,7 @@ routes:
   // The Atlassian Admin enrichment is not built (T-060 follow-up): the source Identities get the
   // e-mails the TST-012 table assumes.
   connector = {
+    gitQuota: (connection, options) => real.gitQuota(connection, options),
     async connect(endpointId, options) {
       const connection = await real.connect(endpointId, options);
       if (endpointId !== SOURCE) {

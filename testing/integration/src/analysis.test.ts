@@ -185,6 +185,7 @@ routes:
   // AUTH-050 step 1: the Atlassian Admin enrichment is not built (T-060 follow-up), so the source
   // Identities get the emails the TST-012 table assumes, as a decorator on the interface.
   connector = {
+    gitQuota: (connection, options) => real.gitQuota(connection, options),
     async connect(endpointId, options) {
       const connection = await real.connect(endpointId, options);
       if (endpointId !== SOURCE) return connection;
@@ -259,6 +260,22 @@ describe('analysis against the fixture world', () => {
     }
     expect(mismatches).toEqual([]);
   }, 300_000);
+
+  it('[JOB-041] pre-acquires the git-refs ls-remote in the git bucket the source adapter declares', async () => {
+    const gitEvents = async () =>
+      Number(
+        (
+          await t.db.pool.query(
+            `SELECT count(*) AS n FROM app.quota_event WHERE bucket_key LIKE $1 AND pool = 'interactive'`,
+            [`${SOURCE}:%:git`],
+          )
+        ).rows[0].n,
+      );
+    const before = await gitEvents();
+    const m = await migrationOf(WORLD_REPOSITORIES[0]?.key ?? '');
+    await analyze(m.id, 'interactive');
+    expect(await gitEvents()).toBeGreaterThan(before);
+  }, 120_000);
 
   it('[LIF-080] the endpoint Migration of the Route is analyzed against the real adapters', async () => {
     const endpointMigration = await t.db.privileged.migration.findFirstOrThrow({

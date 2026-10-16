@@ -42,7 +42,7 @@ import { effectiveFieldSupport, type ProviderRegistry } from '@git-migrator/regi
 import { UnrecoverableError } from 'bullmq';
 import type pg from 'pg';
 import { databaseNow } from '../db-clock.ts';
-import type { EndpointConnector } from '../inventory/connector.ts';
+import { type EndpointConnector, meteredGitClient } from '../inventory/connector.ts';
 import {
   loadPlacement,
   placementOutside,
@@ -266,9 +266,16 @@ export async function runAnalysis(
       signal: options.shutdown,
     }),
   ]);
+  // JOB-041: each ls-remote of a driver pre-acquires its unit in the git bucket of the connection.
+  const gitOf = new Map(
+    [sourceConn, targetConn].map((conn) => [
+      conn,
+      meteredGitClient(deps.git, deps.connector.gitQuota(conn, { pool: options.pool })),
+    ]),
+  );
   const driverContext = (conn: EndpointConnection) => ({
     http: counting(conn.http, calls),
-    git: deps.git,
+    git: gitOf.get(conn) ?? deps.git,
     logger: log as never,
     pool: options.pool,
     signal: options.shutdown,

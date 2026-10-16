@@ -14,16 +14,11 @@ import {
 } from '@git-migrator/adapter-sdk';
 import type { Config } from '@git-migrator/config';
 import type { Db } from '@git-migrator/db';
-import {
-  createGitQuota,
-  type GitQuota,
-  GitService,
-  type GitServiceOptions,
-} from '@git-migrator/git';
+import { type GitQuota, GitService, type GitServiceOptions } from '@git-migrator/git';
 import type { Logger } from '@git-migrator/observability';
 import type { QuotaService } from '@git-migrator/quota';
 import type { ProviderRegistry } from '@git-migrator/registry';
-import type { EndpointConnector } from '../inventory/connector.ts';
+import { type EndpointConnector, gitQuotaOf } from '../inventory/connector.ts';
 import { StepFailure } from '../run/errors.ts';
 import type { StepContext, StepDefinition } from '../run/types.ts';
 import type { MirrorRegistry } from './mirror.ts';
@@ -131,17 +126,7 @@ export async function connectSide(
     pool: 'interactive',
     signal: ctx.signal,
   });
-  const spec = connection.git.quota;
-  const quota: GitQuota = spec
-    ? createGitQuota({
-        gate: services.quota,
-        bucketKey: spec.key,
-        limit: spec.limit,
-        windowSeconds: spec.windowSeconds,
-        pool: 'interactive',
-        ...(services.now ? { now: services.now } : {}),
-      })
-    : { acquire: async () => undefined };
+  const quota: GitQuota = gitQuotaOf(services.quota, connection, 'interactive', services.now);
   const options: GitServiceOptions = {
     quota,
     scratchDir: ctx.scratchDir,

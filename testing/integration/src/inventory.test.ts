@@ -75,6 +75,7 @@ let freshCursors = 0;
 
 function tweaked(real: EndpointConnector): EndpointConnector {
   return {
+    gitQuota: (connection, options) => real.gitQuota(connection, options),
     async connect(endpointId, options) {
       if (tweaks.connectError) throw tweaks.connectError;
       const connection = await real.connect(endpointId, options);

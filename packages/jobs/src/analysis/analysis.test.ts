@@ -6,7 +6,7 @@ import { createBuiltinRegistry } from '@git-migrator/registry';
 import { UnrecoverableError } from 'bullmq';
 import pg from 'pg';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import type { EndpointConnector } from '../inventory/connector.ts';
+import { type EndpointConnector, unmeteredGitQuota } from '../inventory/connector.ts';
 import {
   type AnalysisDeps,
   AnalysisError,
@@ -107,6 +107,7 @@ let liveTeams: { providerId: string; slug: string }[] = [
 ];
 
 const connector: EndpointConnector = {
+  gitQuota: () => unmeteredGitQuota,
   async connect(endpointId) {
     connects++;
     return stubConnection(endpointId.startsWith('src') ? 'source' : 'target') as never;
@@ -795,6 +796,7 @@ describe('runAnalysis', () => {
     const m = await seedMigration(w);
     setReads({ 'deploy-keys': { data: { keys: [] } } });
     const spy: EndpointConnector = {
+      gitQuota: () => unmeteredGitQuota,
       connect: (id, o) => {
         pools.push(o.pool);
         return connector.connect(id, o);
@@ -858,6 +860,7 @@ describe('robustness (ADR-0310, ADR-0312)', () => {
     setReads({ 'deploy-keys': { data: { keys: [] } } });
     let during: { analysisFailureCount: number } | undefined;
     const dies: EndpointConnector = {
+      gitQuota: () => unmeteredGitQuota,
       connect: async () => {
         during = await migrationRow(m.id);
         throw new Error('worker died');
@@ -895,6 +898,7 @@ describe('robustness (ADR-0310, ADR-0312)', () => {
     setReads({ 'deploy-keys': { data: { keys: [] } } });
     let provisional: Date | null = null;
     const slow: EndpointConnector = {
+      gitQuota: () => unmeteredGitQuota,
       connect: async () => {
         provisional = (await migrationRow(m.id)).analysisFailedAt;
         await t.db.pool.query('SELECT pg_sleep(0.1)');

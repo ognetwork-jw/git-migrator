@@ -255,8 +255,8 @@ export async function startWorker(options: StartWorkerOptions): Promise<WorkerHa
       environment: providerEnvironment,
       git: noGitClient,
     });
-    // ls-remote for the `git-refs` read. Its one unit per Analysis in the git bucket is not
-    // pre-acquired yet (ADR-0310): the host cannot name an adapter's git bucket.
+    // ls-remote for the `git-refs` read. The Analysis and the Parity Check pre-acquire its unit in
+    // the git bucket the adapter declared for the connection (JOB-041).
     const git = createAnalysisGitClient({ scratchDir: scratchRoot(env), logger: log });
     const analysisDeps: AnalysisDeps = {
       db: db.privileged,

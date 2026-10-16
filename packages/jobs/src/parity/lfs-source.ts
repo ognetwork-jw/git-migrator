@@ -73,7 +73,7 @@ export function createMirrorLfsSource(options: MirrorLfsSourceOptions): LfsObjec
       const url = connection.git.remoteUrl(repository);
       return withRunScratch(options.scratchRoot, id, async (dir) => {
         const git = new GitService({
-          quota: quota ?? unmetered,
+          quota,
           scratchDir: dir,
           logger: options.log,
         });
