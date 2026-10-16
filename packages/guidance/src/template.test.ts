@@ -161,6 +161,11 @@ describe('guidance templating', () => {
     expect(isSupplied(0)).toBe(true);
     expect(isSupplied(['a'])).toBe(true);
   });
+
+  it('[UI-040] a flag counts as supplied only when it is true', () => {
+    expect(isSupplied(true)).toBe(true);
+    expect(isSupplied(false)).toBe(false);
+  });
 });
 
 describe('guidance value hardening (UI-040, ADR-0092)', () => {
