@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, inject, it } from 'vitest';
 import { createLogger } from './logger.ts';
 import { redactString, scrubPlain } from './redact.ts';
 
@@ -162,7 +162,11 @@ function generator(seed: number) {
 
 /** Cases per property. Raise REDACT_PROPERTY_RUNS (and change REDACT_PROPERTY_SEED) for a deeper search. */
 const RUNS = Number(process.env.REDACT_PROPERTY_RUNS ?? 3000);
-const TIMEOUT = Math.max(5000, RUNS * 2);
+/**
+ * Well under 1 ms per case on an idle machine, yet the 2 ms per case this used to allow ran out when
+ * the whole suite ran in parallel. Scaled by GM_TEST_TIME_FACTOR (ADR-0507).
+ */
+const TIMEOUT = Math.max(30_000, RUNS * 10) * inject('timeFactor');
 const SEED = Number(process.env.REDACT_PROPERTY_SEED ?? 0x5eed_0052);
 
 describe('chained scrub properties (DEP-050)', () => {
