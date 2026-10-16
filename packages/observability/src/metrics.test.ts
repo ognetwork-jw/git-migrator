@@ -1,6 +1,11 @@
 import { Registry } from 'prom-client';
 import { describe, expect, it } from 'vitest';
-import { createMetrics, type HttpStatusLabel, type ProviderRequestLabels } from './metrics.ts';
+import {
+  createMetrics,
+  type HttpStatusLabel,
+  type ProviderRequestLabels,
+  type ProviderRequestStatusLabel,
+} from './metrics.ts';
 
 const PROVIDER: ProviderRequestLabels = {
   provider: 'bitbucket-cloud',
@@ -76,6 +81,24 @@ describe('Prometheus metrics registry (DEP-050)', () => {
     const goodStatus: HttpStatusLabel = '200';
     expect(badStatus.status).toBe('ok');
     expect(goodStatus).toBe('200');
+  });
+
+  it('[ADP-060] the status label also takes the client words for a request without a response', async () => {
+    const { registry, recorders } = createMetrics(new Registry());
+    const statuses: ProviderRequestStatusLabel[] = [
+      'error',
+      'network_error',
+      'authorize_error',
+      'concurrency',
+      'denied_limit',
+    ];
+    for (const status of statuses) recorders.recordProviderRequest({ ...PROVIDER, status }, 0.1);
+    const text = await scrape(registry);
+    for (const status of statuses) {
+      expect(text).toContain(
+        `gm_provider_requests_total{provider="bitbucket-cloud",endpoint="bb-main",bucket="repository-data",status="${status}"} 1`,
+      );
+    }
   });
 
   it('[DEP-050] includes the Node default metrics alongside the gm_ metrics', async () => {

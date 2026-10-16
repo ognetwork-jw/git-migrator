@@ -73,6 +73,19 @@ export interface ProviderSpan {
 }
 
 /**
+ * The `status` label of a provider request: the HTTP status code as text, or, when no response
+ * arrived, why: `error`, `network_error`, `authorize_error`, `concurrency` or `denied_<reason>`.
+ * The observability recorder's label type names the same values.
+ */
+export type ProviderRequestStatus =
+  | `${number}`
+  | 'error'
+  | 'network_error'
+  | 'authorize_error'
+  | 'concurrency'
+  | `denied_${string}`;
+
+/**
  * Telemetry sink (ADP-060). The wiring maps it onto the OpenTelemetry tracer and the
  * `gm_provider_requests_total` / `gm_provider_request_duration_seconds` recorders from
  * `packages/observability`, which `adapter-sdk` may not import (ARC-012).
@@ -80,7 +93,7 @@ export interface ProviderSpan {
 export interface ProviderTelemetry {
   startSpan?(name: string, attributes: Record<string, string | number | boolean>): ProviderSpan;
   recordRequest(
-    labels: { provider: string; endpoint: string; bucket: string; status: string },
+    labels: { provider: string; endpoint: string; bucket: string; status: ProviderRequestStatus },
     durationSeconds: number,
   ): void;
 }
@@ -506,7 +519,7 @@ export class ProviderHttpClient {
       bucket: bucketLabel,
       method,
     });
-    let status = 'error';
+    let status: ProviderRequestStatus = 'error';
     let secrets: readonly string[] = [];
     let leaseId: bigint | undefined;
     let spanEnded = false;
@@ -598,7 +611,7 @@ export class ProviderHttpClient {
         status = 'network_error';
         throw this.#error('transient', method, url, 'Network error', { cause: error, secrets });
       }
-      status = String(response.status);
+      status = `${response.status}`;
       if (response.status >= 300 && response.status < 400 && response.headers.has('location')) {
         const next = new URL(response.headers.get('location') as string, url);
         this.#assertInBase(next);
@@ -650,7 +663,7 @@ export class ProviderHttpClient {
           : undefined;
       const limited = await this.#limitSignal(cls, response, interpretation);
       if (limited !== undefined) {
-        status = String(response.status);
+        status = `${response.status}`;
         throw this.#error('rate_limited', method, url, `Rate limited (${response.status})`, {
           status: response.status,
           retryAfterMs: limited.retryAfterMs,

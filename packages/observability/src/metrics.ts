@@ -9,6 +9,18 @@ import {
 
 /** An HTTP status code as label text, for example `"429"`. */
 export type HttpStatusLabel = `${number}`;
+/**
+ * The status label of a provider request (ADP-060): the HTTP status code as text, or, when no
+ * response arrived, why: `error`, `network_error` (failed in transit), `authorize_error` (no
+ * credentials), `concurrency` (in-flight cap reached) or `denied_<reason>` (quota refused).
+ */
+export type ProviderRequestStatusLabel =
+  | HttpStatusLabel
+  | 'error'
+  | 'network_error'
+  | 'authorize_error'
+  | 'concurrency'
+  | `denied_${string}`;
 /** The two quota pools of JOB-041. */
 export type QuotaPoolLabel = 'background' | 'interactive';
 /** The labels of the provider request metrics (ADP-060). */
@@ -19,7 +31,7 @@ export interface ProviderRequestLabels {
   endpoint: string;
   /** The quota bucket the request was charged to (JOB-040). */
   bucket: string;
-  status: HttpStatusLabel;
+  status: ProviderRequestStatusLabel;
 }
 
 /** The metrics of DEP-050. Names and label sets are part of the operational contract. */
