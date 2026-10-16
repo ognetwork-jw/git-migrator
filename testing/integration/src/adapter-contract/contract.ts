@@ -72,8 +72,33 @@ export interface Scenario<W> {
   name: string;
   /** Seeds the fake (a fresh connection per scenario) and describes what to apply. */
   prepare(connection: ContractConnection<W>): Promise<Prepared> | Prepared;
-  /** A genuine adapter defect this scenario exposes: its writable checks run with `it.fails`. */
-  knownDefect?: string;
+  /**
+   * A genuine adapter defect this scenario exposes in its MutationRecords. The record checks must
+   * fail with a message matching `records`; the read-back and idempotency checks still run, so an
+   * unrelated regression is not hidden while the defect is open.
+   */
+  knownDefect?: { reason: string; records: RegExp };
+}
+
+export interface CheckOptions {
+  /** The record checks are expected to fail with a message matching this (a declared defect). */
+  knownRecordDefect?: RegExp | undefined;
+}
+
+/** Runs the record checks; with a declared defect they must fail, and with that message. */
+function recordChecks(defect: RegExp | undefined, check: () => void): void {
+  if (defect === undefined) {
+    check();
+    return;
+  }
+  let failure: unknown;
+  try {
+    check();
+  } catch (error) {
+    failure = error;
+  }
+  expect(failure, 'the declared record defect no longer shows: remove knownDefect').toBeDefined();
+  expect(failure instanceof Error ? failure.message : String(failure)).toMatch(defect);
 }
 
 export interface AdapterContract<W> {
@@ -186,6 +211,7 @@ export async function checkRoundTrip(
   connection: ContractConnection<unknown>,
   facet: FacetKey,
   prepared: Prepared,
+  options: CheckOptions = {},
 ): Promise<{ records: MutationRecord[] }> {
   const driver = driverOf(connection, facet);
   const apply = driver.apply;
@@ -207,12 +233,14 @@ export async function checkRoundTrip(
   if (!prepared.noop) {
     expect(records.length, `${facet}: the first apply yields a record`).toBeGreaterThan(0);
   }
-  checkMutationRecords(facet, records, {
-    before: before.data,
-    expected,
-    forbidden: prepared.forbidden,
+  recordChecks(options.knownRecordDefect, () => {
+    checkMutationRecords(facet, records, {
+      before: before.data,
+      expected,
+      forbidden: prepared.forbidden,
+    });
+    prepared.checkRecords?.(records);
   });
-  prepared.checkRecords?.(records);
   await prepared.settle?.();
   const after = await driver.read(ctx, prepared.target);
   expectValid(facet, after);
@@ -225,6 +253,7 @@ export async function checkIdempotent(
   connection: ContractConnection<unknown>,
   facet: FacetKey,
   prepared: Prepared,
+  options: CheckOptions = {},
 ): Promise<void> {
   const driver = driverOf(connection, facet);
   const apply = driver.apply;
@@ -238,11 +267,13 @@ export async function checkIdempotent(
   if (!prepared.noop) {
     expect(first.length, `${facet}: the first apply changes something`).toBeGreaterThan(0);
   }
-  checkMutationRecords(facet, first, {
-    before: before.data,
-    expected,
-    forbidden: prepared.forbidden,
-  });
+  recordChecks(options.knownRecordDefect, () =>
+    checkMutationRecords(facet, first, {
+      before: before.data,
+      expected,
+      forbidden: prepared.forbidden,
+    }),
+  );
   await prepared.settle?.();
   const settled = await driver.read(ctx, prepared.target);
   expect(settled.data).toEqual(expected);
@@ -306,21 +337,19 @@ export function defineAdapterContract<W>(contract: AdapterContract<W>): void {
         continue;
       }
 
-      const run = scenario.knownDefect ? it.fails : it;
-      run(`[TST-015] ${label} read -> apply -> read is equal`, async () => {
+      // A known defect narrows only the record checks; everything else is checked as usual.
+      const options: CheckOptions = { knownRecordDefect: scenario.knownDefect?.records };
+      it(`[TST-015] ${label} read -> apply -> read is equal`, async () => {
         const connection = await contract.connect();
         const prepared = await scenario.prepare(connection);
-        await checkRoundTrip(connection, scenario.facet, prepared);
+        await checkRoundTrip(connection, scenario.facet, prepared, options);
       });
 
-      run(
-        `[TST-015] ${label} applying the same document twice yields zero records the second time`,
-        async () => {
-          const connection = await contract.connect();
-          const prepared = await scenario.prepare(connection);
-          await checkIdempotent(connection, scenario.facet, prepared);
-        },
-      );
+      it(`[TST-015] ${label} applying the same document twice yields zero records the second time`, async () => {
+        const connection = await contract.connect();
+        const prepared = await scenario.prepare(connection);
+        await checkIdempotent(connection, scenario.facet, prepared, options);
+      });
     }
   });
 }

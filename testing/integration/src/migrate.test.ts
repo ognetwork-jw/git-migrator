@@ -115,6 +115,8 @@ const faults: {
   failAfterFirstRecordOf?: string;
   /** The Change Request is opened, then the call fails before its records are returned. */
   upsertThenFail?: boolean;
+  /** The Change Request is opened, then the call fails with its records on the error (ADR-0231 item 13). */
+  upsertFailsWithRecords?: boolean;
 } = {};
 
 let freeBytes: (() => Promise<number>) | undefined;
@@ -432,6 +434,16 @@ routes:
                   message: 'the response was lost',
                   retryable: true,
                 });
+              }
+              if (faults.upsertFailsWithRecords) {
+                faults.upsertFailsWithRecords = undefined;
+                const error = new AdapterError({
+                  code: 'conflict',
+                  provider: 'github',
+                  message: 'the last call of the upsert was refused',
+                  retryable: false,
+                });
+                throw Object.assign(error, { mutations: result?.mutations ?? [] });
               }
               return result as never;
             },
@@ -1449,6 +1461,30 @@ describe('recovering a lost record blames the framework only for its own write (
       where: { migrationId: repo.migration.id, reason: 'framework_mutation' },
     });
     expect(differences.map((d) => d.path)).toContain('/refs[name=refs/heads/git-migrator/ci]');
+    expect(fakes.github?.state.findRepo(ORG, repo.target)?.pulls).toHaveLength(1);
+  }, 300_000);
+});
+
+describe('records a failed Change Request call wrote before it failed (LIF-045, ADR-0231)', () => {
+  it('[LIF-045] the records a failed Change Request upsert carries on its error reach the ledger, and the Run is partial', async () => {
+    const repo = await addSourceRepo({ pipelines: PIPELINES_SIMPLE });
+    faults.upsertFailsWithRecords = true;
+    const { runId, result } = await perform(repo.migration.id);
+    expect(faults.upsertFailsWithRecords).toBeUndefined();
+    expect(result).toEqual({ outcome: 'finished', status: 'partial' });
+    const step = await t.db.privileged.runStep.findFirstOrThrow({
+      where: { runId, stepKey: 'change-requests.open' },
+    });
+    expect(step.status).toBe('failed');
+    const written = (await t.db.privileged.mutation.findMany({ where: { runId } })).filter(
+      (l) => l.writtenByStep === step.id && l.state === 'recorded',
+    );
+    const kinds = written.map((l) => (l.resourceRef as { kind?: string }).kind);
+    // The Change Request is on the target, so its record is in the ledger, not lost with the error.
+    expect(kinds).toContain('change-request');
+    expect(
+      written.every((l) => (l.resourceRef as { recovered?: boolean }).recovered !== true),
+    ).toBe(true);
     expect(fakes.github?.state.findRepo(ORG, repo.target)?.pulls).toHaveLength(1);
   }, 300_000);
 });
