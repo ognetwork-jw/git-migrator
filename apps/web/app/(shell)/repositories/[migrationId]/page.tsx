@@ -1,6 +1,7 @@
 import { getTranslations } from 'next-intl/server';
 import { MigrationDetailView } from '../../../../src/migration-detail/detail-view.tsx';
 import { authorizePage } from '../../../../src/server/authorize.ts';
+import { resolutionTaskKeys } from '../../../../src/server/completion.ts';
 import { PageHeading } from '../../../../src/ui/page-heading.tsx';
 
 /** UI-022. Gated on the server (ADR-0321); data comes only through the API. */
@@ -17,7 +18,7 @@ export default async function RepositoryDetailPage({
   return (
     <>
       <PageHeading>{t('title')}</PageHeading>
-      <MigrationDetailView id={migrationId} />
+      <MigrationDetailView id={migrationId} resolutionTasks={resolutionTaskKeys()} />
     </>
   );
 }

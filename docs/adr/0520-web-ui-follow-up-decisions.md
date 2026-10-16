@@ -3,7 +3,7 @@
 - Status: agent-decided
 - Date: 2026-10-16
 - Task: follow-ups (claude/followups-web-ui)
-- Affects: JOB-060, UI-001, UI-023, UI-034
+- Affects: JOB-060, UI-001, UI-022, UI-023, UI-034, LIF-006
 
 ## Context
 
@@ -21,6 +21,8 @@ The Web UI follow-ups in `docs/followups.md` raise points the spec leaves open. 
 
 4. **The Run log reads its tail first and re-reads a window on every update (UI-023).** The first load reads the newest `LOG_MAX_LINES` (20,000) lines from the end, newest page first, instead of the whole log from the start. Log ids are UUIDv7, made at insert time, and each line is written in its own short transaction, so a line can commit after a later one and a cursor "after the last id" skips it for good. A live update therefore reads from the smallest UUIDv7 of 30 s (`LOG_OVERLAP_MS`) before the newest line it has, and merges by id. 30 s is far above the time one log insert holds its transaction. A database sequence cursor was not added: it needs a schema change for the same result.
 
+5. **The task list knows which tasks the data resolves (LIF-006).** The server refuses `done` on a task whose code has completion mode `resolution`, and a dismissal of one needs a reason; the page learned this only from the 422 after the click. Task rows come through the Model API and carry no completion mode. The repository detail page, a server component, now reads the `resolution` codes from the same built-in registry the API uses (`src/server/completion.ts`, computed once per process) and passes them to the client view. Such a task offers no "Mark done", says that it closes when its data changes, and its dismiss dialog requires a reason. No API field was added: spec 09 fixes the custom endpoints, and the registry is code, not data, so it cannot drift between the web and the API of one build.
+
 ## Alternatives
 
 - A `degraded` event from the hub while the listener is down: one more frame type for the same information that the missing heartbeat already gives.
@@ -28,4 +30,4 @@ The Web UI follow-ups in `docs/followups.md` raise points the spec leaves open. 
 
 ## Affected requirements
 
-JOB-060, UI-001, UI-023, UI-034, AUTH-040.
+JOB-060, UI-001, UI-023, UI-034, AUTH-040, LIF-006.

@@ -47,7 +47,7 @@ const fresh = (): World => ({
   responses: {},
 });
 
-function start(role: Actor['role'] = 'operator') {
+function start(role: Actor['role'] = 'operator', resolutionTasks: readonly string[] = []) {
   installMatchMedia();
   // The rows are read when a request arrives, so a test can change the world after rendering.
   const rows = {
@@ -76,7 +76,7 @@ function start(role: Actor['role'] = 'operator') {
   calls = api.calls;
   return renderWithApp(
     <ActorProvider value={actor(role)}>
-      <MigrationDetailView id="m1" />
+      <MigrationDetailView id="m1" resolutionTasks={resolutionTasks} />
     </ActorProvider>,
     new QueryClient({ defaultOptions: { queries: { retry: false } } }),
   );
@@ -581,6 +581,32 @@ describe('[UI-022] the Overview, Tasks, Facets, Runs and Audit tabs', () => {
     expect(screen.getByRole('button', { name: /^Copy / })).toBeTruthy();
     fireEvent.click(screen.getByRole('button', { name: 'Mark done' }));
     await waitFor(() => expect(posted('/api/v1/migrations/m1/tasks/t1/done')).toHaveLength(1));
+  });
+
+  it('[LIF-006] a resolution task offers no Mark done, says why, and is dismissed only with a reason', async () => {
+    world.tasks = [
+      task(1, {
+        facetKey: 'access-control',
+        code: 'access-control.unmapped-principal',
+        phase: 'pre',
+        verifiable: false,
+        params: {},
+      }),
+    ];
+    start('operator', ['access-control access-control.unmapped-principal']);
+    await ready();
+    fireEvent.click(screen.getByRole('tab', { name: /^Tasks/ }));
+    expect(
+      await screen.findByText(/closes by itself when the underlying data changes/),
+    ).toBeTruthy();
+    expect(screen.queryByRole('button', { name: 'Mark done' })).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: 'Dismiss' }));
+    const dialog = within(await screen.findByRole('dialog'));
+    const ok = dialog.getByRole('button', { name: 'Dismiss' }) as HTMLButtonElement;
+    expect(ok.disabled).toBe(true);
+    fireEvent.change(dialog.getByRole('textbox'), { target: { value: 'Retired account' } });
+    fireEvent.click(ok);
+    await waitFor(() => expect(posted('/api/v1/migrations/m1/tasks/t1/dismiss')).toHaveLength(1));
   });
 
   it('[LIF-006] dismiss asks for a note and posts it; reopen posts reopen', async () => {

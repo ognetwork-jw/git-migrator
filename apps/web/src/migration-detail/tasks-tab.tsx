@@ -29,14 +29,23 @@ const STATUS_COLOR: Record<TaskRow['status'], string | undefined> = {
   dismissed: 'default',
 };
 
-/** Actions a task in `status` offers (LIF-006): open can be done or dismissed; the rest reopen. */
-export function actionsFor(status: TaskRow['status']): readonly TaskAction[] {
-  return status === 'open'
-    ? ['done', 'dismiss']
-    : status === 'dismissed'
-      ? ['done', 'reopen']
-      : ['reopen'];
+/**
+ * Actions a task in `status` offers (LIF-006): open can be done or dismissed; the rest reopen. A
+ * `resolution` task closes when its data changes, so it is never marked done by hand: it can only
+ * be dismissed (with a reason) and reopened.
+ */
+export function actionsFor(status: TaskRow['status'], resolution = false): readonly TaskAction[] {
+  const actions: readonly TaskAction[] =
+    status === 'open'
+      ? ['done', 'dismiss']
+      : status === 'dismissed'
+        ? ['done', 'reopen']
+        : ['reopen'];
+  return resolution ? actions.filter((a) => a !== 'done') : actions;
 }
+
+/** The key of a task in the page's list of resolution tasks (the server's `taskCompletionKey`). */
+const completionKey = (task: TaskRow): string => `${task.facetKey} ${task.code}`;
 
 function NoteEditor({
   task,
@@ -96,11 +105,13 @@ function TaskItem({
   migrationId,
   operator,
   defaults,
+  resolution,
 }: {
   readonly task: TaskRow;
   readonly migrationId: string;
   readonly operator: boolean;
   readonly defaults: ParamValues;
+  readonly resolution: boolean;
 }) {
   const t = useTranslations('migrationDetail.tasks');
   const queryClient = useQueryClient();
@@ -131,9 +142,12 @@ function TaskItem({
           })}
         </Typography.Text>
       ) : null}
+      {resolution && task.status === 'open' ? (
+        <Typography.Text type="secondary">{t('resolution')}</Typography.Text>
+      ) : null}
       {operator ? (
         <div className="flex flex-wrap gap-2">
-          {actionsFor(task.status).map((action) => (
+          {actionsFor(task.status, resolution).map((action) => (
             <Button
               key={action}
               size="small"
@@ -151,8 +165,8 @@ function TaskItem({
       <NoteDialog
         open={dismissing}
         texts={{ title: t('dismiss.title'), ok: t('dismiss.ok'), body: t('dismiss.body') }}
-        label={t('dismiss.note')}
-        required={false}
+        label={resolution ? t('dismiss.reason') : t('dismiss.note')}
+        required={resolution}
         maxLength={MAX_NOTE}
         loading={act.isPending}
         error={act.error}
@@ -176,10 +190,13 @@ export function TasksTab({
   migrationId,
   operator,
   targetName,
+  resolutionTasks = [],
 }: {
   readonly migrationId: string;
   readonly operator: boolean;
   readonly targetName: string | null;
+  /** Tasks the data resolves (`facetKey code`), which cannot be marked done (LIF-006). */
+  readonly resolutionTasks?: readonly string[];
 }) {
   const t = useTranslations('migrationDetail.tasks');
   const tStatus = useTranslations('migrationDetail.tasks.status');
@@ -220,6 +237,7 @@ export function TasksTab({
               migrationId={migrationId}
               operator={operator}
               defaults={defaults}
+              resolution={resolutionTasks.includes(completionKey(task))}
             />
           ),
         }))}

@@ -1351,7 +1351,8 @@
         "title": "Dismiss this task?",
         "ok": "Dismiss",
         "body": "A dismissed task no longer holds the repository back. You can reopen it later.",
-        "note": "Note (some tasks need one)"
+        "note": "Note (some tasks need one)",
+        "reason": "Reason (required)"
       },
       "status": {
         "open": "Open",
@@ -1362,7 +1363,8 @@
         "pre": "Before the run",
         "post": "After the run"
       },
-      "verifiable": "Checked by parity"
+      "verifiable": "Checked by parity",
+      "resolution": "This task closes by itself when the underlying data changes, for example when the mapping it names is decided. It cannot be marked done by hand; dismiss it with a reason to go on without it."
     },
     "runs": {
       "empty": "No Run has been started for this repository.",

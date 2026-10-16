@@ -76,9 +76,10 @@ describe('[AUTH-021] [UI-022] [UI-023] the detail pages are gated on the server'
       props: { children: { props: Record<string, unknown> }[] };
     };
     expect(order[0]).toBe('authorize /repositories');
-    expect((page.props.children[1] as { props: Record<string, unknown> }).props).toEqual({
-      id: 'm1',
-    });
+    const props = (page.props.children[1] as { props: Record<string, unknown> }).props;
+    expect(props.id).toBe('m1');
+    // The tasks the server refuses to mark done, from the same registry (LIF-006).
+    expect(props.resolutionTasks).toContain('access-control access-control.unmapped-principal');
     expect(repositoryDetail.dynamic).toBe('force-dynamic');
   });
 

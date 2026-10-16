@@ -252,7 +252,14 @@ function Header({
  * `migration:<id>` over the shell's live connection (JOB-060), so a Run or a task change refreshes
  * every tab.
  */
-export function MigrationDetailView({ id }: { readonly id: string }) {
+export function MigrationDetailView({
+  id,
+  resolutionTasks = [],
+}: {
+  readonly id: string;
+  /** Tasks the data resolves, which cannot be marked done (LIF-006; from the server's registry). */
+  readonly resolutionTasks?: readonly string[];
+}) {
   const t = useTranslations('migrationDetail');
   const actor = useActor();
   const operator = can(actor, 'operate');
@@ -318,6 +325,7 @@ export function MigrationDetailView({ id }: { readonly id: string }) {
                 migrationId={m.id}
                 operator={can(actor, 'manageTasks')}
                 targetName={targetFullName(m)}
+                resolutionTasks={resolutionTasks}
               />
             ),
           },
