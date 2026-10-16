@@ -1,9 +1,12 @@
 import { ORMError, ORMErrorReason, TransactionIsolationLevel } from '@zenstackhq/orm';
 import Decimal from 'decimal.js';
-import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { afterAll, beforeAll, describe, expect, inject, it } from 'vitest';
 import type { PolicyActor, PolicyDb } from './client.ts';
 import { createTestDatabase, type TestDatabase } from './test-support.ts';
 import { buildWorld, type World } from './test-world.ts';
+
+/** Wall-clock budgets scale with GM_TEST_TIME_FACTOR (ADR-0507). */
+const budget = (ms: number): number => ms * inject('timeFactor');
 
 /**
  * ADR-0200: the facade passes ZenStack a fresh plain-data clone of the arguments. These tests attack
@@ -157,7 +160,7 @@ for (const mode of ['a top-level facade', 'a callback facade'] as const) {
         for (let i = 0; i < 25; i++) node = { AND: [node, node] };
         const started = Date.now();
         await expectRefused(find(db)({ where: node }), /shared references/);
-        expect(Date.now() - started).toBeLessThan(1000);
+        expect(Date.now() - started).toBeLessThan(budget(1000));
         const shared = { name: 'y' };
         await expectRefused(find(db)({ where: { OR: [shared, shared] } }), /shared references/);
         // Equal but separate objects are fine; only a repeated object is refused.
