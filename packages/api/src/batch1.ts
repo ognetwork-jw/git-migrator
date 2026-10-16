@@ -793,13 +793,13 @@ export function createBatch1(deps: Batch1Deps) {
                 diffs: diffs.map((d) => {
                   const path = String(d.path ?? '');
                   return {
-                    path,
+                    path: redactText(path),
                     source: redactAtPath(key, path, d.source),
                     target: redactAtPath(key, path, d.target),
                   };
                 }),
                 excluded: excluded.map((e) => ({
-                  path: String(e.path ?? ''),
+                  path: redactText(String(e.path ?? '')),
                   expectedDifferenceId: String(e.expectedDifferenceId ?? ''),
                 })),
               }

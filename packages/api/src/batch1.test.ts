@@ -250,8 +250,20 @@ async function seedWorld(): Promise<Seed> {
       diffs: [
         { path: '/hooks[key=abc]/url', source: hook.url, target: 'https://other.example/q' },
         { path: '/variables/password', source: 'hunter2-fake', target: 'also-fake' },
+        // A path is free text too: a selector may quote a credential URL.
+        {
+          path: '/hooks[key=https://ops:diff-path-pw-fake@h.example]/active',
+          source: 1,
+          target: 2,
+        },
       ],
-      excluded: [{ path: '/hooks[key=abc]/active', expectedDifferenceId: 'ed-1' }],
+      excluded: [
+        { path: '/hooks[key=abc]/active', expectedDifferenceId: 'ed-1' },
+        {
+          path: '/hooks[key=https://ops:excl-path-pw-fake@h.example]/x',
+          expectedDifferenceId: 'ed-2',
+        },
+      ],
       checkedAt: new Date('2026-02-01T00:00:00.000Z'),
     },
   });
@@ -874,7 +886,7 @@ describe('[API-020] [LIF-063] GET /migrations/{id}/diff', () => {
     const hooks = facet(body.facets, 'webhooks');
     expect(hooks.target).toEqual({ hooks: [] });
     expect(hooks.parity?.status).toBe('different');
-    expect(hooks.parity?.excluded).toHaveLength(1);
+    expect(hooks.parity?.excluded).toHaveLength(2);
     // The revoked Expected Difference is not listed.
     expect(hooks.expectedDifferences.map((d) => d.path)).toEqual(['/hooks/active']);
     const secrets = facet(body.facets, 'secrets');
@@ -893,6 +905,8 @@ describe('[API-020] [LIF-063] GET /migrations/{id}/diff', () => {
       'PATHSECRET',
       'also-fake',
       'note-pw-fake',
+      'diff-path-pw-fake',
+      'excl-path-pw-fake',
     ]) {
       expect(text, leak).not.toContain(leak);
     }

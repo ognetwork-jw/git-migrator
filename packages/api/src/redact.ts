@@ -17,8 +17,8 @@ function keySensitive(facetKey: string, key: string): boolean {
 /**
  * A Facet value as the diff shows it (ADR-0331). The value of a sensitive key is replaced when it is
  * a string, and so is every string below such a key; booleans, numbers and `null` stay, so a
- * `hasSecret: true` still diffs. In a `{name|key, value}` pair a sensitive name makes the value
- * sensitive. Webhook URLs reduce to `<origin>/...`, and every other string goes through the log
+ * `hasSecret: true` still diffs. In a `{name|key, value}` pair, or a key-less `[name, value]` pair,
+ * a sensitive name makes the value sensitive. Webhook URLs reduce to `<origin>/...`, and every other string goes through the log
  * scrubber (URL userinfo, token shapes, credential schemes). Pure; the input is not changed.
  */
 export function redactFacetValue(
@@ -35,7 +35,12 @@ export function redactFacetValue(
     return sensitive ? REDACTED : redactString(value);
   }
   if (Array.isArray(value)) {
-    return value.map((item) => redactFacetValue(facetKey, item, key, sensitive, depth + 1));
+    // A key-less pair such as ["Authorization", "..."]: the first element decides for the second.
+    const namedSecret =
+      value.length === 2 && typeof value[0] === 'string' && keySensitive(facetKey, value[0]);
+    return value.map((item, i) =>
+      redactFacetValue(facetKey, item, key, sensitive || (namedSecret && i === 1), depth + 1),
+    );
   }
   if (typeof value === 'object' && value !== null) {
     const record = value as Record<string, unknown>;
@@ -62,7 +67,8 @@ export function redactFacetValue(
 /**
  * A value found at a field path of a Facet (a parity diff side). It is sensitive when ANY segment of
  * the path is a sensitive key, or when a bracket selector (`[name=Authorization]`) names one; bracket
- * contents are never taken as keys themselves.
+ * contents are never taken as keys themselves. A `value`/`values` reached through a bare index
+ * (`headers[0]/value`) is sensitive too: the sibling name that would decide is not on the path.
  */
 export function redactAtPath(facetKey: string, path: string, value: unknown): unknown {
   const selectors = [...path.matchAll(/\[([^\]]*)\]/g)].map((m) => m[1] ?? '');
@@ -71,10 +77,14 @@ export function redactAtPath(facetKey: string, path: string, value: unknown): un
     .split(/[/.]/)
     .filter(Boolean);
   const selectorValues = selectors.map((s) => s.slice(s.indexOf('=') + 1));
+  const last = segments[segments.length - 1] ?? '';
+  const unnamedPairValue =
+    (last === 'value' || last === 'values') && selectors.some((s) => /^\d+$/.test(s));
   const sensitive =
+    unnamedPairValue ||
     segments.some((s) => keySensitive(facetKey, s)) ||
     selectorValues.some((s) => keySensitive(facetKey, s));
-  return redactFacetValue(facetKey, value, segments[segments.length - 1] ?? '', sensitive);
+  return redactFacetValue(facetKey, value, last, sensitive);
 }
 
 /** Free text (notes, unreadable paths) through the log scrubber. */
