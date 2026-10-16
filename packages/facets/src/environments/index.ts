@@ -15,7 +15,7 @@ import {
   seg,
   type TranslationResult,
 } from '@git-migrator/core';
-import { uniqueSorted } from '../scoped/index.ts';
+import { asciiLower, uniqueSorted } from '../scoped/index.ts';
 
 export const ENV_CATEGORY_DROPPED = 'environments.category-dropped';
 export const ENV_NAME_COLLISION = 'environments.name-collision';
@@ -43,7 +43,7 @@ export function translateEnvironments(source: Environments): TranslationResult<E
   // by case (code-unit order) is kept; the pre task asks the user to rename in the source.
   const groups = new Map<string, Environment[]>();
   for (const e of source.environments) {
-    const id = e.name.toLowerCase();
+    const id = asciiLower(e.name);
     groups.set(id, [...(groups.get(id) ?? []), e]);
   }
   const kept: Environment[] = [];
@@ -95,11 +95,11 @@ export function translateEnvironments(source: Environments): TranslationResult<E
 
 /** Names are compared case-insensitively: the target's casing never counts as drift. */
 export function compareEnvironments(desired: Environments, actual: Environments): FieldDiff[] {
-  const byFold = new Map(desired.environments.map((e) => [e.name.toLowerCase(), e.name]));
+  const byFold = new Map(desired.environments.map((e) => [asciiLower(e.name), e.name]));
   const aligned: Environments = {
     environments: actual.environments.map((e) => ({
       ...e,
-      name: byFold.get(e.name.toLowerCase()) ?? e.name,
+      name: byFold.get(asciiLower(e.name)) ?? e.name,
     })),
   };
   return diffDocuments(desired, aligned, environmentsFacet.documentSchema);

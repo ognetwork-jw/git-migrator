@@ -20,6 +20,7 @@ import {
 } from '@git-migrator/core';
 import {
   alignToDesired,
+  asciiUpper,
   environmentOf,
   foldScope,
   targetEnvironments,
@@ -52,6 +53,9 @@ export function translateSecrets(
       decisions.push({ path: itemPath(k.key, 'name'), fidelity: 'translated', accepted: false });
     }
   }
+  for (const i of invalid) {
+    decisions.push({ path: itemPath(i.key), fidelity: 'unsupported', accepted: false });
+  }
   if (invalid.length > 0) {
     preTasks.push({
       code: SECRETS_NAME_INVALID,
@@ -60,10 +64,18 @@ export function translateSecrets(
     });
   }
 
-  // FAC-SEC-001: one post task per scope, listing the names to set by hand.
+  // FAC-SEC-001: one post task per target scope, listing the names to set by hand. Scopes that
+  // differ only by case are one target scope (possible without the environments dependency); the
+  // task uses the first spelling in code-unit order (`kept` is sorted by key).
   const scopes = new Map<string, typeof kept>();
-  for (const k of kept) scopes.set(k.scope, [...(scopes.get(k.scope) ?? []), k]);
-  for (const [scope, list] of [...scopes].sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0))) {
+  for (const k of kept) {
+    const fold = foldScope(k.scope);
+    scopes.set(fold, [...(scopes.get(fold) ?? []), k]);
+  }
+  const groups = [...scopes.values()].map((list) => ({ scope: list[0]?.scope ?? '', list }));
+  for (const { scope, list } of groups.sort((a, b) =>
+    a.scope < b.scope ? -1 : a.scope > b.scope ? 1 : 0,
+  )) {
     const environment = environmentOf(scope);
     postTasks.push({
       code: SECRETS_SET_VALUE,
@@ -100,9 +112,9 @@ export function isSecretsTaskSatisfied(task: FacetTaskRef, target: Secrets): boo
   if (params.names.length === 0 || !params.names.every((n) => typeof n === 'string')) return false;
   const scope = foldScope(params.scope);
   const present = new Set(
-    target.secrets.filter((s) => foldScope(s.scope) === scope).map((s) => s.name.toUpperCase()),
+    target.secrets.filter((s) => foldScope(s.scope) === scope).map((s) => asciiUpper(s.name)),
   );
-  return (params.names as string[]).every((n) => present.has(n.toUpperCase()));
+  return (params.names as string[]).every((n) => present.has(asciiUpper(n)));
 }
 
 export const secretsDefinition: FacetDefinition<Secrets> = {

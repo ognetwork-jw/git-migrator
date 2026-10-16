@@ -141,6 +141,28 @@ describe('teams facet', () => {
       }
     });
 
+    it('[LIF-030] a pipeline result that breaks the target slug rules raises teams.slug-invalid', () => {
+      const route = {
+        defaults: {
+          teamNaming: { steps: [{ var: 'group', op: 'slug' }], template: 'Team_{group}' },
+        },
+      };
+      const t = translate({ teams: [team('dev', 'Dev')] }, { route });
+      expect(teamsOf(t)).toEqual([]);
+      expect(t.blockers).toEqual([
+        expect.objectContaining({ code: 'teams.slug-invalid', params: { team: 'dev' } }),
+      ]);
+    });
+
+    it('[LIF-030] a mapped group id used as the slug must follow the target slug rules', () => {
+      const t = translate(
+        { teams: [team('devs', 'Devs')] },
+        { table: { 'group:devs': mapped(group('Dev Team')) } },
+      );
+      expect(teamsOf(t)).toEqual([]);
+      expect(t.blockers.map((b) => b.code)).toEqual(['teams.slug-invalid']);
+    });
+
     it('[LIF-030] a malformed teamNaming or plannedSlugs is an error, not a silent fallback', () => {
       expect(() =>
         translate({ teams: [team('a', 'A')] }, { route: { defaults: { teamNaming: 'x' } } }),
@@ -197,7 +219,10 @@ describe('teams facet', () => {
     it('[FAC-END] collisions are judged case-insensitively', () => {
       const t = translate(
         { teams: [team('a', 'A'), team('b', 'B')] },
-        { table: { 'group:a': mapped(group('Platform')), 'group:b': mapped(group('platform')) } },
+        {
+          table: { 'group:a': mapped(group('1')), 'group:b': mapped(group('2')) },
+          routeIndex: { targetSlugs: { a: 'Platform', b: 'platform' } },
+        },
       );
       expect(t.blockers.map((b) => b.code)).toEqual(['teams.slug-collision']);
       expect(teamsOf(t)).toEqual([]);

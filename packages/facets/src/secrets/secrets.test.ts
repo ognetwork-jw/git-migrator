@@ -124,6 +124,30 @@ describe('secrets facet', () => {
     expect(t.postTasks).toEqual([]);
   });
 
+  it('[FAC-VAR-003] every rejected secret gets an unsupported decision at its source path', () => {
+    const t = run([s('has-dash'), s('GOOD')]);
+    expect(t.decisions).toEqual([
+      expect.objectContaining({
+        path: '/secrets[key=repository/has-dash]',
+        fidelity: 'unsupported',
+      }),
+    ]);
+  });
+
+  it('[FAC-SEC-001] without the environments dependency, scopes differing only by case give one task', () => {
+    const all = translateAll(registry, {
+      env,
+      sources: { secrets: { secrets: [s('A', 'environment:prod'), s('B', 'environment:Prod')] } },
+    });
+    const t = all.translations.find((x) => x.facetKey === 'secrets');
+    expect(t?.postTasks).toEqual([
+      expect.objectContaining({
+        code: 'secrets.set-value',
+        params: { scope: 'environment:Prod', names: ['A', 'B'], environment: 'Prod' },
+      }),
+    ]);
+  });
+
   it('[FAC-SEC-001] an environment secret takes the casing of the target environment', () => {
     const t = run([s('X', 'environment:Prod')], ['prod']);
     expect((t.desired as Secrets).secrets).toEqual([s('X', 'environment:prod')]);

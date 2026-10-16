@@ -84,6 +84,12 @@ describe('git-refs facet', () => {
     expect(normalizeGitRefs({ ...base, defaultBranch: null }).defaultBranch).toBeNull();
   });
 
+  it('[FAC-GIT-001] a bare refs/heads/ default branch is kept, never normalized to empty', () => {
+    expect(normalizeGitRefs({ ...base, defaultBranch: 'refs/heads/' }).defaultBranch).toBe(
+      'refs/heads/',
+    );
+  });
+
   it('[FAC-GIT-002] warns about hidden refs, without migrating them', () => {
     const t = translate({ ...base, ignoredRefs: ['refs/pull/2/head', 'refs/notes/commits'] });
     expect(t.warnings).toEqual([

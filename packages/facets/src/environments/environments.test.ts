@@ -105,6 +105,15 @@ describe('environments facet', () => {
     ]);
   });
 
+  it('[FAC-ENV] names are case-folded in ASCII only (ADR-0145)', () => {
+    // JavaScript would fold the Kelvin sign to k and capital sigma to the same letter as final sigma.
+    const t = translate({
+      environments: [e('Kelvin'), e('\u212Aelvin'), e('\u03A3'), e('\u03C2')],
+    });
+    expect(t.preTasks).toEqual([]);
+    expect((t.desired as Environments).environments).toHaveLength(4);
+  });
+
   it('[FAC-ENV] distinct names are not a collision', () => {
     const t = translate({ environments: [e('prod'), e('prod2')] });
     expect(t.preTasks).toEqual([]);

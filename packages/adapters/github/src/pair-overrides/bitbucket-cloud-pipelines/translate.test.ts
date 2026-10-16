@@ -12,6 +12,7 @@ import {
   MAX_PATTERNS,
   MAX_REPORTS,
   MAX_TOTAL_JOBS,
+  MAX_TOTAL_OUTPUT,
   MAX_WORKFLOW_BYTES,
   PREDEFINED_CACHES,
   WORKFLOW_ESTIMATE_LIMIT,
@@ -828,9 +829,45 @@ describe('FAC-PIP-002 malformed input', () => {
     expect(r.unsupported[0]?.reason).toContain('too large');
   });
 
-  it('[FAC-PIP-002] duplicate keys are invalid YAML', () => {
-    const r = translate('pipelines:\n  default: []\n  default: []\n');
-    expect(r.workflows).toEqual([]);
+  describe('duplicate keys', () => {
+    const invalid = (source: string) => {
+      const r = translate(source);
+      expect(r.workflows, source).toEqual([]);
+      expect(r.unsupported, source).toEqual([
+        { path: 'bitbucket-pipelines.yml', reason: 'the file is not valid YAML' },
+      ]);
+    };
+
+    it('[FAC-PIP-002] a repeated top-level or nested key makes the file invalid', () => {
+      invalid('pipelines:\n  default: []\n  default: []\n');
+      invalid('pipelines:\n  default:\n    - step:\n        script: [a]\n        script: [b]\n');
+    });
+
+    it('[FAC-PIP-002] a merge key plus an explicit key of the same name is not a duplicate', () => {
+      const r = translate(
+        'definitions:\n  steps:\n    - step: &s {name: base, script: [a]}\npipelines:\n  default:\n    - step:\n        <<: *s\n        name: own\n',
+      );
+      expect(r.workflows).toHaveLength(1);
+      expect(r.unsupported).toEqual([]);
+    });
+
+    it('[FAC-PIP-002] an alias used as a key is refused, so it cannot hide a duplicate that drops a manual gate', () => {
+      invalid(`definitions:
+  k: &k trigger
+pipelines:
+  default:
+    - step:
+        script: [a]
+        *k : manual
+        trigger: automatic
+`);
+    });
+
+    it('[FAC-PIP-002] keys that differ only as YAML types but read as the same text are a duplicate', () => {
+      invalid(
+        "pipelines:\n  branches:\n    1: [{step: {script: [a]}}]\n    '1': [{step: {script: [b]}}]\n",
+      );
+    });
   });
 
   it('[FAC-PIP-002] steps that are not mappings, and empty pipelines, are unsupported', () => {
@@ -1135,22 +1172,25 @@ describe('FAC-PIP-002 patterns at scale and hidden gates', () => {
     expect(r.unsupported.some((u) => u.path === `pipelines.branches[${MAX_PATTERNS}]`)).toBe(true);
   });
 
-  it('[FAC-PIP-002] a workflow that would need more exclusions than the bound is not written', () => {
+  it('[FAC-PIP-002] the exclusion bound follows from the pattern bound: a covering pattern keeps every exclusion', () => {
+    // At most MAX_PATTERNS patterns are examined, so a pattern has at most MAX_PATTERNS - 1
+    // siblings to exclude; the exclusion bound must not be smaller.
+    expect(MAX_PATTERNS - 1).toBeLessThanOrEqual(MAX_EXCLUSIONS);
     const many = Array.from(
-      { length: MAX_EXCLUSIONS + 1 },
+      { length: MAX_PATTERNS + 5 },
       (_, i) => `    'a${i}':\n      - step: {script: [a]}`,
     );
     const r = translate(
       `pipelines:\n  branches:\n    '**':\n      - step: {script: [wide]}\n${many.join('\n')}\n`,
     );
-    // 101 siblings are examined at most (the bound is on patterns), so '**' keeps its exclusions
-    // only while they fit; either way no workflow runs wider than intended.
     const wide = r.workflows.find((w) => w.path.endsWith('branch-pipeline.yml'));
-    if (wide !== undefined) {
-      expect(
-        ((parse(wide.content) as Json).on.push.branches as string[]).length,
-      ).toBeLessThanOrEqual(MAX_EXCLUSIONS + 1);
-    }
+    expect(wide).toBeDefined();
+    const branches = (parse(wide?.content ?? '') as Json).on.push.branches as string[];
+    expect(branches).toEqual([
+      '**',
+      ...Array.from({ length: MAX_PATTERNS - 1 }, (_, i) => `!a${i}`),
+    ]);
+    expect(r.unsupported.some((u) => u.path === `pipelines.branches[${MAX_PATTERNS}]`)).toBe(true);
   });
 
   const filler = (n: number) => Array.from({ length: n }, () => '{foo: 1}').join(', ');
@@ -1233,6 +1273,51 @@ ${Array.from({ length: 50 }, () => '    - step: *s').join('\n')}
     const r = translate(source);
     expect(Date.now() - started).toBeLessThan(3000);
     for (const w of r.workflows) expect(w.content.length).toBeLessThan(MAX_WORKFLOW_BYTES);
+  });
+
+  it('[FAC-PIP-002] output across all workflows is bounded: a service reused by many pipelines cannot fan out', () => {
+    // Service variable names are not text-budget items, and every use of the service repeats them.
+    const env = Array.from({ length: 200 }, (_, i) => `K${'x'.repeat(120)}${i}: v`).join(
+      '\n          ',
+    );
+    const custom = Array.from(
+      { length: 50 },
+      (_, i) =>
+        `    p${i}:\n${Array.from({ length: 10 }, () => '      - step: {script: [make], services: [db]}').join('\n')}`,
+    ).join('\n');
+    const source = `definitions:
+  services:
+    db:
+      image: postgres:16
+      variables:
+          ${env}
+pipelines:
+  custom:
+${custom}
+`;
+    expect(source.length).toBeLessThan(100_000);
+    const started = Date.now();
+    const r = translate(source);
+    expect(Date.now() - started).toBeLessThan(10_000);
+    const total = r.workflows.reduce((n, w) => n + w.content.length, 0);
+    expect(r.workflows.length).toBeGreaterThan(0);
+    // The bound is on estimated sizes; the serialized text adds indentation and comments.
+    expect(total).toBeLessThan(MAX_TOTAL_OUTPUT * 1.2);
+    expect(r.unsupported.some((u) => u.reason.includes('too large'))).toBe(true);
+  });
+
+  it('[FAC-PIP-002] actions are pinned by full commit SHA to their Node 24 majors', () => {
+    const majors = Object.fromEntries(
+      Object.entries(ACTIONS).map(([k, a]) => [k, a.version.split('.')[0]]),
+    );
+    expect(majors).toEqual({
+      checkout: 'v5',
+      cache: 'v5',
+      uploadArtifact: 'v6',
+      downloadArtifact: 'v7',
+    });
+    for (const a of Object.values(ACTIONS))
+      expect(a.uses).toMatch(/^actions\/[a-z-]+@[0-9a-f]{40}$/);
   });
 
   it('[FAC-PIP-002] once the estimate passes the limit no step is added and the rest is reported', () => {

@@ -30,6 +30,7 @@ import {
   MAX_SERVICES_PER_STEP,
   MAX_TEXT_BUDGET,
   MAX_TOTAL_JOBS,
+  MAX_TOTAL_OUTPUT,
   MAX_WORKFLOW_BYTES,
   PREDEFINED_CACHES,
   REASONS,
@@ -146,16 +147,29 @@ interface Binding {
   readonly container: boolean;
 }
 
-/** True when a node (a stage, which is not translated) holds a step that waits for approval. */
-/** True when a mapping repeats a scalar key (linear in the size of the document). */
+/**
+ * True when two keys of a mapping name the same property once converted, or when a key cannot be
+ * compared cheaply (linear in the size of the document). The conversion keeps the last of two equal
+ * keys, which could silently drop a manual gate. A scalar key is compared as `String(value)` (so
+ * `1` and `'1'` are the same key, and `null` is `''`); a merge key (`<<`) is skipped, because its
+ * entries never replace an explicit key. An alias or collection used as a key counts as a
+ * duplicate: resolving it is not linear, and pipeline files have no use for one.
+ */
 function hasDuplicateKeys(doc: Document): boolean {
   let duplicate = false;
   visit(doc, {
     Map(_key, map) {
-      const seen = new Set<unknown>();
-      for (const pair of map.items) {
-        if (!isScalar(pair.key)) continue;
-        const k = pair.key.value;
+      const seen = new Set<string>();
+      for (const { key } of map.items) {
+        let k = '';
+        if (key !== null && key !== undefined) {
+          if (!isScalar(key)) {
+            duplicate = true;
+            return visit.BREAK;
+          }
+          if (typeof key.value === 'symbol') continue;
+          k = key.value === null || key.value === undefined ? '' : String(key.value);
+        }
         if (seen.has(k)) {
           duplicate = true;
           return visit.BREAK;
@@ -181,6 +195,7 @@ function approxSize(node: unknown): number {
   return 8;
 }
 
+/** True when a node (a stage, which is not translated) holds a step that waits for approval. */
 function hasGate(node: unknown): boolean {
   let seen = 0;
   const walk = (n: unknown, depth: number): boolean => {
@@ -207,6 +222,8 @@ class Translator {
   private gate = false;
   private jobTotal = 0;
   private textBudget = MAX_TEXT_BUDGET;
+  /** Estimated characters still allowed across all workflows (MAX_TOTAL_OUTPUT). */
+  private outputBudget = MAX_TOTAL_OUTPUT;
   private overflow = false;
   /** Running estimate of the size of the workflow being built (checked before each step). */
   private bytes = 0;
@@ -497,13 +514,14 @@ class Translator {
       const id = `step-${counter + 1}`;
       const built = this.step(step, stepPath, id);
       if (built === undefined) return undefined;
-      if (this.bytes + built.size > WORKFLOW_ESTIMATE_LIMIT) {
+      if (this.bytes + built.size > WORKFLOW_ESTIMATE_LIMIT || built.size > this.outputBudget) {
         this.report(stepPath, REASONS.tooLarge);
         return undefined;
       }
       counter++;
       this.jobTotal++;
       this.bytes += built.size;
+      this.outputBudget -= built.size;
       jobs.set(id, built.job);
       return { id, artifacts: built.artifacts, setup: built.setup };
     };

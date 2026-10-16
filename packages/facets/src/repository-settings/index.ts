@@ -23,8 +23,11 @@ export const DESCRIPTION_TRUNCATED = 'repository-settings.description-truncated'
 /** `[MIGRATED → <url>] ` written by LIF-070; the trailing space may have been trimmed away. */
 const MIGRATED_PREFIX = /^\[MIGRATED → [^\s\]]*\](?:\s+|$)/;
 
+/** Strips every leading prefix, so `normalize` is idempotent even after repeated applies. */
 export function stripMigratedPrefix(description: string): string {
-  return description.trim().replace(MIGRATED_PREFIX, '').trim();
+  let text = description.trim();
+  while (MIGRATED_PREFIX.test(text)) text = text.replace(MIGRATED_PREFIX, '').trim();
+  return text;
 }
 
 /** Cuts at `max` UTF-16 units without splitting a surrogate pair. */
@@ -73,7 +76,8 @@ export function translateRepositorySettings(
     if (source.forking === 'private-only') {
       forkingDecision = { path: '/forking', fidelity: 'translated', accepted: false };
     }
-    if (ctx.targetCaps.fields['/forking']?.kind === 'unsupported') {
+    // An organization that forbids private forking already gives `disallowed`: nothing to report.
+    if (forking === 'allowed' && ctx.targetCaps.fields['/forking']?.kind === 'unsupported') {
       forkingDecision = {
         path: '/forking',
         fidelity: 'unsupported',

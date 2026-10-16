@@ -94,41 +94,44 @@ type Team = Teams['teams'][number];
 const groupRef = (id: string): PrincipalRef => ({ kind: 'group', id });
 
 /**
- * The source team whose group the Route maps to the target group `target` (the planned slug may
- * differ from the source slug after naming). `undefined` when no source team maps to it.
+ * The source teams whose groups the Route maps to the target group `target` (the planned slug may
+ * differ from the source slug after naming; several source groups may map to one target group).
  */
-function sourceTeamOf(
-  target: PrincipalRef,
-  source: Teams,
-  ctx: TranslateContext,
-): Team | undefined {
-  return source.teams.find((t) => {
+function sourceTeamsOf(target: PrincipalRef, source: Teams, ctx: TranslateContext): Team[] {
+  return source.teams.filter((t) => {
     const r = resolvePrincipal(groupRef(t.slug), ctx);
     return r.status === 'mapped' && samePrincipal(r.principal, target);
   });
 }
 
 /**
- * Whether the desired membership of a team can be trusted: a source team maps to it, the source
- * team has members, and every source member missing from `desired` is explained by its resolution
- * (excluded, pending invitation, unmapped or team missing), i.e. none was skipped. A source team
- * without members is indistinguishable from unreadable membership and is not trusted.
+ * Whether the desired membership of a team can be trusted: at least one source team maps to it,
+ * and every such source team has members and none of them is missing from `desired` without an
+ * explanation by its resolution (excluded, pending invitation, unmapped or team missing), i.e. none
+ * was skipped. A source team without members is indistinguishable from unreadable membership and
+ * is not trusted.
  */
-function membershipKnown(desired: Team, source: Team | undefined, ctx: TranslateContext): boolean {
-  if (source === undefined || source.members.length === 0) return false;
-  return source.members.every((m) => {
-    const r = resolvePrincipal(m.principal, ctx);
-    return (
-      r.status !== 'mapped' || desired.members.some((d) => samePrincipal(d.principal, r.principal))
-    );
-  });
+function membershipKnown(desired: Team, sources: readonly Team[], ctx: TranslateContext): boolean {
+  if (sources.length === 0) return false;
+  return sources.every(
+    (source) =>
+      source.members.length > 0 &&
+      source.members.every((m) => {
+        const r = resolvePrincipal(m.principal, ctx);
+        return (
+          r.status !== 'mapped' ||
+          desired.members.some((d) => samePrincipal(d.principal, r.principal))
+        );
+      }),
+  );
 }
 
 /**
  * Whether `target` can own code: a direct grant of write or more, or (for an identity) membership
  * of a team with such a grant. `unknown` when a team that grants it might hold the owner but its
  * membership cannot be trusted (no teams document, the team is missing from it, or
- * `membershipKnown` fails). Group ids compare case-insensitively, identities exactly. Without the
+ * `membershipKnown` fails). Group ids compare case-insensitively, identities exactly, so grants and
+ * teams differing only in case are all considered and the best one counts. Without the
  * access-control document nothing is judged (ADR-0106).
  */
 function accessOf(
@@ -138,21 +141,28 @@ function accessOf(
   ctx: TranslateContext,
 ): Access {
   if (acl === undefined) return 'sufficient';
-  const direct = acl.grants.find((g) => samePrincipal(g.principal, target));
-  if (direct !== undefined && hasOwnerRole(direct.role)) return 'sufficient';
+  if (acl.grants.some((g) => samePrincipal(g.principal, target) && hasOwnerRole(g.role))) {
+    return 'sufficient';
+  }
   if (target.kind === 'group') return 'insufficient';
   const teamGrants = acl.grants.filter((g) => g.principal.kind === 'group' && hasOwnerRole(g.role));
   if (teamGrants.length === 0) return 'insufficient';
   if (teams === undefined) return 'unknown';
   let unknown = false;
   for (const g of teamGrants) {
-    const team = teams.desired.teams.find((t) => samePrincipal(groupRef(t.slug), g.principal));
-    if (team === undefined) {
+    const matching = teams.desired.teams.filter((t) =>
+      samePrincipal(groupRef(t.slug), g.principal),
+    );
+    if (matching.length === 0) {
       unknown = true;
       continue;
     }
-    if (team.members.some((m) => samePrincipal(m.principal, target))) return 'sufficient';
-    if (!membershipKnown(team, sourceTeamOf(g.principal, teams.source, ctx), ctx)) unknown = true;
+    for (const team of matching) {
+      if (team.members.some((m) => samePrincipal(m.principal, target))) return 'sufficient';
+      if (!membershipKnown(team, sourceTeamsOf(g.principal, teams.source, ctx), ctx)) {
+        unknown = true;
+      }
+    }
   }
   return unknown ? 'unknown' : 'insufficient';
 }

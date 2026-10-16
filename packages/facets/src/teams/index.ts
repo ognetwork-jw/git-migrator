@@ -125,7 +125,8 @@ function targetSlugs(routeIndex: TranslateContext['routeIndex']): Readonly<Recor
  * (`routeIndex.targetSlugs`; the resolver's principal id is the provider's team id, which is not
  * necessarily a slug, ADR-0435), else the
  * GroupMapping `plannedSlug`, else the Route's team naming pipeline over the group (LIF-030).
- * `null` when the pipeline cannot produce a slug.
+ * `null` when no slug that follows the target's slug rules can be produced; the confirmed slug of
+ * an existing target team is taken as it is.
  */
 export function plannedSlug(team: Team, ctx: TranslateContext): string | null {
   const resolved = ctx.groups.resolve({ kind: 'group', id: team.slug });
@@ -133,7 +134,8 @@ export function plannedSlug(team: Team, ctx: TranslateContext): string | null {
     const confirmed = Object.hasOwn(targetSlugs(ctx.routeIndex), team.slug)
       ? targetSlugs(ctx.routeIndex)[team.slug]
       : undefined;
-    return confirmed ?? resolved.principal.id;
+    if (confirmed !== undefined) return confirmed;
+    return TEAM_SLUG.test(resolved.principal.id) ? resolved.principal.id : null;
   }
   const planned = Object.hasOwn(plannedSlugs(ctx.routeIndex), team.slug)
     ? plannedSlugs(ctx.routeIndex)[team.slug]
@@ -142,7 +144,7 @@ export function plannedSlug(team: Team, ctx: TranslateContext): string | null {
   const run = runNamingPipeline(routeTeamNaming(ctx.route), {
     group: { slug: team.slug, name: team.name },
   });
-  return run.ok && run.value !== '' ? run.value : null;
+  return run.ok && TEAM_SLUG.test(run.value) ? run.value : null;
 }
 
 const teamPath = (slug: string, ...rest: string[]) =>
