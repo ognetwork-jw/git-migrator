@@ -43,6 +43,12 @@ const YIELD_EVERY = 500;
 /** Rows per `createMany` statement. */
 const CHUNK = 500;
 
+/**
+ * Pages one listing may take. A provider that keeps issuing fresh cursors must not grow the pass
+ * without bound; at 100 items a page this is a million records.
+ */
+export const MAX_LISTING_PAGES = 10_000;
+
 export interface InventoryDeps {
   /** The privileged client: inventory is server code behind a job (DOM-005). */
   readonly db: Db;
@@ -56,6 +62,8 @@ export interface InventoryDeps {
   readonly scheduleInvitation?: ScheduleInvitationStep;
   /** Test seam. */
   readonly now?: () => Date;
+  /** Test seam: pages one listing may take (`MAX_LISTING_PAGES`). */
+  readonly maxListingPages?: number;
   /** Test seam: runs between a read and the guarded write that follows it. */
   readonly hooks?: {
     readonly beforeTransitionWrite?: (migrationId: string) => Promise<void>;
@@ -123,12 +131,21 @@ const sameTime = (a: Date | null | undefined, b: Date | null | undefined): boole
 async function collect<T>(
   list: (cursor?: string) => Promise<Page<T>>,
   checkpoint: () => void,
+  maxPages: number,
 ): Promise<T[]> {
   const items: T[] = [];
   const seen = new Set<string>();
   let cursor: string | undefined;
+  let pages = 0;
   do {
     checkpoint();
+    if (pages++ >= maxPages) {
+      throw new AdapterError({
+        code: 'invalid',
+        provider: 'inventory',
+        message: `A listing did not end within ${maxPages} pages`,
+      });
+    }
     const page = await list(cursor);
     items.push(...page.items);
     cursor = page.nextCursor;
@@ -163,6 +180,7 @@ export async function runInventory(
   const checkpoint = (): void => {
     if (options.shutdown.aborted) throw new InventoryInterruptedError();
   };
+  const maxPages = deps.maxListingPages ?? MAX_LISTING_PAGES;
 
   const endpoint = await db.endpoint.findUnique({ where: { id: endpointId } });
   if (endpoint?.status !== 'active') {
@@ -227,6 +245,7 @@ export async function runInventory(
     const namespaceRecords = await collect(
       (c) => connection.inventory.listNamespaces(c),
       checkpoint,
+      maxPages,
     );
     const namespaceIds = await upsertNamespaces(namespaceRecords);
     await resolveTargetNamespaces(routes, namespaceRecords, namespaceIds);
@@ -258,9 +277,14 @@ export async function runInventory(
     const identityRecords = await collect(
       (c) => connection.inventory.listIdentities(c),
       checkpoint,
+      maxPages,
     );
     const identityIds = await upsertIdentities(identityRecords);
-    const groupRecords = await collect((c) => connection.inventory.listGroups(c), checkpoint);
+    const groupRecords = await collect(
+      (c) => connection.inventory.listGroups(c),
+      checkpoint,
+      maxPages,
+    );
     await upsertGroups(groupRecords, identityIds);
 
     checkpoint();
@@ -446,7 +470,11 @@ export async function runInventory(
     const byProviderId = new Map<string, RepositoryRecord>();
     for (const ns of namespaces) {
       const ref = { providerId: ns.providerId, slug: ns.slug };
-      const items = await collect((c) => connection.inventory.listRepositories(ref, c), checkpoint);
+      const items = await collect(
+        (c) => connection.inventory.listRepositories(ref, c),
+        checkpoint,
+        maxPages,
+      );
       for (const item of items) byProviderId.set(item.providerId, item);
     }
     return [...byProviderId.values()];

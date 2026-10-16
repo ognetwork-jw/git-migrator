@@ -65,8 +65,11 @@ interface Tweaks {
   emptyRepositories?: boolean;
   /** Every namespace page names the same next cursor. */
   loopNamespaces?: boolean;
+  /** Every namespace page names a next cursor never seen before. */
+  endlessNamespaces?: boolean;
 }
 let tweaks: Tweaks = {};
+let freshCursors = 0;
 
 function tweaked(real: EndpointConnector): EndpointConnector {
   return {
@@ -77,9 +80,9 @@ function tweaked(real: EndpointConnector): EndpointConnector {
         ...connection.inventory,
         async listNamespaces(cursor) {
           if (tweaks.emptyNamespaces) return { items: [] };
-          const page = await connection.inventory.listNamespaces(
-            tweaks.loopNamespaces ? undefined : cursor,
-          );
+          const repeat = tweaks.loopNamespaces || tweaks.endlessNamespaces;
+          const page = await connection.inventory.listNamespaces(repeat ? undefined : cursor);
+          if (tweaks.endlessNamespaces) return { ...page, nextCursor: `fresh-${++freshCursors}` };
           return tweaks.loopNamespaces ? { ...page, nextCursor: 'same' } : page;
         },
         async listRepositories(ns, cursor) {
@@ -819,6 +822,20 @@ describe('inventory against the fixture world', () => {
     } finally {
       tweaks = {};
     }
+  });
+
+  it('[JOB-030] stops a listing that keeps issuing fresh cursors after the page cap', async () => {
+    tweaks = { endlessNamespaces: true };
+    freshCursors = 0;
+    try {
+      await expect(
+        runInventory({ ...deps, maxListingPages: 5 }, SOURCE, { shutdown: shutdown.signal }),
+      ).rejects.toThrow('did not end within 5 pages');
+    } finally {
+      tweaks = {};
+    }
+    expect(freshCursors).toBe(5);
+    expect(await t.db.privileged.repository.count({ where: { presence: 'missing' } })).toBe(0);
   });
 
   it('[JOB-030] destroys the connection when the advisory lock cannot be released', async () => {
