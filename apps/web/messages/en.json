@@ -17,6 +17,7 @@
     },
     "signOut": "Sign out",
     "signingOut": "Signing out",
+    "signOutFailed": "You could not be signed out, and your session is still active. Try again.",
     "loading": "Loading your account",
     "retry": "Try again",
     "failed": "Your account could not be loaded",

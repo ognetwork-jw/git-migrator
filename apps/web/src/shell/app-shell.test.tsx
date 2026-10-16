@@ -137,6 +137,36 @@ describe('AppShell', () => {
     );
   });
 
+  it('[UI-010] a failed sign-out says so and stays on the page with the session', async () => {
+    mockFetch((url) =>
+      url === '/api/auth/sign-out'
+        ? reply(500, { code: 'internal_error' })
+        : reply(200, actor('admin')),
+    );
+    renderWithApp(<AppShell>page body</AppShell>);
+    fireEvent.click(await screen.findByRole('button', { name: 'Sign out' }));
+    expect(
+      await screen.findByText(
+        'You could not be signed out, and your session is still active. Try again.',
+      ),
+    ).toBeTruthy();
+    expect(hardNavigate).not.toHaveBeenCalled();
+    expect(screen.getByRole('main').textContent).toContain('page body');
+    const button = screen.getByRole('button', { name: 'Sign out' });
+    expect(button.className).not.toContain('ant-btn-loading');
+  });
+
+  it('[UI-010] a sign-out that cannot reach the server says so too', async () => {
+    mockFetch((url) => {
+      if (url === '/api/auth/sign-out') throw new TypeError('network down');
+      return reply(200, actor('admin'));
+    });
+    renderWithApp(<AppShell>x</AppShell>);
+    fireEvent.click(await screen.findByRole('button', { name: 'Sign out' }));
+    expect(await screen.findByRole('alert')).toBeTruthy();
+    expect(hardNavigate).not.toHaveBeenCalled();
+  });
+
   it('[UI-010] the menu button opens the drawer with the same navigation', async () => {
     mockFetch(() => reply(200, actor('admin')));
     renderWithApp(<AppShell>x</AppShell>);
