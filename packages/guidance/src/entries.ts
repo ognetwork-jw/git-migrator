@@ -194,7 +194,9 @@ export const GUIDANCE: Readonly<Record<FindingCode, Guidance>> = {
     [
       // Shell context: the URL may carry ; | & $( ) ` or a quote, so it is always single-quoted.
       step('webhooks.recreate-manually', 1, { copy: '{targetUrl:shell}' }),
-      step('webhooks.recreate-manually', 2),
+      step('webhooks.recreate-manually', 2, { when: 'events' }),
+      // Every source event was dropped (FAC-WEB-002): there is no event list to select.
+      step('webhooks.recreate-manually', 4, { unless: 'events' }),
       step('webhooks.recreate-manually', 3, { when: 'hasSecret' }),
     ],
     VERIFICATION.hook,
@@ -271,7 +273,9 @@ export const GUIDANCE: Readonly<Record<FindingCode, Guidance>> = {
     [
       // Shell context: the URL may carry ; | & $( ) ` or a quote, so it is always single-quoted.
       step('org-webhooks.recreate-manually', 1, { copy: '{targetUrl:shell}' }),
-      step('org-webhooks.recreate-manually', 2),
+      step('org-webhooks.recreate-manually', 2, { when: 'events' }),
+      // Every source event was dropped (FAC-WEB-002): there is no event list to select.
+      step('org-webhooks.recreate-manually', 4, { unless: 'events' }),
       step('org-webhooks.recreate-manually', 3, { when: 'hasSecret' }),
     ],
     VERIFICATION.hook,

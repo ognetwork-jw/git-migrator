@@ -287,6 +287,33 @@ describe('display and copy of webhook URLs (UI-040, ADR-0092)', () => {
     }
   });
 
+  it('[FAC-WEB-002] recreate-manually with no supported events asks the operator to choose them, never shows a marker', () => {
+    for (const code of ['webhooks.recreate-manually', 'org-webhooks.recreate-manually']) {
+      const rendered = renderGuidance(code, {
+        targetUrl: 'https://hooks.example.test/h',
+        events: [],
+      });
+      expect(rendered.problems, code).toEqual([]);
+      expect(JSON.stringify(rendered), code).not.toContain('‹');
+      expect(rendered.steps, code).toHaveLength(2);
+      expect(rendered.steps[1]?.text, code).toMatch(/has a GitHub equivalent/);
+      const withEvents = renderGuidance(code, {
+        targetUrl: 'https://hooks.example.test/h',
+        events: ['push'],
+      });
+      expect(withEvents.steps[1]?.text, code).toMatch(/select these events: push/);
+    }
+  });
+
+  it('[FAC-WEB-003] set-secret verification asks for an active hook only when the source hook was active', () => {
+    for (const code of ['webhooks.set-secret', 'org-webhooks.set-secret']) {
+      const verification = renderGuidance(code, { activateAfterSecret: false }).verification ?? '';
+      expect(verification, code).toMatch(/has a secret/);
+      expect(verification, code).not.toMatch(/has a secret and is active\./);
+      expect(verification, code).toMatch(/if it was active on the source/);
+    }
+  });
+
   it('[UI-040] non-http(s) URLs show the marker, never "null/…" or the raw URL', () => {
     for (const url of ['javascript:alert(1)', 'data:text/html,hi', 'mailto:ops@example.test']) {
       const rendered = renderGuidance('webhooks.set-secret', { targetUrl: url });
