@@ -349,6 +349,27 @@ describe('mirror, blob scan and credential hygiene', () => {
     expect(open.blockers).toEqual([]);
     expect(open.warnings).toHaveLength(2);
   });
+
+  it('[FAC-GIT-004] [ADP-060] an aborted blob scan reports a non-retryable cancelled error, not unknown', async () => {
+    const src = await source('blobs-abort', { commits: 1 });
+    const scratchDir = await scratch();
+    const dir = join(scratchDir, 'm');
+    await serviceFor(scratchDir).service.mirror({ url: src.url, credential, dir });
+    const service = new GitService({
+      quota: recordingQuota(),
+      scratchDir,
+      spawn: recordingSpawn([], (args) =>
+        args.includes('rev-list') ? ['-c', 'sleep 30'] : undefined,
+      ),
+    });
+    const controller = new AbortController();
+    setTimeout(() => controller.abort(), 300);
+    const error = await service
+      .scanBlobs({ dir, signal: controller.signal })
+      .catch((e: unknown) => e);
+    expect(isGitCommandError(error)).toBe(true);
+    expect(error).toMatchObject({ code: 'transient', reason: 'cancelled', retryable: false });
+  });
 });
 
 describe('LFS', () => {

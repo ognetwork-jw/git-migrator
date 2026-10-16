@@ -91,6 +91,16 @@ export async function scanBlobs(
     pipeStdoutTo: cat.child.stdin,
   });
   const [catResult, listResult] = await Promise.all([cat.result, list.result]);
+  // An abort kills both processes; whichever exits first must not turn it into a retryable failure.
+  if (catResult.cancelled || listResult.cancelled) {
+    throw new GitCommandError({
+      operation: listResult.cancelled ? 'rev-list' : 'cat-file',
+      exitCode: listResult.cancelled ? listResult.code : catResult.code,
+      stderr: 'cancelled',
+      secrets: context.secrets,
+      klass: { code: 'transient', reason: 'cancelled', retryable: false },
+    });
+  }
   for (const [name, result] of [
     ['rev-list', listResult],
     ['cat-file', catResult],
