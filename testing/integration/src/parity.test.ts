@@ -173,7 +173,7 @@ routes:
     registry,
     git: lsRemote,
     log,
-    lfs: createMirrorLfsSource({ scratchRoot: scratch, log }),
+    lfs: createMirrorLfsSource({ scratchRoot: scratch, log, unknownSizeBytes: 1_000_000 }),
   };
   git = new GitService({ quota: { acquire: async () => undefined }, scratchDir: scratch });
   await inventory(SOURCE);

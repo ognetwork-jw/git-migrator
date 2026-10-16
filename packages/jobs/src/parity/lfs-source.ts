@@ -24,6 +24,12 @@ export interface MirrorLfsSourceOptions {
   /** `$GM_SCRATCH_DIR` (JOB-015). */
   readonly scratchRoot: string;
   readonly log: Logger;
+  /**
+   * The repository size the disk precheck assumes when the source reports none (JOB-015 "size
+   * unknown"), so an unknown size is never estimated as nothing. The worker passes
+   * `sizeClass.largeThresholdBytes`: the largest repository a standard worker is sized for.
+   */
+  readonly unknownSizeBytes: number;
   /** Test seam: free bytes of the scratch volume. */
   readonly freeBytes?: (path: string) => Promise<number>;
 }
@@ -56,7 +62,7 @@ export function createMirrorLfsSource(options: MirrorLfsSourceOptions): LfsObjec
       // 6 times) the way a Run does, so a short volume makes the Facet unverifiable.
       const space = await checkScratchSpace({
         root: options.scratchRoot,
-        needBytes: estimateScratchNeed(sizeBytes, 0n),
+        needBytes: estimateScratchNeed(sizeBytes ?? options.unknownSizeBytes, 0n),
         delaysSoFar: SCRATCH_MAX_DELAYS,
         runId: id,
         ...(options.freeBytes ? { freeBytes: options.freeBytes } : {}),

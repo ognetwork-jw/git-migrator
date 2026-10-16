@@ -277,7 +277,11 @@ export async function startWorker(options: StartWorkerOptions): Promise<WorkerHa
       registry,
       git,
       log,
-      lfs: createMirrorLfsSource({ scratchRoot: scratchRoot(env), log }),
+      lfs: createMirrorLfsSource({
+        scratchRoot: scratchRoot(env),
+        log,
+        unknownSizeBytes: config.sizeClass.largeThresholdBytes,
+      }),
       // LIF-060 step 1: a drift check reads the full source only when the schedule asks for it.
       driftReadsSource: config.schedules.driftReadsSource,
     };
