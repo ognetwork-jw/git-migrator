@@ -37,6 +37,13 @@ describe('[FAC-WEB-002] path glob matcher', () => {
     expect(matchesPattern('https://h.test/x', `https://h.test/${'*'.repeat(2100)}`)).toBe(false);
   });
 
+  it('[FAC-WEB-002] the cap counts the whole URL: a long query alone makes a short path miss (ADR-0366)', () => {
+    expect(matchesPattern('https://h.test/hook?a=1', 'https://h.test/hook')).toBe(true);
+    expect(matchesPattern(`https://h.test/hook?a=${'1'.repeat(2048)}`, 'https://h.test/hook')).toBe(
+      false,
+    );
+  });
+
   it('[FAC-WEB-002] ** in a host never matches', () => {
     expect(matchesPattern('https://a.b.test/x', 'https://**.test/x')).toBe(false);
     expect(matchesPattern('https://a.test/x', 'https://*.test/x')).toBe(true);
