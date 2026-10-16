@@ -20,6 +20,8 @@ Behavior worth knowing:
 - Optional reads degrade to `FacetRead.unreadable` (merge settings, wiki, issue and download counts, team membership without the groups endpoint); any other 4xx fails the read so a missing token scope is visible.
 - Warnings returned with reads: `branch-rules.unknown-kind`, `branch-rules.branching-model`, `webhooks.unmapped-events`, `webhooks.invalid-url`, `webhooks.duplicate-url`, `deploy-keys.unparsable-skipped`, `variables.invalid-name-skipped`, `access-control.workspace-owners-unknown`, `members.roles-unknown`.
 - `SourceLockPartialError.mutations` carries the Mutations already made when `apply` fails midway; the runner must record them.
+- `SourceLockPartialError.possiblyApplied` names the writes whose response was lost and whose read-back also failed (`branch-restriction`, `repository-description`): they may or may not have been applied, and no Mutation is recorded for them. The runner must handle it as a manual-check condition, not retry `apply` blind: a retry would find the lock or prefix and record it as `adopted`.
+- Records marked `adopted` (a lock-shaped restriction or a prefixed description that was already there) are never undone: `undo` leaves them in place and logs it.
 
 ## Tests
 

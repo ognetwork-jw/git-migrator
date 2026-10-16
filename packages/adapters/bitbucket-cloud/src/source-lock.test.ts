@@ -145,6 +145,35 @@ describe('source read-only (LIF-070)', () => {
     expect((error as SourceLockPartialError).possiblyApplied).toEqual(['branch-restriction']);
   });
 
+  it('[LIF-045] a failing description read-back marks the description possiblyApplied and keeps the restriction record', async () => {
+    const world = makeWorld();
+    const { conn } = await makeConnection(world);
+    const original = world.fake.app.request.bind(world.fake.app);
+    let put = false;
+    world.fake.app.request = (async (input: string, init?: RequestInit) => {
+      if (init?.method === 'PUT') {
+        // The response is lost; whether the provider applied the write is unknown.
+        put = true;
+        return new Response('{}', { status: 503 });
+      }
+      if (put && (init?.method ?? 'GET') === 'GET') {
+        return new Response('{}', { status: 403 });
+      }
+      return original(input, init);
+    }) as never;
+    const error = await conn.sourceLock
+      ?.apply(target().repository, { targetWebUrl: URL_TARGET })
+      .catch((e: unknown) => e);
+    expect(put).toBe(true);
+    expect(error).toBeInstanceOf(SourceLockPartialError);
+    const partial = error as SourceLockPartialError;
+    expect(partial.possiblyApplied).toEqual(['repository-description']);
+    // The restriction written before the description is still handed over for the ledger, and the
+    // description is not recorded as written, because its outcome is unknown.
+    expect(partial.mutations.map((m) => m.resourceRef.type)).toEqual(['branch-restriction']);
+    expect(partial.mutations[0]?.resourceRef.adopted).toBeUndefined();
+  });
+
   it('[LIF-045] a lost POST response that the provider applied is recorded, and undo leaves the source clean', async () => {
     const world = makeWorld();
     const { conn } = await makeConnection(world);

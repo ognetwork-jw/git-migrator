@@ -147,6 +147,38 @@ describe('webhooks', () => {
     expect(JSON.stringify(read.warnings)).not.toContain('zzz');
   });
 
+  it('[FAC-WEB-003] with duplicate-URL hooks, never activates the member that has no secret', async () => {
+    const h = await setup();
+    const repo = h.fake.state.addRepository('acme', { name: 'r', files: FILES });
+    const url = 'https://ci.example.test/dup-secret';
+    // The first raw hook has no secret; only the second one does. Both are inactive.
+    const bare = h.fake.state.addHook(repo, { url, events: ['push'], active: false });
+    const guarded = h.fake.state.addHook(repo, {
+      url,
+      events: ['push'],
+      active: false,
+      secret: 'shh-shh-shh',
+    });
+    const d = driver<{ hooks: ReturnType<typeof hook>[] }>(h, 'webhooks');
+    const read = await d.read(h.ctx, h.target('r'));
+    expect(read.data.hooks[0]).toMatchObject({ hasSecret: true, active: false });
+    const out = await all(
+      d.apply?.(
+        h.ctx,
+        h.target('r'),
+        { hooks: [hook(url, { active: true, hasSecret: true })] },
+        read.data,
+        [],
+      ),
+    );
+    expect(bare.active).toBe(false);
+    // The member with a secret is the one patched, and the ledger names it.
+    expect(guarded.active).toBe(true);
+    expect(out).toEqual([
+      expect.objectContaining({ resourceRef: expect.objectContaining({ id: guarded.id }) }),
+    ]);
+  });
+
   it('[FAC-WEB-001] org hooks use the same mapping at organization scope', async () => {
     const h = await setup();
     const url = 'https://ci.example.test/org';

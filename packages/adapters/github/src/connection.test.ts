@@ -62,6 +62,28 @@ describe('inventory', () => {
     expect(await h.conn.inventory.getRepository(h.repo('missing'))).toBeNull();
   });
 
+  it('[LIF-077] getRepository keeps a repository whose owner login changed but whose owner id is the organization (a renamed organization), and drops one under another owner id (a transfer)', async () => {
+    let owner: { login: string; id?: number } | undefined;
+    const h = await setup({
+      intercept: async (r) => {
+        if (r.method !== 'GET' || !new URL(r.url).pathname.endsWith('/repos/acme/app'))
+          return undefined;
+        const res = await h.fake.app.fetch(r);
+        const body = (await res.json()) as { owner: Record<string, unknown> };
+        if (owner) body.owner = { ...body.owner, ...owner };
+        return reply(res.status, body);
+      },
+    });
+    h.fake.state.addRepository('acme', { name: 'app', private: true, files: FILES });
+    // The name answers under the organization's new login; the owner id is unchanged.
+    owner = { login: 'acme-renamed' };
+    const kept = await h.conn.inventory.getRepository(h.repo('app'));
+    expect(kept?.name).toBe('app');
+    // Same name, another owner id: the repository left the organization.
+    owner = { login: 'someone-else', id: 987654321 };
+    expect(await h.conn.inventory.getRepository(h.repo('app'))).toBeNull();
+  });
+
   it('[JOB-030] lists members then outside collaborators as identities with public data', async () => {
     const h = await setup();
     const s = h.fake.state;
@@ -448,6 +470,33 @@ describe('GraphQL error classes', () => {
     await expect(
       gh.graphql('mutation { createBranchProtectionRule { clientMutationId } }', {}, true),
     ).rejects.toMatchObject({ code: 'invalid' });
+  });
+
+  it('[ADP-060] an untyped validation or parse error with no data stays invalid for a read', async () => {
+    const bodies = [
+      // A query naming a field the server does not have (an older server version).
+      {
+        data: null,
+        errors: [
+          {
+            message:
+              "Field 'bypassForcePushAllowances' doesn't exist on type 'BranchProtectionRule'",
+            locations: [{ line: 1, column: 20 }],
+            extensions: { code: 'undefinedField', typeName: 'BranchProtectionRule' },
+          },
+        ],
+      },
+      // A parse error: no data key at all, only a location.
+      { errors: [{ message: 'Parse error on "}" (RCURLY)', locations: [{ line: 1, column: 9 }] }] },
+    ];
+    for (const body of bodies) {
+      const h = await setup({
+        intercept: (r) => (r.url.endsWith('/graphql') ? reply(200, body) : undefined),
+      });
+      await expect(
+        new Gh(h.conn.http).graphql('query { viewer { login } }', {}),
+      ).rejects.toMatchObject({ code: 'invalid' });
+    }
   });
 
   it('[ADP-060] a typed GraphQL error keeps its class', async () => {

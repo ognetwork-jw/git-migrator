@@ -18,6 +18,7 @@ import {
   itemPath,
   mutation,
   orgTarget,
+  readBackGh,
   repoTarget,
   sortBy,
 } from './common.ts';
@@ -194,23 +195,42 @@ export function environmentsDriver(deps: DriverDeps): FacetDriver<Environments> 
             ?.deployment_branch_policy ?? null;
         const haveNames = new Set(existing?.deploymentBranches ?? []);
         const addedBranches = (wantedBranches ?? []).filter((b) => !haveNames.has(b));
-        // No reviewers or wait timers: not available on private Team repositories (provider doc).
-        await gh.send('PUT', `${base}/environments/${encodeURIComponent(env.name)}`, {
-          deployment_branch_policy:
-            wantedBranches === null
-              ? null
-              : { protected_branches: false, custom_branch_policies: true },
-        });
+        const envUrl = `${base}/environments/${encodeURIComponent(env.name)}`;
+        const envRecord = () =>
+          mutation(
+            'environments',
+            existing ? 'update' : 'create',
+            { kind: 'environment', repository: repo.slug, name: env.name },
+            [itemPath('environments', 'name', env.name)],
+            existing ? { ...existing, deploymentBranchPolicy: rawPolicy } : null,
+            { ...env, category: null, deploymentBranches: wantedBranches, addedBranches },
+          );
+        try {
+          // No reviewers or wait timers: not available on private Team repositories (provider doc).
+          await gh.send('PUT', envUrl, {
+            deployment_branch_policy:
+              wantedBranches === null
+                ? null
+                : { protected_branches: false, custom_branch_policies: true },
+          });
+        } catch (error) {
+          // A lost response may still have applied the PUT: an environment that is there now but
+          // was not, or whose policy changed, is ledgered before failing (ADR-0222).
+          const now = await readBackGh(ctx)
+            .getOrNull<Json>(envUrl)
+            .catch(() => null);
+          if (
+            now !== null &&
+            (!existing ||
+              JSON.stringify(now.deployment_branch_policy ?? null) !== JSON.stringify(rawPolicy))
+          ) {
+            yield envRecord();
+          }
+          throw error;
+        }
         // Recorded right after the PUT that changed the target: a failing policy POST below then
         // leaves a ledgered create (or update), so a retry and an undo both see the environment.
-        yield mutation(
-          'environments',
-          existing ? 'update' : 'create',
-          { kind: 'environment', repository: repo.slug, name: env.name },
-          [itemPath('environments', 'name', env.name)],
-          existing ? { ...existing, deploymentBranchPolicy: rawPolicy } : null,
-          { ...env, category: null, deploymentBranches: wantedBranches, addedBranches },
-        );
+        yield envRecord();
         if (wantedBranches !== null) {
           for (const name of addedBranches) {
             await gh.send(

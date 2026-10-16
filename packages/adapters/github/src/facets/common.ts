@@ -26,6 +26,14 @@ export function ghOf(ctx: DriverContext, collector?: Collector): Gh {
   });
 }
 
+/**
+ * A client for the read-back after an ambiguous write (ADR-0222): its own timeout instead of the
+ * Run's signal, so a cancelled Run still records a write the provider applied.
+ */
+export function readBackGh(ctx: DriverContext): Gh {
+  return new Gh(ctx.http, { pool: ctx.pool, signal: AbortSignal.timeout(30_000) });
+}
+
 const undoDirectories = new WeakMap<DriverContext, Directory>();
 
 /**
