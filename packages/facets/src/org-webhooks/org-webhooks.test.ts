@@ -121,6 +121,13 @@ describe('org-webhooks facet', () => {
       }
     });
 
+    it('[FAC-WEB-002] a URL with userinfo is rejected by the schema, so it cannot pass the allowlist', () => {
+      const rule = ['https://*.example.com/hook'];
+      for (const url of ['https://a.example.com@evil.com/hook', 'https://u@a.example.com/hook']) {
+        expect(() => translate(doc(hook(url)), { allowlist: rule }), url).toThrow(/userinfo/);
+      }
+    });
+
     it('[FAC-WEB-002] a hook whose events are all unsupported is omitted and left to the human', () => {
       const targetCaps: FacetCapability = {
         read: true,
