@@ -67,7 +67,7 @@ export function createChangeRequestWriter(
 
   /**
    * Adopting an existing purpose branch (ADR-0231 §13): every commit it is ahead of the default branch
-   * by must be authored by git-migrator. One compare call; anything else is refused without a write.
+   * by must be authored and committed by git-migrator. One compare call; anything else is refused without a write.
    */
   async function refuseForeignCommits(
     client: Gh,
@@ -82,7 +82,15 @@ export function createChangeRequestWriter(
     );
     const commits = Array.isArray(res.commits) ? (res.commits as unknown[]) : [];
     const total = typeof res.total_commits === 'number' ? res.total_commits : commits.length;
-    const foreign = commits.some((c) => str(obj(obj(obj(c).commit).author).email) !== AUTHOR.email);
+    // Both identities must be the framework's: a framework commit amended or rebased by someone
+    // else keeps git-migrator as author but carries another committer.
+    const foreign = commits.some((c) => {
+      const commit = obj(obj(c).commit);
+      return (
+        str(obj(commit.author).email) !== AUTHOR.email ||
+        str(obj(commit.committer).email) !== AUTHOR.email
+      );
+    });
     // Commits not all listed cannot be checked: refuse them as well.
     if (foreign || total > commits.length) {
       throw conflict(

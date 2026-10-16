@@ -146,6 +146,36 @@ describe('Change Request writer', () => {
     expect(repo.pulls).toHaveLength(0);
   });
 
+  it('[LIF-047] a framework-authored commit amended by a human (committer differs) is refused with no writes', async () => {
+    const { h, repo } = await withRepo();
+    await writer(h).upsert(h.repo('r'), request());
+    const pull = repo.pulls[0];
+    if (pull) pull.state = 'closed';
+    // A human amends the framework commit: the author stays git-migrator, the committer changes.
+    const ref = 'refs/heads/git-migrator/ci';
+    const original = repo.git.commits.get(repo.git.resolve(ref) as string);
+    if (!original) throw new Error('no commit');
+    const amended = repo.git.putCommit({
+      tree: repo.git.treeFromFiles({ ...FILES, '.github/workflows/ci.yml': 'name: hand-edited\n' }),
+      parents: original.parents,
+      message: original.message,
+      author: original.author,
+      committer: { name: 'A Human', email: 'human@example.test' },
+    });
+    repo.git.refs.set(ref, amended.sha);
+    const before = h.requests.length;
+    await expect(writer(h).upsert(h.repo('r'), request())).rejects.toMatchObject({
+      code: 'conflict',
+      message: expect.stringContaining('git-migrator/ci'),
+    });
+    const writes = h.requests
+      .slice(before)
+      .filter((r) => r.method !== 'GET' && r.url.includes('/repos/'));
+    expect(writes).toHaveLength(0);
+    expect(repo.git.resolve(ref)).toBe(amended.sha);
+    expect(repo.pulls.filter((p) => p.state === 'open')).toHaveLength(0);
+  });
+
   it('[LIF-047] a framework-authored branch with no open request is adopted, with before === after', async () => {
     const { h, repo } = await withRepo();
     await writer(h).upsert(h.repo('r'), request());
