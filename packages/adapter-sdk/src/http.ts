@@ -741,7 +741,10 @@ export class ProviderHttpClient {
     try {
       const contentType = response.headers.get('content-type') ?? '';
       let stripped: unknown;
-      if (typeof body === 'string') {
+      if (typeof body === 'string' && body.length > MAX_CAPTURE_TEXT) {
+        // Too big to keep whole: only the marker is stored, so nothing is scrubbed.
+        stripped = { truncated: true, bytes: body.length };
+      } else if (typeof body === 'string') {
         stripped = /x-www-form-urlencoded/i.test(contentType)
           ? stripForm(body, scrub)
           : stripText(body, scrub);

@@ -3,15 +3,19 @@ import { describe, expect, it, vi } from 'vitest';
 import { ProviderHttpClient, type QuotaGate } from './http.ts';
 import { noopLogger } from './logger.ts';
 import {
+  isSensitiveHeader,
   isSensitiveKey,
+  MAX_SCAN_CHARS,
   REDACTED,
   stripBody,
+  stripForm,
   stripHeaders,
   stripText,
   stripUrl,
 } from './redact.ts';
 
 const MB = 1024 * 1024;
+const SHAPES = [/\bprov_[A-Za-z0-9]{20,256}\b/g];
 
 /** Best of three, so a busy machine does not turn a linear scan into a flaky failure. */
 function timed(run: () => unknown): number {
@@ -177,6 +181,128 @@ describe('Basic and Bearer shapes', () => {
     expect(stripText('Bearer abc.def-123_xyz')).toBe(REDACTED);
     expect(stripText('Bearer 12345678')).toBe(REDACTED);
     expect(stripText('Basic dXNlcjpwYXNzd29yZA==')).toBe(REDACTED);
+  });
+});
+
+describe('compound sensitive keys', () => {
+  it('[ADP-061] pass, auth and otp count as words inside a compound key, and secret *Key compounds are sensitive', () => {
+    for (const key of [
+      'userPass',
+      'db_pass',
+      'DB_PASS',
+      'basicAuth',
+      'HTTPAuth',
+      'X-Auth',
+      'userOtp',
+      'otp_code',
+      'signingKey',
+      'clientKey',
+      'hmacKey',
+      'hmac_key',
+      'Ocp-Apim-Subscription-Key',
+    ]) {
+      expect(isSensitiveKey(key), key).toBe(true);
+    }
+    expect(isSensitiveHeader('Ocp-Apim-Subscription-Key')).toBe(true);
+    expect(isSensitiveHeader('X-Auth')).toBe(true);
+    for (const key of [
+      'author',
+      'authored_at',
+      'passenger',
+      'bypass',
+      'footprint',
+      'key',
+      'monkey',
+      'facetKey',
+      'bucket_key',
+      'accountKey',
+      'publicKey',
+      'X-OAuth-Scopes',
+      'X-Accepted-OAuth-Scopes',
+    ]) {
+      expect(isSensitiveKey(key), key).toBe(false);
+    }
+    expect(stripBody({ userPass: 'fake-a', signingKey: 'fake-b', key: 'name' })).toEqual({
+      userPass: REDACTED,
+      signingKey: REDACTED,
+      key: 'name',
+    });
+  });
+});
+
+describe('the scan limit cut', () => {
+  const lead = (before: number) => 'x '.repeat(Math.floor((MAX_SCAN_CHARS - before) / 2));
+
+  it('[ADP-061] a declared secret split by the cut leaves no head behind', () => {
+    for (const secret of ['fake-secret-value-0123456789', 'fake secret phrase value']) {
+      const out = stripText(`${lead(10)}${secret} tail`, { secrets: [secret] });
+      expect(out.length).toBeLessThanOrEqual(MAX_SCAN_CHARS);
+      expect(out, secret).not.toContain('fake');
+    }
+  });
+
+  it('[ADP-061] a token-shaped value split by the cut leaves no head behind', () => {
+    const jwt = `eyJ${'a'.repeat(40)}.${'b'.repeat(40)}.${'c'.repeat(40)}`;
+    const out = stripText(`${lead(60)}${jwt} tail`);
+    expect(out).not.toContain('eyJ');
+    expect(out).not.toContain('aaaa');
+    const shaped = stripText(`${lead(20)}prov_${'z'.repeat(60)} tail`, { shapes: SHAPES });
+    expect(shaped).not.toContain('prov_');
+  });
+
+  it('[ADP-061] a form value split by the cut is dropped', () => {
+    const secret = 'fake-secret-value-0123456789';
+    const out = stripForm(`a=${'x'.repeat(MAX_SCAN_CHARS - 20)}&note=${secret}&b=1`, {
+      secrets: [secret],
+    });
+    expect(out).not.toContain('fake');
+  });
+});
+
+describe('signed token shapes inside a longer run', () => {
+  it('[ADP-061] a JWT after a dot, a dash or an underscore is redacted', () => {
+    const jwt = 'eyJhbGciOiJub25l.eyJmYWtlIjoxfQ.fake-signature';
+    for (const prefix of ['id.', 'run-', 'tok_', 'x']) {
+      const out = stripText(`v=${prefix}${jwt} end`);
+      expect(out, prefix).not.toContain('eyJ');
+      expect(out, prefix).not.toContain('fake-signature');
+      expect(out, prefix).toContain(' end');
+    }
+    expect(stripText(`a=${jwt}.${jwt} end`)).not.toContain('eyJ');
+  });
+});
+
+describe('Link header scan', () => {
+  it('[ADP-061] a link URL of any length is stripped as a URL', () => {
+    const link = `<https://h.test/r?pad=${'p'.repeat(5000)}&access_token=fake-token-value&page=2>; rel="next"`;
+    const out = stripHeaders(new Headers({ Link: link }));
+    expect(out.link).not.toContain('fake-token-value');
+    expect(out.link).toContain('page=2');
+    expect(out.link).toContain('rel="next"');
+  });
+
+  it('[ADP-061] a Link header of unclosed brackets is scanned in linear time', () => {
+    const value = '<'.repeat(MB / 2);
+    expect(timed(() => stripHeaders(new Headers({ Link: value })))).toBeLessThan(100);
+  });
+});
+
+describe('userinfo in text', () => {
+  it('[ADP-061] an unescaped @ in the password does not leak the tail', () => {
+    const out = stripText('clone https://fake-user:fake@pass@word@h.test/r.git failed');
+    expect(out).toBe(`clone ${REDACTED}h.test/r.git failed`);
+    expect(stripText(`see http://u:${'p'.repeat(600)}@h.test/x`)).toBe(`see ${REDACTED}h.test/x`);
+  });
+
+  it('[ADP-061] a username-only userinfo (a token used as the user) is redacted', () => {
+    expect(stripText('fetch https://fake-token-0123@h.test/r.git')).toBe(
+      `fetch ${REDACTED}h.test/r.git`,
+    );
+  });
+
+  it('[ADP-061] text without userinfo is kept', () => {
+    const text = 'see https://h.test/a@b and mail user@h.test, http://h.test:8080/x';
+    expect(stripText(text)).toBe(text);
   });
 });
 
