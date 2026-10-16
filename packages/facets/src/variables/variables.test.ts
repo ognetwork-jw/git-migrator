@@ -110,6 +110,31 @@ describe('variables facet', () => {
     });
   });
 
+  it('[FAC-VAR-003] names are upper-cased in ASCII only: a non-ASCII letter stays invalid', () => {
+    // JavaScript would upper-case these to the valid STRASSE, I and K.
+    const t = run([v('straße'), v('\u0131'), v('\u212A'), v('OK')]);
+    expect((t.desired as Variables).variables.map((x) => x.name)).toEqual(['OK']);
+    expect(t.preTasks[0]).toMatchObject({
+      code: 'variables.name-invalid',
+      params: { names: ['straße', '\u0131', '\u212A'] },
+    });
+  });
+
+  it('[FAC-VAR-003] every rejected variable gets an unsupported decision at its source path', () => {
+    const t = run([v('my-var'), v('Token', 'a'), v('TOKEN', 'b'), v('OK')]);
+    expect(t.decisions).toEqual(
+      expect.arrayContaining(
+        ['TOKEN', 'Token', 'my-var'].map((name) =>
+          expect.objectContaining({
+            path: `/variables[key=repository/${name}]`,
+            fidelity: 'unsupported',
+          }),
+        ),
+      ),
+    );
+    expect(t.decisions.filter((d) => d.fidelity === 'unsupported')).toHaveLength(3);
+  });
+
   it('[FAC-VAR-003] a collision after normalization rejects every colliding variable', () => {
     const t = run([v('Token', 'a'), v('TOKEN', 'b'), v('Other')]);
     expect((t.desired as Variables).variables.map((x) => x.name)).toEqual(['OTHER']);

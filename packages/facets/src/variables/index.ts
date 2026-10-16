@@ -53,6 +53,9 @@ export function translateVariables(
     }
     return { key: k.key, scope: k.scope, name: k.name, value: values.get(k.sourceKey) ?? '' };
   });
+  for (const i of invalid) {
+    decisions.push({ path: itemPath(i.key), fidelity: 'unsupported', accepted: false });
+  }
   if (invalid.length > 0) {
     preTasks.push({
       code: VARIABLES_NAME_INVALID,

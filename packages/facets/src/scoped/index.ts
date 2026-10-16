@@ -22,9 +22,21 @@ export function environmentScope(name: string): string {
   return `${ENVIRONMENT_PREFIX}${name}`;
 }
 
+/**
+ * ASCII-only case mapping. JavaScript's full Unicode mapping would turn `ß` into `SS`, the Kelvin
+ * sign into `k` and fold `Σ`/`ς`; the target's folding beyond ASCII is unverified (ADR-0145).
+ */
+export function asciiLower(text: string): string {
+  return text.replace(/[A-Z]+/g, (m) => m.toLowerCase());
+}
+
+export function asciiUpper(text: string): string {
+  return text.replace(/[a-z]+/g, (m) => m.toUpperCase());
+}
+
 /** Case-insensitive identity of a scope: the target does not tell environments apart by case. */
 export function foldScope(scope: string): string {
-  return scope.toLowerCase();
+  return asciiLower(scope);
 }
 
 /**
@@ -36,7 +48,7 @@ export function targetEnvironments(ctx: TranslateContext): Map<string, string> {
   const desired = ctx.deps.environments?.desired as
     | { environments?: readonly { name: string }[] }
     | undefined;
-  for (const e of desired?.environments ?? []) map.set(e.name.toLowerCase(), e.name);
+  for (const e of desired?.environments ?? []) map.set(asciiLower(e.name), e.name);
   return map;
 }
 
@@ -44,7 +56,7 @@ export function targetEnvironments(ctx: TranslateContext): Map<string, string> {
 export function alignScope(scope: string, environments: ReadonlyMap<string, string>): string {
   const env = environmentOf(scope);
   if (env === null) return scope;
-  const known = environments.get(env.toLowerCase());
+  const known = environments.get(asciiLower(env));
   return known === undefined ? scope : environmentScope(known);
 }
 
@@ -71,7 +83,7 @@ export function translateScoped(
 ): ScopedTranslation {
   const groups = new Map<string, (typeof items)[number][]>();
   for (const item of items) {
-    const id = scopedKey(foldScope(alignScope(item.scope, environments)), item.name.toUpperCase());
+    const id = scopedKey(foldScope(alignScope(item.scope, environments)), asciiUpper(item.name));
     groups.set(id, [...(groups.get(id) ?? []), item]);
   }
   const kept: ScopedTranslation['kept'] = [];
@@ -79,7 +91,7 @@ export function translateScoped(
   for (const group of groups.values()) {
     const [first] = group;
     if (first === undefined) continue;
-    const upper = first.name.toUpperCase();
+    const upper = asciiUpper(first.name);
     if (group.length > 1 || !isValidTargetName(upper)) {
       for (const i of group) invalid.push({ key: i.key, name: i.name });
       continue;
