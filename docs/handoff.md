@@ -18,7 +18,7 @@ All of the following runs in CI on every pull request to `ai-main`. CI was green
 | `pnpm spec:coverage -- --strict` | Every must-test requirement ID has a test that names it. The CI run fails if one is missing (TST-002). |
 | Integration tests | about 340 tests against Postgres and the provider fakes. They cover the Phase-1 scenario (TST-020) and every additional TST-020 scenario; `testing/integration/README.md` maps each scenario to its test. |
 | UI e2e | Playwright against the production web build, the real API and worker, and the fakes. It runs the Phase-1 spec and the NeedsAttention spec (TST-021), and proves live updates arrive over SSE. |
-| Live e2e, dry mode | The live spec runs against the fakes (`GM_E2E_TARGET=fakes`). Some assertions skip because the fakes lack those endpoints. |
+| Live e2e, dry mode | The live spec runs against the fakes (`GM_E2E_TARGET=fakes`). No assertion skips: the fakes serve every endpoint the spec reads. |
 | Docker image | The image is built and smoke-tested with a read-only root filesystem as UID 10001. The test checks that it serves the sign-in page, health, readiness and metrics, and exits 0 on SIGTERM. |
 | Helm | lint and helm-unittest |
 | gitleaks | secret scan of the full history |

@@ -59,17 +59,10 @@ export default async function globalSetup(): Promise<() => Promise<void>> {
           privateKey: FAKE_PEM,
         },
         operatorEmail: FAKE_OPERATOR_EMAIL,
-        // What the fakes do not implement: the tag listing and file lookups of the source
-        // API, and on the target the Actions variables and whatever was pushed over git (refs,
-        // files, the branch protection read). The live mode has no such list.
-        skipChecks: [
-          'bitbucket-tags',
-          'bitbucket-lfs',
-          'github-variables',
-          'github-refs',
-          'github-contents',
-          'github-protection',
-        ],
+        // What the fakes do not implement. They now serve the source's tags and file metadata and,
+        // on the target, the Actions variables and what was pushed over git (refs, files, the
+        // branch protection read), so nothing is skipped. The live mode never skips.
+        skipChecks: [],
       };
       process.env[CONTEXT_VARIABLE] = JSON.stringify(context);
       process.env.GM_E2E_BASE_URL = stack.baseUrl;
