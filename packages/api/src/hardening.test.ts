@@ -660,3 +660,42 @@ describe('[API-011] isUnavailable', () => {
     expect(isUnavailable(new Error('x'))).toBe(false);
   });
 });
+
+describe('[API-011] a lock or statement timeout', () => {
+  it('[API-011] is a 503 busy with Retry-After and is logged at warn with safe fields only', async () => {
+    const warned: unknown[][] = [];
+    const slow = createApiApp({
+      events: inertEvents(),
+      db: {
+        ...t.db,
+        privileged: new Proxy(t.db.privileged, {
+          get: (target, prop, receiver) =>
+            prop === 'apiKey'
+              ? new Proxy(
+                  {},
+                  {
+                    get: () => () => {
+                      throw Object.assign(new Error('canceling statement leak-me'), {
+                        dbErrorCode: '57014',
+                      });
+                    },
+                  },
+                )
+              : Reflect.get(target, prop, receiver),
+        }) as never,
+      },
+      auth: service,
+      publicUrl: ORIGIN,
+      logger: {
+        error: () => undefined,
+        warn: (...a: unknown[]) => warned.push(a),
+      } as never,
+    });
+    const res = await slow.request(`${ORIGIN}/api/v1/me`, {
+      headers: { authorization: 'Bearer gm_abcdefgh_abcdefghijklmnopqrstuvwxyzABCDEF' },
+    });
+    expect(res.headers.get('retry-after')).toBe('5');
+    await expectProblem(res, 503, 'busy');
+    expect(warned).toEqual([[{ errorClass: 'Error', dbErrorCode: '57014' }, 'database busy']]);
+  });
+});

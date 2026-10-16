@@ -334,8 +334,14 @@ export function createApiApp(deps: ApiDeps) {
     if (error instanceof HTTPException) {
       return problemResponse(problemCodeForStatus(error.status));
     }
-    // A lock or statement timeout means another writer holds the Route: retry shortly.
-    if (isTimeout(error)) return problemResponse('busy', { headers: { 'retry-after': '5' } });
+    // A lock or statement timeout: retry shortly. The only bounded waits the API sets are those of
+    // the mapping and invitation transactions (a writer holds the same Route or target), so the
+    // answer is `busy`. No pool-wide timeout is configured; a 57014 from an operator's
+    // pg_cancel_backend lands here too and is just as retryable.
+    if (isTimeout(error)) {
+      deps.logger?.warn(safeErrorFields(error), 'database busy');
+      return problemResponse('busy', { headers: { 'retry-after': '5' } });
+    }
     // A serialization failure or deadlock that reaches here is a conflict the caller can retry.
     if (isRetryableConflict(error)) return problemResponse('conflict');
     // A database that cannot be reached is a 503 the caller can retry, not a server fault.
