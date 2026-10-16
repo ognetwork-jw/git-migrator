@@ -27,6 +27,16 @@ Mark these **unverified — validate during live e2e** in `docs/providers/bitbuc
 
 Items verified and different from the plan: no project-level branch restrictions exist; `write:repository:bitbucket` does not suffice for the description update (`admin:repository:bitbucket` is required); project deploy keys need `admin:project:bitbucket`; `GET /pipelines_config` needs `admin:repository:bitbucket`.
 
+## Update 2026-10-16: items 1, 7 and 11 verified
+
+`support.atlassian.com` became reachable. Three items are settled by its pages; the plan and the code defaults stand unchanged:
+
+- **Item 1, verified.** [Using API tokens](https://support.atlassian.com/bitbucket-cloud/docs/using-api-tokens/#Using-API-tokens-with-Git-commands) documents `x-bitbucket-api-token-auth` (and `x-token-auth`) as static Git usernames for API tokens, recommended for apps and integrations. The default stays; keeping it configurable is still harmless.
+- **Item 7, verified.** [Suggest or require checks before a merge](https://support.atlassian.com/bitbucket-cloud/docs/suggest-or-require-checks-before-a-merge/): without Premium, merge checks (including maximum commits behind) only warn; blocking needs Premium and "Prevent a merge with unresolved merge checks". Inferred, not stated: that setting is the `enforce_merge_checks` branch-restriction kind.
+- **Item 11, verified.** [API request limits](https://support.atlassian.com/bitbucket-cloud/docs/api-request-limits/) matches the provider doc's numbers. It says limits may change, possibly dynamically, so JOB-043's configurable limits stay.
+
+Items 2–6 and 8–10 need a real Bitbucket workspace. They remain open until the live e2e (T-095) runs against real Bitbucket accounts; so far it has only run in dry mode against the fakes.
+
 ## Alternatives
 
 Block T-030 until `support.atlassian.com` is allowed: rejected by the orchestrator.

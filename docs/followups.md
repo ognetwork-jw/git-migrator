@@ -4,7 +4,7 @@ These are unresolved review findings (review loops that hit the 5-round cap) and
 
 | Date | Task | Round | Severity | Finding | Location | Status |
 |---|---|---|---|---|---|---|
-| 2026-10-08 | T-030 | — | deferred | Validate the 11 unverified Bitbucket items (ADR-0036) during the live e2e; support.atlassian.com was unreachable | docs/adr/0036-unverified-bitbucket-items.md | open |
+| 2026-10-08 | T-030 | — | deferred | Validate the 11 unverified Bitbucket items (ADR-0036) during the live e2e; support.atlassian.com was unreachable | docs/adr/0036-unverified-bitbucket-items.md | open: items 1, 7, 11 verified against support.atlassian.com on 2026-10-16 (ADR-0036 update); items 2–6, 8–10 wait on a run of the live e2e (T-095) against real Bitbucket accounts |
 | 2026-10-08 | T-031 | — | deferred | ADR-0040: staging/contract check that a non-listed writer's force push is rejected and a bypass actor's is accepted; on a GraphQL validation error for `allowsForcePushes:false` + bypass list, retry with empty list and report `branch-rules.exemptions-dropped` (T-033) | docs/adr/0040-force-push-fail-closed.md | open |
 | 2026-10-08 | T-031 | 2 | MINOR | 403 on GraphQL branch-protection mutations or repo delete must map to a blocking finding with guidance (Administration: write), not a retry; confirm required permission and whether org delete-policy blocks Apps on staging (T-033) | docs/providers/github.md | open |
 | 2026-10-08 | T-031 | 2 | MINOR | Secondary-limit point costs are "most" GET=1/write=5 with undisclosed exceptions; JOB-045 must rely on 403/429 handling, not exact local point accounting (T-025) | docs/providers/github.md | open |

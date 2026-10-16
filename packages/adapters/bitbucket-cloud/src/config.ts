@@ -13,7 +13,7 @@ export const RESOURCE_GROUPS = [
 ] as const;
 export type ResourceGroup = (typeof RESOURCE_GROUPS)[number];
 
-/** Default git HTTPS username for API tokens (unverified, ADR-0036 item 1). */
+/** Default git HTTPS username for API tokens (documented by Atlassian, ADR-0036 item 1). */
 export const DEFAULT_GIT_USERNAME = 'x-bitbucket-api-token-auth';
 
 /**

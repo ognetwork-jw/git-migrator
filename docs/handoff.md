@@ -49,7 +49,7 @@ This is the validation the spec expects (00-overview). Follow [docs/e2e-setup.md
 
 Expect small fixes on the first run. The request shapes were never tried against the real APIs. The first run also confirms several assumptions:
 
-- **Bitbucket:** the 11 unverified items in ADR-0036, the `fork_policy` value for "Allow only private forks", and the workspace `owner` role (T-030, T-032).
+- **Bitbucket:** the 8 items in ADR-0036 still unverified (items 1, 7 and 11 were settled from Atlassian docs), the `fork_policy` value for "Allow only private forks", and the workspace `owner` role (T-030, T-032).
 - **GitHub:**
   - push-rejection wording and the git stderr fragments that `classifyGitFailure` matches (T-040, T-027);
   - the deploy-key "already in use" body, whether a GitHub App may delete repositories, and environment protection on private Team-plan repos (T-042);
