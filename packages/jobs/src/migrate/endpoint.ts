@@ -20,6 +20,7 @@ import {
 import { StepFailure } from '../run/errors.ts';
 import { addRunTask } from '../run/findings.ts';
 import { checkPlacement } from '../run/placement.ts';
+import { lockMigration } from '../run/store.ts';
 import type { StepDefinition, StepResult } from '../run/types.ts';
 import { applyWithLedger, recoverOpenIntents } from './facets.ts';
 import { connectSide, type MigrationContext, type MigrationServices } from './services.ts';
@@ -225,6 +226,8 @@ export async function settleTeams(
     await tx.$executeRaw`SELECT set_config('lock_timeout', '15000', true), set_config('statement_timeout', '60000', true)`;
     await advisoryXactLock(tx, invitationTargetLockKey(world.targetEndpointId));
     await advisoryXactLock(tx, routeMappingLockKey(world.routeId));
+    // Lock order is Migration row, then Run row (ADR-0340): readiness below writes the Migration.
+    await lockMigration(tx as never, world.migrationId);
     // The locks may have been waited for a long time: write only if this worker still has the Run.
     await ctx.assertLease(tx as never);
     // A renamed team keeps its provider id: refresh the stored slug and name (never the mapping).

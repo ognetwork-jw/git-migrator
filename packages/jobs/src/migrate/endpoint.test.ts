@@ -344,6 +344,34 @@ describe('settling created teams (LIF-080, AUTH-050)', () => {
     expect(await db.group.count({ where: { endpointId: world.targetEndpointId } })).toBe(0);
   });
 
+  it('[LIF-080] [LIF-046] the Migration row is locked before the lease check share-locks the Run (lock order)', async () => {
+    const { db, world, record } = await seed(['devs']);
+    await record('create', { kind: 'team', slug: 'devs' }, null, { slug: 'devs' });
+    let migrationLocked: boolean | undefined;
+    // Checked from another session while settleTeams' transaction is at its lease check.
+    const probe = async () => {
+      const client = await t.db.pool.connect();
+      try {
+        await client.query('BEGIN');
+        await client.query('SELECT id FROM app.migration WHERE id = $1 FOR NO KEY UPDATE NOWAIT', [
+          world.migrationId,
+        ]);
+        migrationLocked = false;
+      } catch (error) {
+        migrationLocked = (error as { code?: string }).code === '55P03';
+      } finally {
+        await client.query('ROLLBACK');
+        client.release();
+      }
+    };
+    await settleTeams(
+      contextOf(db, [], [], probe),
+      endpointWorld(world),
+      targetOf([{ id: '9', slug: 'devs' }]),
+    );
+    expect(migrationLocked).toBe(true);
+  });
+
   it('[LIF-080] [FAC-ACL-004] liveGroupRows tells a renamed team from a deleted one by provider id', () => {
     const rows = [
       { status: 'confirmed', sourceProviderId: 'a', targetProviderId: '1', targetSlug: 'old' },
