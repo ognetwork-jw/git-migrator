@@ -1,8 +1,17 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { render } from '@testing-library/react';
+import { configure, render } from '@testing-library/react';
 import { NextIntlClientProvider } from 'next-intl';
 import type { ReactElement } from 'react';
+import { inject, vi } from 'vitest';
 import { messages } from './messages.ts';
+
+// jsdom renders of the antd pages take seconds when the whole suite runs in parallel: the 1 s
+// default wait of `findBy*`/`waitFor` and the 5 s test timeout then fail tests that pass alone.
+// Every component test imports this module, so they all get room, scaled by GM_TEST_TIME_FACTOR
+// (ADR-0507). A missing element still fails, after the wait.
+const timeFactor = inject('timeFactor');
+configure({ asyncUtilTimeout: 10_000 * timeFactor });
+vi.setConfig({ testTimeout: 30_000 * timeFactor });
 
 /** Renders with the real English catalog and a fresh query client (for component tests). */
 export function renderWithApp(ui: ReactElement, client = new QueryClient()) {

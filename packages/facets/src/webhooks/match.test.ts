@@ -1,5 +1,8 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, inject, it } from 'vitest';
 import { matchesPattern, pathGlobMatches } from './match.ts';
+
+/** Wall-clock budgets scale with GM_TEST_TIME_FACTOR (ADR-0507). */
+const budget = (ms: number): number => ms * inject('timeFactor');
 
 describe('[FAC-WEB-002] path glob matcher', () => {
   it('[FAC-WEB-002] * stays inside a segment and ** crosses segments', () => {
@@ -27,7 +30,7 @@ describe('[FAC-WEB-002] path glob matcher', () => {
     expect(pathGlobMatches(pattern, text)).toBe(false);
     const manyStars = `/${'a*'.repeat(900)}b`;
     expect(pathGlobMatches(manyStars, `/${'a'.repeat(1500)}`)).toBe(false);
-    expect(performance.now() - started).toBeLessThan(2000);
+    expect(performance.now() - started).toBeLessThan(budget(2000));
   });
 
   it('[FAC-WEB-002] a pattern or a path over 2048 characters never matches', () => {

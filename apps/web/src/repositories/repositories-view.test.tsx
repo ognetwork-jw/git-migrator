@@ -9,9 +9,6 @@ import { installMatchMedia, renderWithApp } from '../test-render.tsx';
 import type { RepositoryRow } from './api.ts';
 import { RepositoriesView } from './repositories-view.tsx';
 
-// antd tables are slow to render in jsdom, more so when the whole suite runs at once.
-vi.setConfig({ testTimeout: 30_000 });
-
 const actor = (role: Actor['role']): Actor => ({
   id: 'a1',
   displayName: 'Ada',

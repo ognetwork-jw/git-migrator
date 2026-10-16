@@ -11,8 +11,6 @@ import type { MigrationDetail } from './api.ts';
 import { MigrationDetailView } from './detail-view.tsx';
 import { diff, diffFacet, migration, run, task } from './fixtures.ts';
 
-vi.setConfig({ testTimeout: 30_000 });
-
 const followed: string[][] = [];
 vi.mock('../shell/live-topics.tsx', () => ({
   useLiveTopics: (topics: readonly string[]) => {

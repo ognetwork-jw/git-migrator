@@ -1,15 +1,11 @@
 // @vitest-environment jsdom
 
 import { QueryClient } from '@tanstack/react-query';
-import { cleanup, configure, fireEvent, screen, waitFor, within } from '@testing-library/react';
+import { cleanup, fireEvent, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { bodyOf, json, mockApi } from '../test-api.ts';
 import { installMatchMedia, renderWithApp } from '../test-render.tsx';
 import { WebhookAllowlistView } from './webhook-view.tsx';
-
-vi.setConfig({ testTimeout: 30_000 });
-// The machine is shared by parallel agents: async queries get more than the 1 s default (UI tests).
-configure({ asyncUtilTimeout: 10_000 });
 
 /** A header button is disabled until the Route list has loaded: wait for it. */
 const enabled = async (name: string) => {

@@ -18,8 +18,6 @@ import {
 import { filterLines, ROW_HEIGHT, rankOf, VIEW_HEIGHT, visibleRange } from './log-viewer.tsx';
 import { elapsed, errorSummary, RunDetailView } from './run-detail-view.tsx';
 
-vi.setConfig({ testTimeout: 30_000 });
-
 const followed: string[][] = [];
 vi.mock('../shell/live-topics.tsx', () => ({
   useLiveTopics: (topics: readonly string[]) => {

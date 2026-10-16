@@ -32,7 +32,7 @@ beforeAll(async () => {
 
 afterAll(async () => {
   await t?.drop();
-});
+}, 60_000);
 
 describe('[AUTH-040] key format and storage', () => {
   it('[AUTH-040] a key is gm_<8 base62>_<32 base62> and keys differ', () => {
@@ -104,10 +104,20 @@ describe('[AUTH-040] verification', () => {
       code: 'key_not_found',
     });
 
-    const expired = await issue(new Date(Date.now() + 1000));
-    expect((await verifyApiKey(t.db.privileged, expired.key)).status).toBe('ok');
+    // Explicit clocks: issuing and verifying can take over a second on a loaded machine.
+    const issuedAt = Date.now();
+    const expired = await issue(new Date(issuedAt + 1000));
+    expect((await verifyApiKey(t.db.privileged, expired.key, new Date(issuedAt))).status).toBe(
+      'ok',
+    );
     expect(
-      (await verifyApiKey(t.db.privileged, expired.key, new Date(Date.now() + 5000))).status,
+      (await verifyApiKey(t.db.privileged, expired.key, new Date(issuedAt + 999))).status,
+    ).toBe('ok');
+    expect(
+      (await verifyApiKey(t.db.privileged, expired.key, new Date(issuedAt + 1000))).status,
+    ).toBe('invalid');
+    expect(
+      (await verifyApiKey(t.db.privileged, expired.key, new Date(issuedAt + 5000))).status,
     ).toBe('invalid');
   });
 

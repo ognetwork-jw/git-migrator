@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, inject, it } from 'vitest';
 import {
   classifyExistingTarget,
   collisionKey,
@@ -15,6 +15,29 @@ import {
   validateReplacePattern,
   validateTargetName,
 } from './naming.ts';
+
+/** Wall-clock budgets scale with GM_TEST_TIME_FACTOR (ADR-0507). */
+const budget = (ms: number): number => ms * inject('timeFactor');
+
+/**
+ * Runs `run` and asserts it took under `budget(ms)`. When it is over, it runs again (three runs at
+ * most) and the best time is judged, so one preemption on a busy machine is not a failure, while a
+ * genuinely slow implementation fails every run (ADR-0507).
+ */
+function within<T>(ms: number, run: () => T, label?: string): T {
+  const limit = budget(ms);
+  let best = Number.POSITIVE_INFINITY;
+  let result: T;
+  let runs = 0;
+  do {
+    const started = performance.now();
+    result = run();
+    best = Math.min(best, performance.now() - started);
+    runs++;
+  } while (best >= limit && runs < 3);
+  expect(best, label).toBeLessThan(limit);
+  return result;
+}
 
 const limits: NamingLimits = {
   maxLength: 100,
@@ -736,9 +759,7 @@ describe('[LIF-030] replace safety (ADR-0095)', () => {
       ['(.*a){10}', 'a'.repeat(256)],
     ];
     for (const [pattern, input] of cases) {
-      const t0 = performance.now();
-      const r = runNamingPipeline(rp(pattern, 'x'), src('K', input));
-      expect(performance.now() - t0, pattern).toBeLessThan(250);
+      const r = within(250, () => runNamingPipeline(rp(pattern, 'x'), src('K', input)), pattern);
       expect(r.ok || r.issue.reason === 'pipeline', pattern).toBe(true);
     }
   });
@@ -790,9 +811,9 @@ describe('[LIF-030] replace safety (ADR-0095)', () => {
   });
 
   it('[LIF-030] the ReDoS probe (a+)+$ runs in linear time on the RE2 engine', () => {
-    const t0 = performance.now();
-    const r = runNamingPipeline(rp('(a+)+$', 'b'), src('K', `${'a'.repeat(200)}!`));
-    expect(performance.now() - t0).toBeLessThan(250);
+    const r = within(250, () =>
+      runNamingPipeline(rp('(a+)+$', 'b'), src('K', `${'a'.repeat(200)}!`)),
+    );
     expect(r).toEqual({ ok: true, value: `${'a'.repeat(200)}!` });
   });
 

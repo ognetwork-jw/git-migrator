@@ -28,9 +28,6 @@ const mapping = (id: string, status: string, extra: Record<string, unknown> = {}
   ...extra,
 });
 
-// antd tables and drawers are slow to render in jsdom, more so when the whole suite runs at once.
-vi.setConfig({ testTimeout: 30_000 });
-
 const json = (body: unknown, status = 200) =>
   new Response(JSON.stringify(body), { status, headers: { 'content-type': 'application/json' } });
 

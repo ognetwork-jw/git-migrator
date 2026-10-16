@@ -6,8 +6,6 @@ import { installMatchMedia, renderWithApp } from '../test-render.tsx';
 import { GuidanceView, guidanceParams } from './guidance-view.tsx';
 import { tokenizeInline, unescapeMarkdown } from './inline-markdown.tsx';
 
-vi.setConfig({ testTimeout: 30_000 });
-
 afterEach(() => {
   cleanup();
   vi.unstubAllGlobals();

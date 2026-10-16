@@ -7,8 +7,6 @@ import { installMatchMedia, renderWithApp } from '../test-render.tsx';
 import { BatchView } from './batch-view.tsx';
 import { InvitationsView } from './invitations-view.tsx';
 
-vi.setConfig({ testTimeout: 30_000 });
-
 const json = (body: unknown, status = 200) =>
   new Response(JSON.stringify(body), { status, headers: { 'content-type': 'application/json' } });
 

@@ -194,5 +194,6 @@
 | [0503](0503-viewers-do-not-read-snapshot-data.md) | Viewers do not read Snapshot data or Analysis translations through RPC (webhook URLs may carry credentials); amends ADR-0331 | agent-decided |
 | [0504](0504-route-retarget-and-rollback.md) | A Route retargeted after the framework wrote its target: the place is pinned, Runs refused with a blocker, rollback where the writes went, earlier repositories left and reported | agent-decided |
 | [0506](0506-illustrative-requirement-ids.md) | Illustrative IDs in the overview are not requirements | agent-decided |
+| [0507](0507-load-tolerant-test-timing.md) | Load-tolerant tests: wall-clock budgets and default timeouts scale with GM_TEST_TIME_FACTOR, over-budget runs are re-measured, linearity is asserted as an n vs 4n ratio | agent-decided |
 
 New ADRs take the next free number, or the range the orchestrator assigns to a task or fix branch (check the highest row above, and the highest file in this directory, before choosing). Implementor decisions use `status: agent-decided` (PROC-005); the orchestrator folds them into the spec and changes the status to `accepted (spec updated)`.

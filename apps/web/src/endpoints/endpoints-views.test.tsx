@@ -10,8 +10,6 @@ import { installMatchMedia, renderWithApp } from '../test-render.tsx';
 import { EndpointMigrationView, runKindFor } from './endpoint-migration-view.tsx';
 import { EndpointsView, migrationHref } from './endpoints-view.tsx';
 
-vi.setConfig({ testTimeout: 30_000 });
-
 const actor = (role: Actor['role']): Actor => ({
   id: 'a1',
   displayName: 'Ada',

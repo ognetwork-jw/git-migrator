@@ -1,5 +1,5 @@
 import { generateKeyPairSync } from 'node:crypto';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, inject, it } from 'vitest';
 import {
   isSensitiveKey,
   MAX_TEXT_LENGTH,
@@ -8,6 +8,29 @@ import {
   redactString,
   redactValue,
 } from './redact.ts';
+
+/** Wall-clock budgets scale with GM_TEST_TIME_FACTOR (ADR-0507). */
+const budget = (ms: number): number => ms * inject('timeFactor');
+
+/**
+ * Runs `run` and asserts it took under `budget(ms)`. When it is over, it runs again (three runs at
+ * most) and the best time is judged, so one preemption on a busy machine is not a failure, while a
+ * genuinely slow implementation fails every run (ADR-0507).
+ */
+function within<T>(ms: number, run: () => T, label?: string): T {
+  const limit = budget(ms);
+  let best = Number.POSITIVE_INFINITY;
+  let result: T;
+  let runs = 0;
+  do {
+    const started = performance.now();
+    result = run();
+    best = Math.min(best, performance.now() - started);
+    runs++;
+  } while (best >= limit && runs < 3);
+  expect(best, label).toBeLessThan(limit);
+  return result;
+}
 
 /*
  * Secret-shaped test values are assembled at run time from fragments, so that no secret-shaped
@@ -343,10 +366,7 @@ describe('bounded scanning (DEP-050)', () => {
   for (const [name, unit] of shapes) {
     it(`[DEP-050] scans a 1 MB ${name} input within the time budget`, () => {
       const input = unit.repeat(Math.ceil(MEGABYTE / unit.length));
-      const started = performance.now();
-      const out = redactString(input);
-      const elapsed = performance.now() - started;
-      expect(elapsed).toBeLessThan(1000);
+      const out = within(1000, () => redactString(input));
       expect(out.length).toBeLessThanOrEqual(MAX_TEXT_LENGTH + 64);
     });
   }
@@ -506,11 +526,9 @@ describe('encoded, folded and spaced secrets (DEP-050)', () => {
       'a-_'.repeat(8),
     ]) {
       const input = unit.repeat(Math.ceil((1024 * 1024) / unit.length));
-      const started = performance.now();
-      redactString(input);
-      expect(performance.now() - started, unit).toBeLessThan(1000);
+      within(1000, () => redactString(input), unit);
     }
-  });
+  }, 60_000);
 });
 
 describe('chained scrub, encoded structure and nested escapes (DEP-050)', () => {
@@ -603,11 +621,9 @@ describe('chained scrub, encoded structure and nested escapes (DEP-050)', () => 
       j('-----BEGIN+', 'PRIVATE+KEY-----'),
     ]) {
       const input = unit.repeat(Math.ceil((1024 * 1024) / unit.length));
-      const started = performance.now();
-      redactString(input);
-      expect(performance.now() - started, unit).toBeLessThan(1000);
+      within(1000, () => redactString(input), unit);
     }
-  });
+  }, 60_000);
 });
 
 describe('multi-line, compound, markup and long-prefix secrets (DEP-050, T-004 follow-ups)', () => {
@@ -719,11 +735,9 @@ describe('multi-line, compound, markup and long-prefix secrets (DEP-050, T-004 f
   it('[DEP-050] scans 1 MB command-line users made of colons within the time budget', () => {
     for (const head of ['-u "', "-u '", '--user=', '-u "a', '--user "']) {
       const input = head + ':'.repeat(1024 * 1024);
-      const started = performance.now();
-      redactString(input);
-      expect(performance.now() - started, head).toBeLessThan(1000);
+      within(1000, () => redactString(input), head);
     }
-  });
+  }, 60_000);
 
   it('[DEP-050] scans 1 MB inputs of the multi-line, compound and markup shapes within the time budget', () => {
     for (const unit of [
@@ -747,11 +761,9 @@ describe('multi-line, compound, markup and long-prefix secrets (DEP-050, T-004 f
       'password=a&',
     ]) {
       const input = unit.repeat(Math.ceil((1024 * 1024) / unit.length));
-      const started = performance.now();
-      redactString(input);
-      expect(performance.now() - started, unit).toBeLessThan(1000);
+      within(1000, () => redactString(input), unit);
     }
-  });
+  }, 60_000);
 });
 
 describe('YAML sequence, blank-line, tag and markup variants (DEP-050, T-097 review)', () => {
@@ -828,11 +840,9 @@ describe('YAML sequence, blank-line, tag and markup variants (DEP-050, T-097 rev
       'a:\\/\\/b:',
     ]) {
       const input = unit.repeat(Math.ceil((5 * 1024 * 1024) / unit.length));
-      const started = performance.now();
-      redactString(input);
-      expect(performance.now() - started, unit).toBeLessThan(1000);
+      within(1000, () => redactString(input), unit);
     }
-  });
+  }, 60_000);
 });
 
 describe('neighbours of the review inputs (DEP-050, T-097 round 2)', () => {
@@ -910,11 +920,9 @@ describe('neighbours of the review inputs (DEP-050, T-097 round 2)', () => {
       'status_code ',
     ]) {
       const input = unit.repeat(Math.ceil((5 * 1024 * 1024) / unit.length));
-      const started = performance.now();
-      redactString(input);
-      expect(performance.now() - started, unit).toBeLessThan(1000);
+      within(1000, () => redactString(input), unit);
     }
-  });
+  }, 60_000);
 });
 
 describe('YAML node properties before a value (DEP-050, T-097 round 3)', () => {
@@ -960,11 +968,9 @@ describe('YAML node properties before a value (DEP-050, T-097 round 3)', () => {
   it('[DEP-050] scans 5 MB of node properties followed by comments within the time budget', () => {
     for (const unit of ['password: &a # c\n', 'password: &a #password: &a #', 'k: !t #\n  x\n']) {
       const input = unit.repeat(Math.ceil((5 * 1024 * 1024) / unit.length));
-      const started = performance.now();
-      redactString(input);
-      expect(performance.now() - started, unit).toBeLessThan(1000);
+      within(1000, () => redactString(input), unit);
     }
-  });
+  }, 60_000);
 
   it('[DEP-050] an empty query parameter is not read as a YAML anchor', () => {
     expect(redactString('?token=&user=bob')).toBe('?token=&user=bob');
@@ -980,9 +986,7 @@ describe('YAML node properties before a value (DEP-050, T-097 round 3)', () => {
       `password: &${'a'.repeat(2000)} `,
     ]) {
       const input = unit.repeat(Math.ceil((5 * 1024 * 1024) / unit.length));
-      const started = performance.now();
-      redactString(input);
-      expect(performance.now() - started, unit.slice(0, 20)).toBeLessThan(1000);
+      within(1000, () => redactString(input), unit.slice(0, 20));
     }
-  });
+  }, 60_000);
 });

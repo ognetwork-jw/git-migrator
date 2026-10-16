@@ -60,7 +60,7 @@ function fixture(pkgs: Record<string, Pkg>): string {
 describe('ARC-012 dependency-rule check', () => {
   it('[ARC-012] the real repository has no violations', () => {
     expect(checkDependencies(repoRoot)).toEqual([]);
-  });
+  }, 60_000);
 
   it('[ARC-012] fails when core imports another internal package (source import)', () => {
     const root = fixture({
@@ -134,7 +134,7 @@ describe('ARC-012 dependency-rule check', () => {
     expect(failing.stderr).toContain('[ARC-012]');
     const passing = spawnSync(process.execPath, [script, '--root', repoRoot], { encoding: 'utf8' });
     expect(passing.status).toBe(0);
-  });
+  }, 60_000);
 
   it('[ARC-012] catches dependencies hidden in the value (workspace/link/file paths, npm aliases)', () => {
     for (const value of ['workspace:../db', 'link:../db', 'file:../db', 'npm:@git-migrator/db@1']) {
@@ -287,7 +287,7 @@ describe('ARC-012 dependency-rule check', () => {
     expect(run('--root', join(empty, 'missing')).status).toBe(2);
     write(empty, 'pnpm-workspace.yaml', 'packages:\n  - nothing-here/*\n');
     expect(run('--root', empty).status).toBe(1);
-  });
+  }, 60_000);
 
   it('[ARC-012] flags packages outside pnpm-workspace.yaml and workspaces missing from the root tsconfig', () => {
     const root = fixture({ 'packages/core': {} });

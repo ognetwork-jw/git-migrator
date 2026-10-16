@@ -31,7 +31,7 @@ Never hand `privileged` to the RPC handler. The value `forActor` returns is not 
 
 ## Tests
 
-The tests need PostgreSQL 16 and create databases named `gm_t010_<random>` or `gm_test_<random>`, dropping them afterwards. The admin connection is `GM_TEST_DATABASE_URL` (default `postgresql://git_migrator:git_migrator@127.0.0.1:5432/postgres`; the role needs `CREATEDB`). Other packages use `createTestDatabase` from `@git-migrator/db/testing`.
+The tests need PostgreSQL 16 and create databases named `gm_t010_<random>` or `gm_test_<random>`, dropping them afterwards. The admin connection is `GM_TEST_DATABASE_URL` (default `postgresql://git_migrator:git_migrator@127.0.0.1:5432/postgres`; the role needs `CREATEDB`). Other packages use `createTestDatabase` from `@git-migrator/db/testing`. Teardown drops with `WITH (FORCE)` and, when that is refused because an autovacuum worker (which runs as the bootstrap superuser) is on the database and the role is not a superuser, falls back to a plain `DROP DATABASE`, which cancels autovacuum itself; use `dropDatabaseNamed` for databases created by hand.
 
 `src/policy.test.ts` drives every model through every role: reads, plus create, update and delete, expecting a denial for everything outside API-012. The Azure Flexible Server needs `pg_trgm` in `azure.extensions` for step 1.
 

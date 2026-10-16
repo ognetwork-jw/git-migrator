@@ -1,6 +1,9 @@
 import { createLogger } from '@git-migrator/observability';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, inject, it } from 'vitest';
 import { betterAuthLogger, MAX_LOGGED_TEXT, scrubEmails } from './logger.ts';
+
+/** Wall-clock budgets scale with GM_TEST_TIME_FACTOR (ADR-0507). */
+const budget = (ms: number): number => ms * inject('timeFactor');
 
 interface Line {
   msg?: string;
@@ -25,7 +28,7 @@ describe('Better Auth logger adapter (DEP-050)', () => {
     const huge = `${'a'.repeat(50_000)}@${'b'.repeat(50_000)}`;
     const started = performance.now();
     log.log('error', huge, { callbackURL: huge }, huge);
-    expect(performance.now() - started).toBeLessThan(200);
+    expect(performance.now() - started).toBeLessThan(budget(200));
     expect(lines).toHaveLength(1);
     expect(lines[0]?.length).toBeLessThan(4 * MAX_LOGGED_TEXT);
     expect(lines[0]).toContain('[truncated ');
@@ -34,7 +37,7 @@ describe('Better Auth logger adapter (DEP-050)', () => {
   it('[DEP-050] scrubEmails itself is linear on a long run of address characters', () => {
     const started = performance.now();
     scrubEmails(`${'a'.repeat(50_000)}@${'b'.repeat(50_000)}.${'c'.repeat(50_000)}`);
-    expect(performance.now() - started).toBeLessThan(200);
+    expect(performance.now() - started).toBeLessThan(budget(200));
     expect(scrubEmails('mail ada@example.test now')).toBe('mail [REDACTED] now');
     expect(scrubEmails('see https://x.example/u/ada@example.test/z')).toBe(
       'see https://x.example/u/[REDACTED]/z',
@@ -88,7 +91,7 @@ describe('Better Auth logger adapter (DEP-050)', () => {
     }
     const started = performance.now();
     expect(() => log.log('info', 'graph', self, shared)).not.toThrow();
-    expect(performance.now() - started).toBeLessThan(200);
+    expect(performance.now() - started).toBeLessThan(budget(200));
     const [first] = (parsed()[0]?.args ?? []) as [Record<string, unknown>];
     expect(Object.values(first)).toEqual(Array(10).fill('[Circular]'));
   });

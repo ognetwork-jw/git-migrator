@@ -257,61 +257,88 @@ export async function checkIdempotent(
   expect(final.data).toEqual(settled.data);
 }
 
+/**
+ * Every contract test starts its own fake and drives it over HTTP, and the normalisation test does
+ * so once per scenario. These files also run in the unit project (ADR-0475), whose default timeout
+ * is 5 s; give each test room so a loaded machine does not fail it (ADR-0507).
+ */
+const CONTRACT_TIMEOUT_MS = 60_000;
+
 export function defineAdapterContract<W>(contract: AdapterContract<W>): void {
   const readable = Object.entries(contract.capabilities.facets)
     .filter(([, cap]) => cap?.read)
     .map(([facet]) => facet as FacetKey);
 
   describe(`adapter contract: ${contract.name}`, () => {
-    it('[TST-015] every readable Facet has a contract scenario and a driver', async () => {
-      const connection = await contract.connect();
-      const covered = new Set(contract.scenarios.map((s) => s.facet));
-      for (const facet of readable) {
-        expect(covered.has(facet), `${facet} has a scenario`).toBe(true);
-        expect(connection.conn.facets[facet], `${facet} has a driver`).toBeDefined();
-      }
-      for (const facet of covered) expect(readable).toContain(facet);
-    });
+    it(
+      '[TST-015] every readable Facet has a contract scenario and a driver',
+      async () => {
+        const connection = await contract.connect();
+        const covered = new Set(contract.scenarios.map((s) => s.facet));
+        for (const facet of readable) {
+          expect(covered.has(facet), `${facet} has a scenario`).toBe(true);
+          expect(connection.conn.facets[facet], `${facet} has a driver`).toBeDefined();
+        }
+        for (const facet of covered) expect(readable).toContain(facet);
+      },
+      CONTRACT_TIMEOUT_MS,
+    );
 
-    it('[TST-015] a Facet is writable exactly when its driver has apply', async () => {
-      const connection = await contract.connect();
-      for (const facet of readable) {
-        const writable = contract.capabilities.facets[facet]?.write === true;
-        const driver = connection.conn.facets[facet];
-        expect(typeof driver?.apply === 'function', `${facet}: apply iff write`).toBe(writable);
-      }
-    });
+    it(
+      '[TST-015] a Facet is writable exactly when its driver has apply',
+      async () => {
+        const connection = await contract.connect();
+        for (const facet of readable) {
+          const writable = contract.capabilities.facets[facet]?.write === true;
+          const driver = connection.conn.facets[facet];
+          expect(typeof driver?.apply === 'function', `${facet}: apply iff write`).toBe(writable);
+        }
+      },
+      CONTRACT_TIMEOUT_MS,
+    );
 
-    it('[TST-015] normalisations are limited to the allow-list and counted per adapter', async () => {
-      const used: Record<string, number> = {};
-      for (const scenario of contract.scenarios) {
-        const prepared = await scenario.prepare(await contract.connect());
-        const id = prepared.normalisation?.id;
-        if (id) used[id] = (used[id] ?? 0) + 1;
-      }
-      expect(used).toEqual(contract.normalisations);
-    });
+    it(
+      '[TST-015] normalisations are limited to the allow-list and counted per adapter',
+      async () => {
+        const used: Record<string, number> = {};
+        for (const scenario of contract.scenarios) {
+          const prepared = await scenario.prepare(await contract.connect());
+          const id = prepared.normalisation?.id;
+          if (id) used[id] = (used[id] ?? 0) + 1;
+        }
+        expect(used).toEqual(contract.normalisations);
+      },
+      CONTRACT_TIMEOUT_MS,
+    );
 
     for (const scenario of contract.scenarios) {
       const writable = contract.capabilities.facets[scenario.facet]?.write === true;
       const label = `${scenario.facet}: ${scenario.name}`;
 
       if (!writable) {
-        it(`[TST-015] ${label} reads valid and stable (read-only)`, async () => {
-          const connection = await contract.connect();
-          const prepared = await scenario.prepare(connection);
-          expect(prepared.desired).toBeUndefined();
-          await checkReadOnly(connection, scenario.facet, prepared);
-        });
+        it(
+          `[TST-015] ${label} reads valid and stable (read-only)`,
+          async () => {
+            const connection = await contract.connect();
+            const prepared = await scenario.prepare(connection);
+            expect(prepared.desired).toBeUndefined();
+            await checkReadOnly(connection, scenario.facet, prepared);
+          },
+          CONTRACT_TIMEOUT_MS,
+        );
         continue;
       }
 
       const run = scenario.knownDefect ? it.fails : it;
-      run(`[TST-015] ${label} read -> apply -> read is equal`, async () => {
-        const connection = await contract.connect();
-        const prepared = await scenario.prepare(connection);
-        await checkRoundTrip(connection, scenario.facet, prepared);
-      });
+      run(
+        `[TST-015] ${label} read -> apply -> read is equal`,
+        async () => {
+          const connection = await contract.connect();
+          const prepared = await scenario.prepare(connection);
+          await checkRoundTrip(connection, scenario.facet, prepared);
+        },
+        CONTRACT_TIMEOUT_MS,
+      );
 
       run(
         `[TST-015] ${label} applying the same document twice yields zero records the second time`,
@@ -320,6 +347,7 @@ export function defineAdapterContract<W>(contract: AdapterContract<W>): void {
           const prepared = await scenario.prepare(connection);
           await checkIdempotent(connection, scenario.facet, prepared);
         },
+        CONTRACT_TIMEOUT_MS,
       );
     }
   });
