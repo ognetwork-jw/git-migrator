@@ -71,6 +71,9 @@ describe('[AUTH-050] CSV parsing', () => {
     expect(checkRow('s', 'not-an-email', 'invite')).toEqual(['target_not_email']);
     expect(checkRow('s', 'x', 'exclude')).toEqual(['target_not_allowed']);
     expect(checkRow('s', 'a@b.test', 'invite')).toEqual([]);
+    // An apostrophe is valid in the local part (RFC 5322 atext), never in the domain.
+    expect(checkRow('s', "o'brien@b.test", 'invite')).toEqual([]);
+    expect(checkRow('s', "a@o'b.test", 'invite')).toEqual(['target_not_email']);
     expect(checkRow('s', '', 'exclude')).toEqual([]);
   });
 
