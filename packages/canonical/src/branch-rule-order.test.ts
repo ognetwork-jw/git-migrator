@@ -61,6 +61,20 @@ describe('branch-rule apply order (ADR-0113)', () => {
     expect(branchPatternIncludes('ma?n', 'main')).toBeUndefined();
   });
 
+  it('[FAC-BRR-003] a final or glued `**` is not read as multi-segment', () => {
+    // Only a whole, non-final `**` segment spans segments on the target (ADR-0110).
+    for (const p of ['a/**', '**', 'a**', '**a/*', 'a/***/b']) {
+      expect(branchPatternIncludes(p, 'a/b/c'), p).toBeUndefined();
+      expect(branchPatternIncludes('**/*', p), p).toBeUndefined();
+    }
+    expect(branchPatternCovers('a/**', 'a/b/c')).toBe(false);
+    expect(branchPatternCovers('a**', 'a*')).toBe(false);
+    expect(branchPatternCovers('a*', 'a**')).toBe(false);
+    expect(
+      branchRuleApplyOrder([{ pattern: 'a**' }, { pattern: 'a*' }]).map((r) => r.pattern),
+    ).toEqual(['a*', 'a**']);
+  });
+
   it('[FAC-BRR-003] the apply order is topological: `*hotfix` before `*` despite equal prefixes', () => {
     expect(
       branchRuleApplyOrder([{ pattern: '*' }, { pattern: '*hotfix' }]).map((r) => r.pattern),

@@ -2,7 +2,8 @@
  * Branch-rule patterns as the target applies them (docs/adr/0113-branch-rule-overlap.md).
  *
  * Patterns are in the target dialect of ADR-0110: `*` stays inside one path segment and a
- * whole-segment `**` matches zero or more segments. The target applies one rule per branch: a rule
+ * whole, non-final `**` segment matches zero or more segments. Any other `**` (final, or glued to
+ * other characters) is left uninterpreted, as `convertPattern` never produces one. The target applies one rule per branch: a rule
  * naming the exact branch wins, and among wildcard rules (any of `*`, `?`, `[`, `]`, `\`) the one
  * created first wins. A writer therefore creates rules in `branchRuleApplyOrder`, which puts every
  * rule before the wildcard rules that include it.
@@ -72,12 +73,23 @@ function segmentsInclude(
 }
 
 /**
+ * A `**` that is not a whole, non-final segment (`a/**`, `a**`, `***`) does not span segments on
+ * the target, and `convertPattern` never produces one, so it is not interpreted here.
+ */
+function hasUninterpretedDoubleStar(segments: readonly string[]): boolean {
+  return segments.some((s, i) => s.includes('**') && (s !== '**' || i === segments.length - 1));
+}
+
+/**
  * Does `wide` match every branch that `narrow` matches? Sound but conservative: `true` is proven,
  * `false` means "not shown", and `undefined` means a pattern uses operators not interpreted here.
  */
 export function branchPatternIncludes(wide: string, narrow: string): boolean | undefined {
   if (UNINTERPRETED.test(wide) || UNINTERPRETED.test(narrow)) return undefined;
-  return segmentsInclude(wide.split('/'), 0, narrow.split('/'), 0);
+  const w = wide.split('/');
+  const n = narrow.split('/');
+  if (hasUninterpretedDoubleStar(w) || hasUninterpretedDoubleStar(n)) return undefined;
+  return segmentsInclude(w, 0, n, 0);
 }
 
 /** `wide` is a different pattern that provably matches every branch `narrow` matches. */
