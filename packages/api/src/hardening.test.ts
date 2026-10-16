@@ -524,3 +524,141 @@ describe('[AUTH-021] the RPC mount, round 3', () => {
     expect(safeErrorFields('a string')).toEqual({});
   });
 });
+
+describe('[API-011] the RPC mount maps database failures (ADR-0202)', () => {
+  beforeAll(async () => {
+    // A real database error on the real facade path: inserting a Wave whose name asks for it
+    // raises that SQLSTATE.
+    await t.db.pool.query(`
+      CREATE OR REPLACE FUNCTION app.gm_test_raise() RETURNS trigger AS $$
+      BEGIN
+        IF NEW.name LIKE 'gm-raise-%' THEN
+          RAISE EXCEPTION 'raised for a test' USING ERRCODE = substr(NEW.name, 10, 5);
+        END IF;
+        RETURN NEW;
+      END $$ LANGUAGE plpgsql;
+      CREATE TRIGGER gm_test_raise BEFORE INSERT ON app.wave
+        FOR EACH ROW EXECUTE FUNCTION app.gm_test_raise();`);
+  });
+  afterAll(async () => {
+    await t.db.pool.query('DROP TRIGGER IF EXISTS gm_test_raise ON app.wave');
+  });
+
+  it('[API-011] a deadlock or serialization failure in an RPC call, also in $transaction/sequential, is a 409 conflict problem', async () => {
+    const { jar } = await signInAdmin();
+    await expectProblem(
+      await call('/api/model/wave/create', {
+        method: 'POST',
+        jar,
+        body: { data: { name: 'gm-raise-40P01' } },
+      }),
+      409,
+      'conflict',
+    );
+    await expectProblem(
+      await call('/api/model/$transaction/sequential', {
+        method: 'POST',
+        jar,
+        body: [{ model: 'Wave', op: 'create', args: { data: { name: 'gm-raise-40001' } } }],
+      }),
+      409,
+      'conflict',
+    );
+    // Any other database error keeps ZenStack's answer.
+    const other = await call('/api/model/wave/create', {
+      method: 'POST',
+      jar,
+      body: { data: { name: 'gm-raise-22023' } },
+    });
+    expect(other.status).toBe(400);
+  });
+
+  it('[API-011] an unreachable database on the RPC mount is a 503 not_ready problem', async () => {
+    const { jar, email } = await signInAdmin();
+    const actor = await t.db.privileged.actor.findFirstOrThrow({ where: { email } });
+    const dead = createDb({ connectionString: 'postgresql://gm@127.0.0.1:1/none' });
+    try {
+      const down = createApiApp({
+        events: inertEvents(),
+        db: { ...t.db, forActor: () => dead.forActor(actor) },
+        auth: service,
+        publicUrl: ORIGIN,
+      });
+      const res = await down.request(`${ORIGIN}/api/model/wave/findMany`, {
+        headers: { cookie: jar.header() },
+      });
+      expect(res.headers.get('retry-after')).toBe('5');
+      await expectProblem(res, 503, 'not_ready');
+    } finally {
+      await dead.close();
+    }
+  });
+
+  it('[API-011] an unreachable database under /api/v1 is a 503 not_ready problem', async () => {
+    const dead = createDb({ connectionString: 'postgresql://gm@127.0.0.1:1/none' });
+    try {
+      const down = createApiApp({
+        events: inertEvents(),
+        db: dead,
+        auth: service,
+        publicUrl: ORIGIN,
+      });
+      const res = await down.request(`${ORIGIN}/api/v1/me`, {
+        headers: { authorization: 'Bearer gm_abcdefgh_abcdefghijklmnopqrstuvwxyzABCDEF' },
+      });
+      expect(res.headers.get('retry-after')).toBe('5');
+      await expectProblem(res, 503, 'not_ready');
+    } finally {
+      await dead.close();
+    }
+  });
+
+  it('[AUTH-021] a 5xx from the RPC handler is logged with its model and operation', async () => {
+    const { jar, email } = await signInAdmin();
+    const actor = await t.db.privileged.actor.findFirstOrThrow({ where: { email } });
+    const real = t.db.forActor(actor);
+    const records: unknown[][] = [];
+    const broken = createApiApp({
+      events: inertEvents(),
+      db: {
+        ...t.db,
+        forActor: () =>
+          ({
+            ...real,
+            wave: { findMany: () => Promise.reject(new Error('leak-me')) },
+          }) as never,
+      },
+      auth: service,
+      publicUrl: ORIGIN,
+      logger: { error: (...a: unknown[]) => records.push(a) } as never,
+    });
+    const res = await broken.request(`${ORIGIN}/api/model/wave/findMany`, {
+      headers: { cookie: jar.header() },
+    });
+    expect(res.status).toBe(500);
+    expect(records).toEqual([
+      [{ status: 500, model: 'Wave', operation: 'findMany' }, 'RPC request failed'],
+    ]);
+  });
+});
+
+describe('[API-011] isUnavailable', () => {
+  it('[API-011] recognises name resolution, routing and server-side connection failures, on the error or its cause', async () => {
+    const { isUnavailable } = await import('./app.ts');
+    for (const code of [
+      'ENOTFOUND',
+      'EAI_AGAIN',
+      'EHOSTUNREACH',
+      'ENETUNREACH',
+      '53300',
+      '08P01',
+      '57P04',
+    ]) {
+      expect(isUnavailable({ code }), code).toBe(true);
+      expect(isUnavailable({ dbErrorCode: code }), code).toBe(true);
+      expect(isUnavailable(new Error('x', { cause: { code } })), code).toBe(true);
+    }
+    expect(isUnavailable({ code: '23505' })).toBe(false);
+    expect(isUnavailable(new Error('x'))).toBe(false);
+  });
+});

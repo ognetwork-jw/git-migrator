@@ -79,17 +79,28 @@ export function isRetryableConflict(error: unknown): boolean {
 }
 
 const UNAVAILABLE_CODES = new Set([
+  // Socket and name resolution failures of the driver.
   'ECONNREFUSED',
   'ECONNRESET',
   'ETIMEDOUT',
   'EPIPE',
+  'ENOTFOUND',
+  'EAI_AGAIN',
+  'EHOSTUNREACH',
+  'ENETUNREACH',
+  // admin_shutdown, crash_shutdown, cannot_connect_now, database_dropped.
   '57P01',
   '57P02',
   '57P03',
+  '57P04',
+  // too_many_connections.
+  '53300',
+  // Connection exceptions, protocol_violation included.
   '08000',
   '08001',
   '08003',
   '08006',
+  '08P01',
 ]);
 
 /** True for connection-level database failures (refused, reset, timed out, shut down), on the error or its causes. */
@@ -121,6 +132,20 @@ export function isTimeout(error: unknown): boolean {
     current = e.cause;
   }
   return false;
+}
+
+const MODEL_NAMES: readonly string[] = Object.keys(schema.models);
+
+/** The model and operation of an RPC path, for logs: only a schema model and a short identifier. */
+function rpcTarget(model: string | undefined, operation: string | undefined) {
+  const out: { model?: string; operation?: string } = {};
+  const known =
+    model === '$transaction'
+      ? model
+      : MODEL_NAMES.find((name) => name.toLowerCase() === model?.toLowerCase());
+  if (known !== undefined) out.model = known;
+  if (operation !== undefined && /^[A-Za-z]{1,32}$/.test(operation)) out.operation = operation;
+  return out;
 }
 
 export const API_TITLE = 'git-migrator API';
@@ -168,10 +193,26 @@ export function createApiApp(deps: ApiDeps) {
         }
       }
       const response = await rpc.handleRequest(request);
-      if (response.status >= 500) {
-        const error = (response.body as { error?: unknown } | undefined)?.error;
+      // ZenStack answers a failed query with a 400 that names the SQLSTATE (or driver code). The
+      // retryable ones keep the meaning they have under /api/v1 (ADR-0202 item 4).
+      const error = (response.body as { error?: { reason?: unknown } } | undefined)?.error;
+      // Only a database failure or a 5xx is inspected: other 4xx messages can echo the request.
+      const failed = response.status >= 500 || error?.reason === 'db-query-error';
+      if (failed && isRetryableConflict(error)) {
+        return { status: 409, body: problemBody('conflict') };
+      }
+      if (failed && isUnavailable(error)) {
         deps.logger?.error(
-          { status: response.status, ...safeErrorFields(error) },
+          { ...safeErrorFields(error), ...rpcTarget(model, operation) },
+          'database unavailable',
+        );
+        return { status: 503, body: problemBody('not_ready') };
+      }
+      if (response.status >= 500) {
+        // The body is ZenStack's `{ error: { message } }`: the message is free text, so only the
+        // model and operation of the request are logged.
+        deps.logger?.error(
+          { status: response.status, ...rpcTarget(model, operation) },
           'RPC request failed',
         );
         return { status: 500, body: problemBody('internal_error') };
@@ -243,14 +284,17 @@ export function createApiApp(deps: ApiDeps) {
   app.all('/api/model/*', async (c, next) => {
     const response = (await rpcHandler(c, next)) as Response;
     // createHonoHandler sends JSON; the problems this mount makes itself keep their media type.
-    if (response.status !== 404 && response.status !== 500) return response;
+    if (![404, 409, 500, 503].includes(response.status)) return response;
     const text = await response.clone().text();
     try {
       const body = JSON.parse(text) as { type?: unknown };
       if (typeof body.type === 'string' && body.type.startsWith(PROBLEM_BASE)) {
         return new Response(text, {
           status: response.status,
-          headers: { 'content-type': PROBLEM_CONTENT_TYPE },
+          headers: {
+            'content-type': PROBLEM_CONTENT_TYPE,
+            ...(response.status === 503 ? { 'retry-after': '5' } : {}),
+          },
         });
       }
     } catch {
