@@ -209,6 +209,10 @@ export async function withSessionLock<T>(
   const pollMs = options.pollMs ?? 200;
   const client = await pool.connect();
   let destroy: Error | undefined;
+  // One abort listener for the whole wait: it cuts the current poll's sleep short.
+  let wake: (() => void) | undefined;
+  const onAbort = (): void => wake?.();
+  options.signal?.addEventListener('abort', onAbort, { once: true });
   try {
     const started = Date.now();
     for (;;) {
@@ -228,15 +232,13 @@ export async function withSessionLock<T>(
       }
       await new Promise<void>((resolve) => {
         const timer = setTimeout(resolve, pollMs);
-        options.signal?.addEventListener(
-          'abort',
-          () => {
-            clearTimeout(timer);
-            resolve();
-          },
-          { once: true },
-        );
+        wake = () => {
+          clearTimeout(timer);
+          resolve();
+        };
+        if (options.signal?.aborted) wake(); // aborted during the query
       });
+      wake = undefined;
     }
     try {
       return await fn();
@@ -248,6 +250,7 @@ export async function withSessionLock<T>(
       }
     }
   } finally {
+    options.signal?.removeEventListener('abort', onAbort);
     client.release(destroy);
   }
 }

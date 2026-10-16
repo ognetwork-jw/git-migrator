@@ -152,7 +152,7 @@ export interface KeepRunLeaseOptions {
   readonly log?: Logger;
   readonly renewMs?: number;
   readonly localLimitMs?: number;
-  /** Test seam. */
+  /** Monotonic milliseconds, so a wall-clock step cannot move the local limit. Test seam. */
   readonly now?: () => number;
 }
 
@@ -168,7 +168,7 @@ export async function keepRunLease(
 ): Promise<RunLeaseHandle | undefined> {
   const { pool, runId, log } = options;
   const token = newLeaseToken(options.workerId, options.jobId);
-  const now = options.now ?? Date.now;
+  const now = options.now ?? (() => performance.now());
   const limit = options.localLimitMs ?? RUN_LEASE_LOCAL_LIMIT_MS;
   const claimSentAt = now();
   const claimed =

@@ -4,7 +4,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { type Config, resolveConfig } from '@git-migrator/config';
 import { adminDatabaseUrl, createTestDatabase, type TestDatabase } from '@git-migrator/db/testing';
-import { migrateBullmqSchema } from '@git-migrator/jobs';
+import { JobRuntime, migrateBullmqSchema } from '@git-migrator/jobs';
 import { createLogger } from '@git-migrator/observability';
 import pg from 'pg';
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
@@ -167,6 +167,41 @@ describe('worker entrypoint', () => {
     await start('large');
     const { existsSync } = await import('node:fs');
     expect(existsSync(join(scratch, 'stale-run'))).toBe(false);
+  }, 60_000);
+
+  it('[JOB-015] the start-up scratch sweep ends before the Workers take a job', async () => {
+    const { existsSync } = await import('node:fs');
+    await mkdir(join(scratch, 'stale-before-jobs'));
+    const longAgo = new Date(Date.now() - 3 * 86_400_000);
+    await utimes(join(scratch, 'stale-before-jobs'), longAgo, longAgo);
+    // A job waiting before the pod starts is taken as soon as the Workers run.
+    const producer = new JobRuntime({
+      connectionString: t.connectionString,
+      log,
+      workerCount: 0,
+      telemetry: false,
+    });
+    await producer.enqueue('maintenance', 'maintenance.prune', {});
+    await producer.close();
+    let seenByJob: boolean | undefined;
+    const worker = await startWorker({
+      config,
+      env,
+      role: 'standard',
+      log,
+      healthPort: 0,
+      metricsPort: false,
+      leaderIntervalMs: 100,
+      leaderLockName: 'worker-sweep-order',
+      handlers: {
+        'maintenance.prune': async () => {
+          seenByJob ??= existsSync(join(scratch, 'stale-before-jobs'));
+        },
+      },
+    });
+    handles.push(worker);
+    await until(() => seenByJob !== undefined);
+    expect(seenByJob).toBe(false);
   }, 60_000);
 
   it('[DEP-050] serves metrics when a metrics port is given and exposes the provider environment', async () => {
@@ -452,6 +487,34 @@ describe('worker process life cycle (DEP-030, ADR-0213)', () => {
       expect(exits).toEqual([]);
       await vi.advanceTimersByTimeAsync(2);
       expect(exits).toEqual([1]);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('[DEP-030] SIGTERM once the Workers take jobs drains without the 30 s start-up exit', async () => {
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'Date'] });
+    try {
+      const { exits, sigterm, options } = harness();
+      const running = runWorkerProcess({
+        ...options,
+        // The Workers run, then start-up is aborted: closing them waits for a 5-minute step.
+        start: (signal, workersStarted) => {
+          workersStarted();
+          return new Promise((_resolve, reject) => {
+            signal.addEventListener('abort', () =>
+              setTimeout(() => reject(new Error('aborted')), 300_000),
+            );
+          });
+        },
+      });
+      await vi.advanceTimersByTimeAsync(1);
+      sigterm();
+      await vi.advanceTimersByTimeAsync(STARTUP_EXIT_MS + 1_000);
+      expect(exits).toEqual([]); // no forced exit while jobs drain
+      await vi.advanceTimersByTimeAsync(300_000);
+      await running;
+      expect(exits).toEqual([0]);
     } finally {
       vi.useRealTimers();
     }

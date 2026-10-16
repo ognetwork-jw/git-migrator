@@ -633,8 +633,9 @@ export function rollbackTargetStep(): StepDefinition<MigrationServices> {
       /**
        * Every write to an adopted target is preceded by a read of the name it goes to: the same
        * provider id in the organization, or the lookup again. A write that is still answered with
-       * a redirect or `not_found` takes the same path, so it never ends in a bare `invalid` or
-       * `not_found` (ADR-0465 rounds 4 and 5).
+       * a redirect, or with `not_found` once the repository is no longer there under its id, takes
+       * the same path, so a moved repository never ends in a bare `invalid` or `not_found`
+       * (ADR-0465 rounds 4 and 5).
        */
       const writeToTarget = async <T>(write: () => Promise<T>): Promise<T> => {
         if (target && repoRef) {
@@ -645,6 +646,13 @@ export function rollbackTargetStep(): StepDefinition<MigrationServices> {
           return await write();
         } catch (error) {
           if (!target || !(isRedirect(error) || isNotFound(error))) throw error;
+          if (repoRef && !isRedirect(error)) {
+            // A sub-resource write (an environment, a collaborator, a team grant) answers
+            // `not_found` for that resource: with the repository still there under its id, the
+            // error is reported as it is, not as a repository that moved.
+            const now = await connection.inventory.getRepository(repoRef);
+            if (now !== null && now.providerId === repoRef.providerId) throw error;
+          }
           return moved();
         }
       };

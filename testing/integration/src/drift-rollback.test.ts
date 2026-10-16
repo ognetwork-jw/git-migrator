@@ -107,6 +107,11 @@ const faults: {
    * repository goes away under a write.
    */
   goneDuringUndo?: string;
+  /**
+   * The first driver `undo` of this Facet fails `not_found` while the repository stays: a write to
+   * a sub-resource (an environment, a collaborator, a team grant) that is not there.
+   */
+  subResourceMissingDuringUndo?: string;
 } = {};
 
 const delayed: { runId: string; delayMs: number | undefined }[] = [];
@@ -370,6 +375,14 @@ routes:
                         faults.goneDuringUndo = undefined;
                         const repo = fakes.github?.state.findRepo(ORG, target.repository.slug);
                         if (repo) fakes.github?.state.deleteRepository(repo);
+                        throw new AdapterError({
+                          code: 'not_found',
+                          provider: 'github',
+                          message: 'Not Found',
+                        });
+                      }
+                      if (faults.subResourceMissingDuringUndo === key) {
+                        faults.subResourceMissingDuringUndo = undefined;
                         throw new AdapterError({
                           code: 'not_found',
                           provider: 'github',
@@ -1371,6 +1384,31 @@ describe('rollback never takes "not found" for "gone" (LIF-077)', () => {
 });
 
 describe('what rollback cannot revert is reported, not hidden (LIF-077)', () => {
+  it('[LIF-077] a sub-resource write answered not_found while the target is still there is reported as it is, not as a moved repository', async () => {
+    const repo = await addSourceRepo({ variables: ['SUB_A'] });
+    const id = repo.migration.id;
+    await createTarget(repo.target);
+    expect(
+      (await perform(id, 'migrate', { options: { skipSourceReadOnly: true } })).result,
+    ).toMatchObject({ status: 'succeeded' });
+    faults.subResourceMissingDuringUndo = 'variables';
+
+    const { runId, result } = await perform(id, 'rollback', { confirm: confirmOf(repo.target) });
+    expect(faults.subResourceMissingDuringUndo).toBeUndefined();
+    expect(result).toEqual({ outcome: 'finished', status: 'failed' });
+    const step = await t.db.privileged.runStep.findFirstOrThrow({
+      where: { runId, stepKey: 'rollback.target' },
+    });
+    expect(step.error).toMatchObject({ code: 'not_found' });
+    expect(
+      await t.db.privileged.manualTask.count({
+        where: { migrationId: id, code: 'repository-settings.target-unreadable' },
+      }),
+    ).toBe(0);
+    expect(fakes.github?.state.findRepo(ORG, repo.target)).toBeDefined();
+    expect((await migration(id)).status).toBe('partial');
+  }, 600_000);
+
   it('[LIF-077] a recovered write (no exact reverse) keeps an adopted rollback from completing: the Run fails rollback.incomplete and the Migration is partial', async () => {
     const repo = await addSourceRepo();
     const id = repo.migration.id;

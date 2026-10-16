@@ -734,6 +734,17 @@ describe('[LIF-070] a step resumed after the worker died between the write and i
     expect(s.applyCalls).toHaveLength(1);
   });
 
+  it('[LIF-021] settling an open lock intent marks the Analysis stale, with or without a baseline', async () => {
+    for (const baseline of [[], null]) {
+      const h = new Harness(t);
+      const { migrationId } = await seed(h);
+      const before = (await h.migration(migrationId)).staleGeneration;
+      await resume(stub(), { baseline, existing: { h, migrationId } });
+      // The Analysis may have withheld branch-rules and repository-settings while it was open.
+      expect((await h.migration(migrationId)).staleGeneration).toBeGreaterThan(before);
+    }
+  });
+
   it('[LIF-070] a lock that appeared after the baseline is recorded as undoable (not inert, flagged possiblyFramework) and the Step fails for a check', async () => {
     const s = stub();
     s.inspected = [flagged(RESTRICTION)];

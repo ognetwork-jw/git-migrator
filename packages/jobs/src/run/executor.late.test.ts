@@ -174,6 +174,29 @@ describe('[LIF-002] a write that lands after the Run finished', () => {
     expect(migration.staleGeneration).toBeGreaterThan(before);
   });
 
+  it('[LIF-049] a late record to a cancelled verify Run, whose status ignores Mutations, adds the blocker and marks the Analysis stale', async () => {
+    const h = new Harness(t);
+    h.registry.register('verify', {
+      steps: () => [
+        step('verify', async () => {
+          throw rateLimited();
+        }),
+      ],
+    });
+    const { world, runId } = await h.queuedRun('verify');
+    expect((await h.execute(runId)).outcome).toBe('delayed');
+    expect(await requestRunCancel(h.db, runId)).toBe('cancelled');
+    expect((await h.migration(world.migrationId)).status).toBe('analyzed');
+    const before = (await h.migration(world.migrationId)).staleGeneration;
+
+    await lateWrite(h, runId, world.migrationId, world.routeId);
+
+    const migration = await h.migration(world.migrationId);
+    expect(migration.status).toBe('analyzed');
+    expect(migration.blockerCodes).toEqual(['run.late-mutation']);
+    expect(migration.staleGeneration).toBeGreaterThan(before);
+  });
+
   it('[LIF-049] Q1: a late record from a failed Run after a successful rollback is flagged; the status stays rolled_back', async () => {
     const h = new Harness(t);
     h.registry.register('migrate', {
@@ -535,5 +558,77 @@ describe('[LIF-002] a Run whose only records were not applied', () => {
     expect(await running).toEqual({ outcome: 'finished', status: 'cancelled' });
     expect((await h.run(runId)).hasMutations).toBe(false);
     expect((await h.migration(world.migrationId)).status).toBe('analyzed');
+  });
+
+  /** A Run cancelled while its only record is an open intent: the Migration is `partial`. */
+  async function cancelledWithOpenIntent(h: Harness) {
+    let intentId = '';
+    h.registry.register('migrate', {
+      steps: () => [
+        step('target.ensure-repository', async (ctx) => {
+          intentId = await ctx.ledger.intend(
+            { side: 'target', origin: 'framework' },
+            record('repo'),
+          );
+          throw rateLimited();
+        }),
+      ],
+    });
+    const made = await h.queuedRun();
+    expect((await h.execute(made.runId)).outcome).toBe('delayed');
+    expect(await requestRunCancel(h.db, made.runId)).toBe('cancelled');
+    expect((await h.migration(made.world.migrationId)).status).toBe('partial');
+    return { ...made, intentId };
+  }
+
+  /** A straggler worker settles the intent after the Run ended. */
+  const lateNotApplied = (
+    h: Harness,
+    runId: string,
+    world: { migrationId: string; routeId: string },
+    id: string,
+  ) =>
+    ledgerTransaction(
+      h.db,
+      runId,
+      (tx) =>
+        confirmLedger(
+          tx,
+          { runId, migrationId: world.migrationId, routeId: world.routeId },
+          id,
+          'not_applied',
+          undefined,
+          new Date(),
+        ),
+      { log: silentLog },
+    );
+
+  it('[LIF-002] a late not_applied for the only intent of a cancelled Run returns the Migration to its saved status', async () => {
+    const h = new Harness(t);
+    const { world, runId, intentId } = await cancelledWithOpenIntent(h);
+    await lateNotApplied(h, runId, world, intentId);
+    expect((await h.run(runId)).hasMutations).toBe(false);
+    const migration = await h.migration(world.migrationId);
+    expect(migration.status).toBe('analyzed');
+    expect(migration.blockerCodes).toEqual([]);
+  });
+
+  it('[LIF-049] a late not_applied that empties a cancelled Run when a later Run exists adds the blocker and marks the Analysis stale', async () => {
+    const h = new Harness(t);
+    const { world, runId, intentId } = await cancelledWithOpenIntent(h);
+    await h.db.migration.update({ where: { id: world.migrationId }, data: { readiness: 'ready' } });
+    await createRun(h.db, {
+      migrationId: world.migrationId,
+      kind: 'verify',
+      triggeredById: world.actorId,
+    });
+    const before = (await h.migration(world.migrationId)).staleGeneration;
+    await lateNotApplied(h, runId, world, intentId);
+    const migration = await h.migration(world.migrationId);
+    expect(migration.status).toBe('running'); // the later Run's status is not rewritten
+    expect(migration.runBlockers).toMatchObject([
+      { code: 'run.late-mutation', params: { runId, mutationId: intentId } },
+    ]);
+    expect(migration.staleGeneration).toBeGreaterThan(before);
   });
 });

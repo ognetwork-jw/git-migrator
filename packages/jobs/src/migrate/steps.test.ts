@@ -5,7 +5,7 @@ import { afterApply, applyWithLedger } from './facets.ts';
 import { MirrorRegistry } from './mirror.ts';
 import { createMigrationPlanner } from './plan.ts';
 import { chooseDefaultBranch } from './push.ts';
-import { branchesAboutToChange } from './repository.ts';
+import { branchesAboutToChange, warnIfProtectionLifted } from './repository.ts';
 import {
   type MigrationContext,
   MigrationLinks,
@@ -141,6 +141,34 @@ describe('[LIF-040] the Steps of a migration Run', () => {
     await expect(none[0]?.run({} as never)).rejects.toMatchObject({
       code: 'run.analysis_missing',
     });
+  });
+
+  it('[LIF-049] a fatal failure in step 3a itself, or in a push after it, names the lifted protection rules', async () => {
+    const world = await seedBasics(t.db.privileged);
+    const analysis = await t.db.privileged.analysis.create({
+      data: { migrationId: world.migrationId, readiness: 'ready', translation: {} },
+    });
+    const codes = ['target.lift-protection', 'git.push-lfs', 'git.push-refs', 'preflight'];
+    for (const [order, code] of codes.entries()) {
+      await t.db.privileged.planItem.create({
+        data: {
+          analysisId: analysis.id,
+          kind: 'step',
+          code,
+          facetKey: 'framework',
+          fieldPaths: [],
+          params: {},
+          order,
+        },
+      });
+    }
+    const planner = createMigrationPlanner({ db: t.db.privileged } as unknown as MigrationServices);
+    const steps = await planner.steps({
+      run: { analysisId: analysis.id },
+      migration: { scope: 'repository' },
+    } as never);
+    const withTask = steps.filter((s) => s.onFailed === warnIfProtectionLifted).map((s) => s.key);
+    expect(withTask).toEqual(['target.lift-protection', 'git.push-lfs', 'git.push-refs']);
   });
 
   it('[LIF-040] a Run with no Analysis plans one fatal Step that fails with run.analysis_missing', async () => {
@@ -364,6 +392,29 @@ describe('[LIF-046] the name lock around the target repository', () => {
       await holder.query('SELECT pg_advisory_unlock(hashtextextended($1, 0))', ['k-abort']);
       holder.release();
     }
+  });
+
+  it('[LIF-046] a long wait adds one abort listener, not one per poll, and removes it', async () => {
+    let polls = 0;
+    const client = {
+      // Busy for 20 polls, then free.
+      query: async () => ({ rows: [{ ok: ++polls > 20 }] }),
+      release: () => undefined,
+    };
+    const pool = { connect: async () => client } as never;
+    const abort = new AbortController();
+    const added = vi.spyOn(abort.signal, 'addEventListener');
+    const removed = vi.spyOn(abort.signal, 'removeEventListener');
+    await expect(
+      withSessionLock(pool, 'k-listeners', async () => 'ran', {
+        signal: abort.signal,
+        pollMs: 1,
+      }),
+    ).resolves.toBe('ran');
+    expect(polls).toBeGreaterThan(20);
+    expect(added).toHaveBeenCalledTimes(1);
+    expect(removed).toHaveBeenCalledTimes(1);
+    expect(removed.mock.calls[0]?.[1]).toBe(added.mock.calls[0]?.[1]);
   });
 
   it('[LIF-046] a connection whose unlock failed is destroyed, not returned to the pool, and the outcome of the work is kept', async () => {
