@@ -25,6 +25,7 @@ import {
   availableActions,
   forceAdoptKind,
   type HeaderAction,
+  legacyPlacementUnknown,
   targetFullName,
 } from './rules.ts';
 
@@ -207,7 +208,7 @@ export function HeaderActions({
   const undoFirst = migration.sourceReadOnlyApplied;
   // Legacy target writes of unknown place: every Run on the target, and the rollback, is confirmed
   // by typing the name that names the Route's place (ADR-0504).
-  const legacy = migration.targetPlacementUnknown === true;
+  const legacy = legacyPlacementUnknown(migration);
   const legacyName = legacy ? legacyConfirmationName(migration) : null;
   const legacyKind =
     legacy && plainKind && TARGET_KINDS.includes(plainKind) ? plainKind : undefined;

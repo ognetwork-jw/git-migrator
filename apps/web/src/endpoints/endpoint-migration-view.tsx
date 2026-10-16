@@ -62,6 +62,21 @@ export function runKindFor(
 }
 
 /**
+ * True while the legacy confirmation applies: the flag is set and no place is pinned. The server
+ * judges a pinned Migration by its pin, even with the flag still set after a failed legacy
+ * rollback (ADR-0504, ADR-0520).
+ */
+export function endpointLegacyUnknown(m: {
+  readonly targetPlacementUnknown?: boolean;
+  readonly targetPlacedEndpointId?: string | null;
+  readonly targetPlacedNamespaceId?: string | null;
+}): boolean {
+  return (
+    m.targetPlacementUnknown === true && !(m.targetPlacedEndpointId && m.targetPlacedNamespaceId)
+  );
+}
+
+/**
  * The readiness the page offers a Run by. A legacy Migration of unknown place is blocked only by
  * the placement blocker its typed confirmation answers, so its open pre tasks decide (ADR-0504).
  */
@@ -70,8 +85,10 @@ export function offeredEndpointReadiness(m: {
   readonly blockerCodes: readonly string[];
   readonly readinessCounts: { readonly preTasks?: number } | null;
   readonly targetPlacementUnknown?: boolean;
+  readonly targetPlacedEndpointId?: string | null;
+  readonly targetPlacedNamespaceId?: string | null;
 }): string | null {
-  if (m.targetPlacementUnknown !== true || m.readiness !== 'blocked') return m.readiness;
+  if (!endpointLegacyUnknown(m) || m.readiness !== 'blocked') return m.readiness;
   if (
     m.blockerCodes.length === 0 ||
     !m.blockerCodes.every((c) => c === PLACEMENT_UNKNOWN_BLOCKER)
@@ -273,7 +290,7 @@ export function EndpointMigrationView({ routeId }: { readonly routeId: string })
   const stale = data.analysisStaleAt !== null && new Date(data.analysisStaleAt) <= new Date();
   const kind = runKindFor(data.status, offeredEndpointReadiness(data), stale);
   // Target writes of unknown place: the Run waits for the Route's Namespace path (ADR-0504).
-  const legacyName = data.targetPlacementUnknown === true ? data.route.targetNamespacePath : null;
+  const legacyName = endpointLegacyUnknown(data) ? data.route.targetNamespacePath : null;
   const runLabel = (k: EndpointRunKind | undefined) =>
     k === 'run_anyway' ? t('action.runAnyway') : t('action.migrate');
 

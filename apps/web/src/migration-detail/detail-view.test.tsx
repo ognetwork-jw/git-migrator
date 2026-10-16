@@ -755,6 +755,39 @@ describe('[LIF-077] a legacy Migration of unknown place confirms the Route place
     expect(link.getAttribute('href')).toBe('/runs/run-new');
   });
 
+  it('[LIF-077] after a failed legacy rollback (flag and pin set) the page follows the pin, as the server does', async () => {
+    world.migration = legacy({
+      targetPlacedEndpointId: 'e-target',
+      targetPlacedNamespaceId: 'ns-old',
+      targetPlacedNamespace: { slug: 'old-org' },
+      route: {
+        id: 'r1',
+        targetNamespacePath: 'acme-org',
+        targetEndpointId: 'e-target',
+        targetNamespaceId: 'ns-new',
+        sourceEndpoint: { displayName: 'Source main' },
+        targetEndpoint: { displayName: 'Target main' },
+      },
+    });
+    world.runs = [run(1, { kind: 'rollback', status: 'failed', hasMutations: true })];
+    start();
+    await ready();
+    // The placement blocker is no longer waived: no Run is offered until the next Analysis.
+    expect(screen.queryByRole('button', { name: 'Migrate' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Run anyway' })).toBeNull();
+    // The rollback names the target in the pinned Namespace, not in the Route's new one.
+    click('Roll back');
+    expect(dialog().queryByText(/type acme-org\/plat-api to confirm it/)).toBeNull();
+    const input = dialog().getByRole('textbox');
+    fireEvent.change(input, { target: { value: 'old-org/plat-api' } });
+    fireEvent.click(dialog().getByRole('button', { name: 'Roll back' }));
+    await waitFor(() => expect(posted('/api/v1/migrations/m1/runs')).toHaveLength(1));
+    expect(bodyOf(posted('/api/v1/migrations/m1/runs')[0])).toEqual({
+      kind: 'rollback',
+      confirm: 'old-org/plat-api',
+    });
+  });
+
   it('[LIF-043] with open pre tasks it offers Run anyway, confirmed the same way', async () => {
     world.migration = legacy({ readinessCounts: { blockers: 1, preTasks: 2, postTasks: 0 } });
     start();

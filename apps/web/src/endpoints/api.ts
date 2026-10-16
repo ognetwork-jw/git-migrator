@@ -79,6 +79,9 @@ export interface EndpointMigration {
   readonly readinessCounts: { readonly preTasks?: number } | null;
   /** Target writes from before places were recorded: Runs confirm the Route's place (ADR-0504). */
   readonly targetPlacementUnknown?: boolean;
+  /** The pinned place of the target writes (ADR-0504); null before the first write. */
+  readonly targetPlacedEndpointId?: string | null;
+  readonly targetPlacedNamespaceId?: string | null;
   readonly latestAnalysisId: string | null;
   readonly analysisStaleAt: string | null;
   readonly route: RouteRow & {
@@ -102,6 +105,8 @@ export const fetchEndpointMigration = async (routeId: string): Promise<EndpointM
         blockerCodes: true,
         readinessCounts: true,
         targetPlacementUnknown: true,
+        targetPlacedEndpointId: true,
+        targetPlacedNamespaceId: true,
         latestAnalysisId: true,
         analysisStaleAt: true,
         route: {

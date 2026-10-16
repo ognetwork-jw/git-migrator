@@ -23,6 +23,8 @@ The Web UI follow-ups in `docs/followups.md` raise points the spec leaves open. 
 
 5. **The task list knows which tasks the data resolves (LIF-006).** The server refuses `done` on a task whose code has completion mode `resolution`, and a dismissal of one needs a reason; the page learned this only from the 422 after the click. Task rows come through the Model API and carry no completion mode. The repository detail page, a server component, now reads the `resolution` codes from the same built-in registry the API uses (`src/server/completion.ts`, computed once per process) and passes them to the client view. Such a task offers no "Mark done", says that it closes when its data changes, and its dismiss dialog requires a reason. No API field was added: spec 09 fixes the custom endpoints, and the registry is code, not data, so it cannot drift between the web and the API of one build.
 
+6. **The page keys the legacy confirmation on the flag and the pin, as the guard does (ADR-0504).** The guard asks for the legacy confirmation only while `targetPlacementUnknown` is set and no place counts as pinned. A failed or cancelled legacy rollback keeps both the flag and the pin, so the server then judges the Migration by its pin: the rollback confirms the target's full name in the pinned Namespace, and the placement blocker is not waived until the next Analysis. The page keyed on the flag alone. It now reads the pin (`targetPlacedEndpointId`, `targetPlacedNamespaceId`, the pinned Namespace's slug and the Route's resolved ids) and treats the Migration as legacy only while the flag is set and no pin exists; a pin outside the Route names the target in the pinned Namespace. Residual: the guard counts a pin only while the target repository exists or target writes remain undone; when a failed legacy rollback undid every write and the repository is gone, the server is back in legacy mode while the page is not. The server's refusal then states the name to type. Closing this needs the server to expose the derived state, and spec 09 fixes the custom endpoints.
+
 ## Alternatives
 
 - A `degraded` event from the hub while the listener is down: one more frame type for the same information that the missing heartbeat already gives.
@@ -30,4 +32,4 @@ The Web UI follow-ups in `docs/followups.md` raise points the spec leaves open. 
 
 ## Affected requirements
 
-JOB-060, UI-001, UI-023, UI-034, AUTH-040, LIF-006.
+JOB-060, UI-001, UI-022, UI-023, UI-026, UI-034, AUTH-040, LIF-006, LIF-077.
