@@ -28,6 +28,17 @@ export interface GitCommit {
   committer: Signature;
 }
 
+/** An annotated tag object (only read from the git server's bare repository, never written by REST). */
+export interface GitTag {
+  sha: string;
+  /** The object the tag points at, and its type. */
+  object: string;
+  type: 'commit' | 'tree' | 'blob' | 'tag';
+  tag: string;
+  tagger: Signature | null;
+  message: string;
+}
+
 export const EMPTY_TREE = '4b825dc642cb6eb9a060e54bf8d69288fbee4904';
 
 const BASE_DATE = Date.UTC(2026, 0, 1);
@@ -36,8 +47,11 @@ export class GitStore {
   readonly blobs = new Map<string, Buffer>();
   readonly trees = new Map<string, TreeEntry[]>();
   readonly commits = new Map<string, GitCommit>();
-  /** Full ref names (`refs/heads/main`) to commit shas. */
+  readonly tags = new Map<string, GitTag>();
+  /** Full ref names (`refs/heads/main`) to commit shas, or annotated tag shas under `refs/tags/`. */
   readonly refs = new Map<string, string>();
+  /** Refs last read from the git server's bare repository (`importBareRepository`). */
+  readonly importedRefs = new Set<string>();
   private tick = 0;
 
   constructor() {
@@ -247,14 +261,25 @@ export class GitStore {
       .map((s) => this.commits.get(s) as GitCommit);
   }
 
-  /** `refs/heads/x`, `heads/x`, `x`, a tag or a sha to a commit sha. */
+  /** `refs/heads/x`, `heads/x`, `x`, a tag or a sha to a commit sha (annotated tags are peeled). */
   resolve(rev: string): string | undefined {
     if (/^[0-9a-f]{40}$/.test(rev) && this.commits.has(rev)) return rev;
     for (const candidate of [rev, `refs/${rev}`, `refs/heads/${rev}`, `refs/tags/${rev}`]) {
       const sha = this.refs.get(candidate);
-      if (sha) return sha;
+      if (sha) return this.peel(sha);
     }
     return undefined;
+  }
+
+  /** Follows annotated tags to the object they finally point at. */
+  peel(sha: string): string {
+    let current = sha;
+    for (let depth = 0; depth < 10; depth++) {
+      const tag = this.tags.get(current);
+      if (!tag) return current;
+      current = tag.object;
+    }
+    return current;
   }
 
   branches(): string[] {

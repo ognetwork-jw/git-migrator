@@ -58,6 +58,12 @@ export interface GitSideOptions {
    */
   onCgiSpawn?: (info: { repo: string; operation: 'read' | 'write'; pid: number }) => void;
   /**
+   * Called when a push (`git-receive-pack` POST) has finished, before its response ends, so a client
+   * that reads the provider's REST API right after the push sees what it pushed. `repo` is the
+   * repository path without `.git`. Called for rejected pushes too (the repository is then unchanged).
+   */
+  onPushed?: (info: { repo: string }) => void | Promise<void>;
+  /**
    * Ref policy for pushes (pre-receive hook): called per updated ref, return a message to reject the
    * push or nothing to accept. `old`/`new` are object ids (all zeros = absent); `fastForward` is
    * false when `old` is not an ancestor of `new`. Used for branch protection (ADR-0040).
@@ -101,6 +107,7 @@ interface SideState {
   refPolicy?: GitSideOptions['refPolicy'];
   refPolicyFlag?: GitSideOptions['refPolicyFlag'];
   onCgiSpawn?: GitSideOptions['onCgiSpawn'];
+  onPushed?: GitSideOptions['onPushed'];
   maxBlobBytes: number | null;
   maxPushBytes: number | null;
   allowPush: boolean;
@@ -177,6 +184,7 @@ export async function startFakeGitServer(options: FakeGitServerOptions): Promise
       refPolicy: o.refPolicy,
       refPolicyFlag: o.refPolicyFlag,
       onCgiSpawn: o.onCgiSpawn,
+      onPushed: o.onPushed,
       maxBlobBytes:
         o.maxBlobBytes === undefined ? (isTarget ? DEFAULT_MAX_BLOB_BYTES : null) : o.maxBlobBytes,
       maxPushBytes:
@@ -433,7 +441,14 @@ export async function startFakeGitServer(options: FakeGitServerOptions): Promise
       pid: child.pid ?? -1,
     });
     const isPush = req.method === 'POST' && pathInfo.endsWith('/git-receive-pack');
-    const done = pumpCgi(req, res, child, isPush ? side.maxPushBytes : null);
+    const onPushed = side.onPushed;
+    const done = pumpCgi(
+      req,
+      res,
+      child,
+      isPush ? side.maxPushBytes : null,
+      isPush && onPushed ? () => onPushed({ repo: policyRepo }) : undefined,
+    );
     return ticketId ? done.finally(() => tickets.delete(ticketId as string)) : done;
   }
 
@@ -498,13 +513,15 @@ function text(res: ServerResponse, status: number, body: string): void {
 /**
  * Pipes the request into the CGI process and translates its CGI headers into an HTTP response.
  * With `pushLimit`, a request body larger than the limit is drained, the CGI process is killed (so
- * nothing is applied) and the answer is a fixed `413` (ADR-0071).
+ * nothing is applied) and the answer is a fixed `413` (ADR-0071). `beforeEnd` runs after the CGI
+ * exited and before the response ends (its failure does not change the response).
  */
 function pumpCgi(
   req: IncomingMessage,
   res: ServerResponse,
   child: ChildProcess,
   pushLimit: number | null,
+  beforeEnd?: () => void | Promise<void>,
 ): Promise<void> {
   return new Promise((resolve) => {
     const stdin = child.stdin;
@@ -611,12 +628,17 @@ function pumpCgi(
         forward(body);
       }
     });
-    child.on('close', () => {
+    child.on('close', async () => {
       if (exceeded || res.writableEnded) return;
       if (!started) {
         res.writeHead(500, { 'content-type': 'text/plain' });
         res.end(`git http-backend failed: ${stderr.trim()}\n`);
       } else {
+        try {
+          await beforeEnd?.();
+        } catch {
+          // The push itself is done; the observer's failure is not the client's.
+        }
         flushHead();
         res.end();
       }

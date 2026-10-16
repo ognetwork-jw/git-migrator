@@ -340,8 +340,8 @@ describe('branch protection and access over git push', () => {
       required_pull_request_reviews: null,
       restrictions: null,
     };
-    expect((await rest('PUT', '/repos/acme/app/branches/main/protection', put)).status).toBe(404); // no such branch yet
-    t.repo.git.commitFiles('refs/heads/main', { a: 'a' }, 'init'); // REST protection needs a branch in the REST ref table
+    expect((await rest('PUT', '/repos/acme/app/branches/nope/protection', put)).status).toBe(404); // no such branch
+    // `main` was pushed over git in setup, so the REST protection write takes it.
     expect((await rest('PUT', '/repos/acme/app/branches/main/protection', put)).status).toBe(200);
     expect(existsSync(flag)).toBe(true);
     expect((await rest('DELETE', '/repos/acme/app/branches/main/protection')).status).toBe(204);

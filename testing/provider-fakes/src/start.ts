@@ -18,12 +18,14 @@ import {
   startFakeGitServer,
 } from './git/index.ts';
 import { githubGitAccess } from './github/git-access.ts';
+import { importBareRepository } from './github/git-import.ts';
 import {
   createFakeGitHub,
   type FakeGitHub,
   type FakeGitHubOptions,
   type GitHubState,
 } from './github/index.ts';
+import type { RepoRec } from './github/types.ts';
 
 /** Ports from DEV-020. */
 export const DEFAULT_PORTS = { bitbucket: 4010, github: 4020, git: 4030 } as const;
@@ -63,7 +65,7 @@ export interface RunningFakes {
  * repositories created, renamed and deleted with the REST repository (with their LFS objects), LFS
  * existence from the target LFS store.
  */
-function githubGitWiring(git: FakeGitServer): FakeGitHubOptions {
+function githubGitWiring(git: FakeGitServer, pushes: PushTracker): FakeGitHubOptions {
   const dir = (repo: { owner: string; name: string }, name = repo.name) =>
     git.repoDir('target', `${repo.owner}/${name}`);
   const lfsDir = (repo: { owner: string; name: string }, name = repo.name) =>
@@ -77,6 +79,7 @@ function githubGitWiring(git: FakeGitServer): FakeGitHubOptions {
   };
   return {
     gitBaseUrl: `${git.baseUrl}/target`,
+    syncGit: (repo) => pushes.sync(repo, () => importBareRepository(dir(repo), repo.git)),
     lfsHas: (repo, oid) => git.lfsStore('target').size(`${repo.owner}/${repo.name}`, oid),
     repositoryHooks: {
       // Keeps the pre-receive policy flag in step with the rules (the hook reads it when it runs).
@@ -132,9 +135,48 @@ function mergeHooks(
   };
 }
 
+/**
+ * Repositories pushed to since the fake GitHub last read their bare repository. A push marks the
+ * repository before its response ends; the next REST request on it reads the bare repository once
+ * (concurrent requests share that read).
+ */
+class PushTracker {
+  private readonly dirty = new WeakSet<RepoRec>();
+  private readonly reading = new WeakMap<RepoRec, Promise<void>>();
+
+  pushed(repo: RepoRec | undefined): void {
+    if (repo) this.dirty.add(repo);
+  }
+
+  async sync(repo: RepoRec, read: () => Promise<void>): Promise<void> {
+    for (;;) {
+      const running = this.reading.get(repo);
+      if (running) {
+        await running.catch(() => {});
+        continue;
+      }
+      if (!this.dirty.has(repo)) return;
+      this.dirty.delete(repo);
+      const next = read().finally(() => this.reading.delete(repo));
+      this.reading.set(repo, next);
+      await next;
+      return;
+    }
+  }
+}
+
 /** Git server target side options that tie access and pushes to the fake GitHub's tokens and rules. */
-function githubGitServerSide(getState: () => GitHubState | undefined): GitSideOptions {
-  return githubGitAccess(getState);
+function githubGitServerSide(
+  getState: () => GitHubState | undefined,
+  pushes: PushTracker,
+): GitSideOptions {
+  return {
+    ...githubGitAccess(getState),
+    onPushed: ({ repo }) => {
+      const [owner, name] = repo.split('/');
+      pushes.pushed(owner && name ? getState()?.findRepo(owner, name) : undefined);
+    },
+  };
 }
 
 function listen(
@@ -161,11 +203,14 @@ export async function startFakes(options: StartOptions = {}): Promise<RunningFak
   // branch protection decisions.
   let githubState: GitHubState | undefined;
   const withGitHub = options.githubPort !== undefined || options.github !== undefined;
+  const pushes = new PushTracker();
   if (options.git !== false) {
     git = await startFakeGitServer({
       ...options.git,
       ...(withGitHub
-        ? { target: { ...githubGitServerSide(() => githubState), ...options.git?.target } }
+        ? {
+            target: { ...githubGitServerSide(() => githubState, pushes), ...options.git?.target },
+          }
         : {}),
       rootDir: options.gitRootDir ?? (await mkdtemp(join(tmpdir(), 'fake-git-'))),
       port: options.gitPort ?? DEFAULT_PORTS.git,
@@ -176,7 +221,7 @@ export async function startFakes(options: StartOptions = {}): Promise<RunningFak
     ...(git ? { gitBaseUrl: `${git.baseUrl}/source` } : {}),
     ...options.bitbucket,
   });
-  const wiring = git ? githubGitWiring(git) : {};
+  const wiring = git ? githubGitWiring(git, pushes) : {};
   const github = withGitHub
     ? createFakeGitHub({
         ...wiring,

@@ -148,6 +148,11 @@ export interface FakeGitHubOptions {
      */
     policyChanged?: (repo: import('./types.ts').RepoRec, active: boolean) => void;
   };
+  /**
+   * Brings a repository's in-memory git data up to date with the git server before a REST request
+   * on it is handled (`startFakes` reads what was pushed into the bare repository, ADR-0070).
+   */
+  syncGit?: (repo: import('./types.ts').RepoRec) => Promise<void>;
   /** PEM public key of the App. When set, JWT signatures are verified; by default any key is accepted. */
   appPublicKeyPem?: string;
 }
