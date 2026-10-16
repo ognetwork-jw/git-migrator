@@ -7,7 +7,8 @@
  * dependencies of ARC-012, and that no file reaches into another package by relative path.
  *
  * Only `*.test.*` and `*.spec.*` files count as test files; they may use test-support packages, and
- * non-test files may not import them (or any test file).
+ * non-test files may not import them (or any test file). A package's `/testing` entry point (test
+ * seams) is likewise loaded only from test files and `testing/*` packages.
  *
  * Usage: node tools/check-deps.ts [--root <dir>]
  * Exit codes: 0 ok, 1 violations, 2 usage error or no workspaces found (never "OK" on nothing).
@@ -68,6 +69,13 @@ export const RULES: Readonly<Record<string, readonly string[]>> = {
   observability: [],
   guidance: ['core', 'canonical'],
 };
+
+/**
+ * A package's test entry point (`@git-migrator/auth/testing`, `@git-migrator/db/testing`). It
+ * exposes test seams (`createAuthForTest` can redirect the sign-in authority and rewrite role
+ * decisions), so only test files and `testing/*` packages may load it; type-only imports are fine.
+ */
+const TESTING_ENTRY = /^@git-migrator\/[^/]+\/testing(?:\/|$)/;
 
 /** Test-support packages any package may use as a devDependency, from test files only. */
 export const TEST_SUPPORT = ['provider-fakes', 'fixtures'] as const;
@@ -250,6 +258,8 @@ function targetShort(specifier: string): string {
 export interface ModuleReference {
   specifier: string;
   dynamic: boolean;
+  /** `import type`, `export type … from`, `import('x').T` types and `/// <reference>`: erased at run time. */
+  typeOnly?: boolean;
 }
 
 const MODULE_CALL_NAMES = new Set([
@@ -263,19 +273,24 @@ const MODULE_CALL_NAMES = new Set([
   'requireMock',
 ]);
 
-const isMember = (n: Node | undefined, object: string, property: string): boolean =>
-  n?.type === 'MemberExpression' &&
-  n.object?.type === 'Identifier' &&
-  n.object.name === object &&
-  n.property?.name === property;
+/** `createRequire(…)` or `module.createRequire(…)`. */
+function isCreateRequireCall(n: Node | undefined): boolean {
+  if (n?.type !== 'CallExpression') return false;
+  const callee = n.callee as Node;
+  return (
+    (callee.type === 'Identifier' && callee.name === 'createRequire') ||
+    (callee.type === 'MemberExpression' && callee.property?.name === 'createRequire')
+  );
+}
 
 /**
  * Module specifiers found in code, via a real parser (comments and ordinary strings are ignored).
  * A string counts when it is in a module position: `import`/`export … from`, `import()`,
  * `import x = require()`, `import('x')` types, `require()`, `require.resolve()`,
  * `import.meta.resolve()`, `import.meta.glob()`, `vi.mock`-style calls, `createRequire(…)(…)` and
- * variables assigned from `createRequire`, `new URL('…', import.meta.url)`, and `/// <reference>`
- * directives. A syntax error makes `ok` false (fail closed).
+ * variables assigned from `createRequire` (and aliases of them), `new URL('…', import.meta.url)`,
+ * and `/// <reference>` directives. A `+` concatenation that starts with a string counts like a
+ * template literal (its static prefix). A syntax error makes `ok` false (fail closed).
  */
 export function findModuleReferences(
   source: string,
@@ -283,9 +298,9 @@ export function findModuleReferences(
 ): { references: ModuleReference[]; ok: boolean } {
   const { program, comments, ok } = parse(source, filename);
   const references: ModuleReference[] = [];
-  const add = (node: Node | undefined) => {
+  const add = (node: Node | undefined, typeOnly = false) => {
     const str = stringValue(node);
-    if (str) references.push({ specifier: str.value, dynamic: str.dynamic });
+    if (str) references.push({ specifier: str.value, dynamic: str.dynamic, typeOnly });
   };
 
   /** import()/require() arguments: anything that is not a string is a computed specifier (fail closed). */
@@ -295,8 +310,10 @@ export function findModuleReferences(
     else add(node);
   };
 
-  // Variables holding a require function: `const r = createRequire(import.meta.url)`.
+  // Variables holding a require function: `const r = createRequire(import.meta.url)`, and aliases
+  // of those (`const r2 = r`, also chained), resolved to a fixed point.
   const requireFns = new Set<string>(['require']);
+  const assignments: { id: string; init: Node }[] = [];
   walkAst(program, (n) => {
     const target =
       n.type === 'VariableDeclarator'
@@ -304,22 +321,30 @@ export function findModuleReferences(
         : n.type === 'AssignmentExpression' && n.operator === '='
           ? { id: n.left as Node | undefined, init: n.right as Node | undefined }
           : undefined;
-    if (target?.id?.type !== 'Identifier') return;
-    const callee =
-      target.init?.type === 'CallExpression' ? (target.init.callee as Node) : undefined;
-    if (
-      (callee?.type === 'Identifier' && callee.name === 'createRequire') ||
-      (callee?.type === 'MemberExpression' && callee.property?.name === 'createRequire')
-    )
-      requireFns.add(target.id.name as string);
+    if (target?.id?.type === 'Identifier' && target.init)
+      assignments.push({ id: target.id.name as string, init: target.init });
   });
+  for (let grew = true; grew; ) {
+    grew = false;
+    for (const { id, init } of assignments) {
+      if (requireFns.has(id)) continue;
+      const holdsRequire =
+        isCreateRequireCall(init) || (init.type === 'Identifier' && requireFns.has(init.name));
+      if (holdsRequire) {
+        requireFns.add(id);
+        grew = true;
+      }
+    }
+  }
 
   walkAst(program, (n) => {
     switch (n.type) {
       case 'ImportDeclaration':
+        add(n.source, n.importKind === 'type');
+        break;
       case 'ExportAllDeclaration':
       case 'ExportNamedDeclaration':
-        if (n.source) add(n.source);
+        if (n.source) add(n.source, n.exportKind === 'type');
         break;
       case 'ImportExpression':
         addDynamic(n.source);
@@ -329,7 +354,7 @@ export function findModuleReferences(
           add(n.moduleReference.expression);
         break;
       case 'TSImportType':
-        add(n.source ?? n.argument?.literal ?? n.argument);
+        add(n.source ?? n.argument?.literal ?? n.argument, true);
         break;
       case 'NewExpression':
         if (
@@ -344,11 +369,17 @@ export function findModuleReferences(
         const callee = n.callee as Node;
         const first = n.arguments?.[0] as Node | undefined;
         const meta = callee.type === 'MemberExpression' && callee.object?.type === 'MetaProperty';
-        if (callee.type === 'Identifier' && requireFns.has(callee.name as string)) {
+        if (
+          (callee.type === 'Identifier' && requireFns.has(callee.name as string)) ||
+          isCreateRequireCall(callee)
+        ) {
           addDynamic(first);
         } else if (
           callee.type === 'CallExpression' ||
-          isMember(callee, 'require', 'resolve') ||
+          (callee.type === 'MemberExpression' &&
+            callee.object?.type === 'Identifier' &&
+            requireFns.has(callee.object.name) &&
+            callee.property?.name === 'resolve') ||
           (meta && callee.property?.name === 'resolve') ||
           (callee.type === 'MemberExpression' && MODULE_CALL_NAMES.has(callee.property?.name))
         )
@@ -364,7 +395,7 @@ export function findModuleReferences(
 
   for (const c of comments) {
     const m = /^\/\s*<reference\s+(?:types|path)\s*=\s*["']([^"']+)["']/.exec(c.value);
-    if (m?.[1]) references.push({ specifier: m[1], dynamic: false });
+    if (m?.[1]) references.push({ specifier: m[1], dynamic: false, typeOnly: true });
   }
   return { references, ok };
 }
@@ -401,52 +432,171 @@ const BANNED_GLOBALS: ReadonlySet<string> = new Set([
 ]);
 const GLOBAL_OBJECTS: readonly string[] = ['globalThis', 'self', 'window', 'global'];
 
-/** Names bound anywhere in the file (variables, parameters, functions, classes, catch). */
-function boundNames(program: Node): Set<string> {
-  const bound = new Set<string>();
-  const pattern = (p: Node | undefined): void => {
-    if (!p) return;
-    switch (p.type) {
-      case 'Identifier':
-        bound.add(p.name as string);
-        break;
-      case 'ObjectPattern':
-        for (const prop of p.properties as Node[])
-          pattern(prop.type === 'Property' ? prop.value : prop);
-        break;
-      case 'ArrayPattern':
-        for (const el of p.elements as Node[]) pattern(el);
-        break;
-      case 'AssignmentPattern':
-        pattern(p.left);
-        break;
-      case 'RestElement':
-        pattern(p.argument);
-        break;
-    }
-  };
-  walkAst(program, (n) => {
-    if (n.type === 'VariableDeclarator') pattern(n.id);
-    else if (n.type === 'FunctionDeclaration' || n.type === 'ClassDeclaration') pattern(n.id);
-    else if (n.type === 'CatchClause') pattern(n.param);
-    if (
-      n.type === 'FunctionDeclaration' ||
-      n.type === 'FunctionExpression' ||
-      n.type === 'ArrowFunctionExpression'
-    ) {
-      for (const param of (n.params ?? []) as Node[]) pattern(param);
-    }
-  });
-  return bound;
+/** A lexical scope: the names it binds and the scope it is nested in. */
+interface Scope {
+  readonly names: ReadonlySet<string>;
+  readonly parent: Scope | undefined;
 }
+
+function isBound(scope: Scope | undefined, name: string): boolean {
+  for (let s = scope; s; s = s.parent) if (s.names.has(name)) return true;
+  return false;
+}
+
+/** Adds the names a binding pattern declares. */
+function patternNames(p: Node | undefined, out: Set<string>): void {
+  if (!p) return;
+  switch (p.type) {
+    case 'Identifier':
+      out.add(p.name as string);
+      break;
+    case 'ObjectPattern':
+      for (const prop of p.properties as Node[])
+        patternNames(prop.type === 'Property' ? prop.value : prop, out);
+      break;
+    case 'ArrayPattern':
+      for (const el of p.elements as Node[]) patternNames(el, out);
+      break;
+    case 'AssignmentPattern':
+      patternNames(p.left, out);
+      break;
+    case 'RestElement':
+      patternNames(p.argument, out);
+      break;
+    case 'TSParameterProperty':
+      patternNames(p.parameter, out);
+      break;
+  }
+}
+
+const FUNCTIONS: ReadonlySet<string> = new Set([
+  'FunctionDeclaration',
+  'FunctionExpression',
+  'ArrowFunctionExpression',
+]);
+
+/** `var` names declared in a function body or the program, not looking into nested functions. */
+function hoistedVars(node: unknown, out: Set<string>): void {
+  if (Array.isArray(node)) {
+    for (const child of node) hoistedVars(child, out);
+    return;
+  }
+  if (!node || typeof node !== 'object') return;
+  const n = node as Node;
+  if (FUNCTIONS.has(n.type)) return;
+  if (n.type === 'VariableDeclaration' && n.kind === 'var')
+    for (const d of n.declarations as Node[]) patternNames(d.id, out);
+  for (const key of Object.keys(n))
+    if (key !== 'type' && key !== 'start' && key !== 'end') hoistedVars(n[key], out);
+}
+
+/** Names declared directly in a statement list: variables, functions, classes and imports. */
+function lexicalNames(statements: readonly Node[], out: Set<string>): void {
+  for (const statement of statements) {
+    const s =
+      (statement.type === 'ExportNamedDeclaration' ||
+        statement.type === 'ExportDefaultDeclaration') &&
+      statement.declaration
+        ? (statement.declaration as Node)
+        : statement;
+    if (s.type === 'VariableDeclaration')
+      for (const d of s.declarations as Node[]) patternNames(d.id, out);
+    else if ((s.type === 'FunctionDeclaration' || s.type === 'ClassDeclaration') && s.id)
+      out.add(s.id.name as string);
+    else if (s.type === 'ImportDeclaration')
+      for (const spec of (s.specifiers ?? []) as Node[]) patternNames(spec.local, out);
+    else if (s.type === 'TSImportEqualsDeclaration') patternNames(s.id, out);
+  }
+}
+
+/** The names a node binds for its descendants, or undefined when it opens no scope. */
+function scopeNames(n: Node): Set<string> | undefined {
+  const out = new Set<string>();
+  switch (n.type) {
+    case 'Program':
+      lexicalNames(n.body as Node[], out);
+      hoistedVars(n.body, out);
+      return out;
+    case 'FunctionDeclaration':
+    case 'FunctionExpression':
+    case 'ArrowFunctionExpression':
+      for (const param of (n.params ?? []) as Node[]) patternNames(param, out);
+      if (n.type === 'FunctionExpression' && n.id) out.add(n.id.name as string);
+      hoistedVars(n.body, out);
+      return out;
+    case 'BlockStatement':
+    case 'FunctionBody':
+    case 'StaticBlock':
+      lexicalNames(n.body as Node[], out);
+      return out;
+    case 'SwitchStatement':
+      lexicalNames(
+        (n.cases as Node[]).flatMap((c) => c.consequent as Node[]),
+        out,
+      );
+      return out;
+    case 'ForStatement':
+    case 'ForInStatement':
+    case 'ForOfStatement': {
+      const head = (n.type === 'ForStatement' ? n.init : n.left) as Node | undefined;
+      if (head?.type === 'VariableDeclaration') lexicalNames([head], out);
+      return out;
+    }
+    case 'CatchClause':
+      patternNames(n.param, out);
+      return out;
+    case 'ClassExpression':
+      if (n.id) out.add(n.id.name as string);
+      return out;
+    default:
+      return undefined;
+  }
+}
+
+/** Like `walk` (parents first), also passing the scope each node is in. */
+function walkScoped(
+  node: unknown,
+  scope: Scope | undefined,
+  visit: (n: Node, scope: Scope | undefined) => void,
+): void {
+  if (Array.isArray(node)) {
+    for (const child of node) walkScoped(child, scope, visit);
+    return;
+  }
+  if (!node || typeof node !== 'object') return;
+  const n = node as Node;
+  let inner = scope;
+  if (typeof n.type === 'string') {
+    const names = scopeNames(n);
+    if (names) inner = { names, parent: scope };
+    visit(n, inner);
+  }
+  for (const key of Object.keys(n))
+    if (key !== 'type' && key !== 'start' && key !== 'end') walkScoped(n[key], inner, visit);
+}
+
+/** The static name of a member access: `a.b` and `a['b']`. */
+function memberName(n: Node): string | undefined {
+  if (n.type !== 'MemberExpression') return undefined;
+  if (!n.computed) return n.property?.name as string | undefined;
+  const key = stringValue(n.property as Node | undefined);
+  return key && !key.dynamic ? key.value : undefined;
+}
+
+/** Members of `process` that load native bindings, below every module check. */
+const BINDING_ACCESS: ReadonlySet<string> = new Set(['binding', '_linkedBinding']);
 
 /**
  * Direct HTTP in adapter source (ADP-060): the global `fetch`, `XMLHttpRequest`, `WebSocket` or
- * `EventSource` (bare or as a member of the global object), `navigator.sendBeacon`, `eval` and
- * the `Function` constructor, `process.getBuiltinModule` of a banned module, and imports of HTTP
- * and socket modules. Other members of the global object (`globalThis.crypto`, `typeof window`)
- * and names shadowed by a local binding are fine; aliasing, destructuring, computed access and
- * `Reflect` use of the global object are not, because they can reach `fetch` unnamed.
+ * `EventSource` (bare or as a member of the global object), `navigator.sendBeacon`, `eval`, the
+ * `Function` constructor and `.constructor(…)` calls, `process.binding`,
+ * `process.getBuiltinModule` of a banned module, imports of HTTP and socket modules, and
+ * `import()`/`require()` with a computed specifier. Other members of the global object
+ * (`globalThis.crypto`, `typeof window`) are fine, and so are the global object, `navigator`,
+ * `eval` and `Function` where a local binding shadows them (scope by scope, not file-wide). A
+ * binding named `fetch`, `XMLHttpRequest`, `WebSocket` or `EventSource` never exempts it.
+ * Aliasing, destructuring, computed access and `Reflect` use of the global object are flagged,
+ * because they can reach `fetch` unnamed.
  *
  * This is a lint-level guard, not a sandbox: determined code can still evade a static check. The
  * SDK's runtime origin pinning and host allowlist are the backstop.
@@ -457,24 +607,30 @@ export function findDirectHttp(source: string, filename = 'file.ts'): string[] {
   const found: string[] = [];
   const names = new Set<Node>();
   const explained = new Set<Node>();
-  const bound = boundNames(program);
-  const isGlobal = (name: unknown): boolean =>
-    typeof name === 'string' && GLOBAL_OBJECTS.includes(name) && !bound.has(name);
-  walkAst(program, (n) => {
+  const isGlobal = (name: unknown, scope: Scope | undefined): boolean =>
+    typeof name === 'string' && GLOBAL_OBJECTS.includes(name) && !isBound(scope, name);
+  walkScoped(program, undefined, (n, scope) => {
     if (n.type === 'MemberExpression' && !n.computed && n.property) names.add(n.property as Node);
     if ((n.type === 'Property' || n.type === 'PropertyDefinition') && !n.computed && n.key) {
       names.add(n.key as Node);
     }
-    if (n.type === 'MemberExpression' && n.object?.type === 'Identifier' && !n.computed) {
+    if (n.type === 'MemberExpression' && n.object?.type === 'Identifier') {
       const object = n.object.name as string;
-      const property = n.property?.name as string | undefined;
-      if (isGlobal(object) && property !== undefined) {
+      const property = memberName(n);
+      if (!n.computed && isGlobal(object, scope) && property !== undefined) {
         // A static member of the global object is fine unless it opens connections.
         explained.add(n.object as Node);
         if (BANNED_GLOBALS.has(property)) found.push('globalThis.fetch');
       }
-      if (object === 'navigator' && !bound.has('navigator') && property === 'sendBeacon') {
+      if (object === 'navigator' && !isBound(scope, 'navigator') && property === 'sendBeacon') {
         found.push('navigator.sendBeacon');
+      }
+      if (
+        object === 'process' &&
+        !isBound(scope, 'process') &&
+        BINDING_ACCESS.has(property ?? '')
+      ) {
+        found.push('process.binding');
       }
     }
     if (
@@ -484,14 +640,17 @@ export function findDirectHttp(source: string, filename = 'file.ts'): string[] {
     ) {
       explained.add(n.argument as Node);
     }
-    if (
-      (n.type === 'CallExpression' || n.type === 'NewExpression') &&
-      n.callee?.type === 'Identifier'
-    ) {
-      const callee = n.callee.name as string;
-      if ((callee === 'eval' || callee === 'Function') && !bound.has(callee)) {
-        found.push(`${callee} (dynamic code)`);
+    if (n.type === 'CallExpression' || n.type === 'NewExpression') {
+      const callee = n.callee as Node;
+      if (
+        callee.type === 'Identifier' &&
+        (callee.name === 'eval' || callee.name === 'Function') &&
+        !isBound(scope, callee.name as string)
+      ) {
+        found.push(`${callee.name} (dynamic code)`);
       }
+      // `(() => {}).constructor('return fetch')` is the Function constructor by another name.
+      if (memberName(callee) === 'constructor') found.push('constructor call (dynamic code)');
     }
     if (n.type === 'CallExpression' && n.callee?.type === 'MemberExpression') {
       const callee = n.callee as Node;
@@ -504,15 +663,15 @@ export function findDirectHttp(source: string, filename = 'file.ts'): string[] {
       }
     }
   });
-  walkAst(program, (n) => {
+  walkScoped(program, undefined, (n, scope) => {
     if (n.type !== 'Identifier' || names.has(n) || explained.has(n)) return;
     const name = n.name as string;
-    if (bound.has(name)) return;
     if (BANNED_GLOBALS.has(name)) found.push(name);
-    else if (isGlobal(name)) found.push(`use of the global object (${name})`);
+    else if (isGlobal(name, scope)) found.push(`use of the global object (${name})`);
   });
   const { references } = findModuleReferences(source, filename);
   for (const ref of references) {
+    if (ref.dynamic) found.push('computed module specifier');
     const first = ref.specifier.replace(/^node:/, '').split('/')[0] ?? '';
     if (FORBIDDEN_HTTP_MODULES.has(first)) found.push(`import of ${ref.specifier}`);
   }
@@ -691,6 +850,11 @@ export function checkDependencies(root: string): Violation[] {
             testFile,
           });
           if (problem) add(file, `'${specifier}': ${problem}`);
+          else if (TESTING_ENTRY.test(specifier) && !testFile && !ws.isTesting && !ref.typeOnly)
+            add(
+              file,
+              `'${specifier}' exposes test seams; import it only from *.test.* files or testing/* packages`,
+            );
         } else if (specifier.startsWith('/') || specifier.startsWith('file:')) {
           add(file, `'${specifier}' is an absolute specifier; import the package by name`);
         } else if (specifier.startsWith('.')) {

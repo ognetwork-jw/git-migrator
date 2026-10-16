@@ -104,7 +104,9 @@ export function migrationPrefix(targetWebUrl: string): string {
       message: 'targetWebUrl must be an http(s) URL without credentials',
     });
   }
-  return `[MIGRATED → ${url.origin}${url.pathname}] `;
+  // URL keeps `[` and `]` in the path; encoded, the prefix ends at its only `]` (PREFIX_RE).
+  const path = url.pathname.replaceAll('[', '%5B').replaceAll(']', '%5D');
+  return `[MIGRATED → ${url.origin}${path}] `;
 }
 
 const created = obj({ id: z.number() });

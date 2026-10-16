@@ -251,6 +251,54 @@ describe('ARC-012 dependency-rule check', () => {
     expect(checkDependencies(otherTesting)).toHaveLength(1);
   });
 
+  it('[ARC-012] a package /testing entry point is imported only from test files and testing packages', () => {
+    const seams = "import { createAuthForTest } from '@git-migrator/auth/testing';\n";
+    const pkgs = (src: string, extra: Record<string, Pkg> = {}) =>
+      fixture({
+        'packages/auth': {},
+        'packages/api': { deps: ['auth'], src },
+        'apps/web': { deps: ['auth'], src },
+        ...extra,
+      });
+    expect(
+      checkDependencies(pkgs(seams))
+        .map((v) => v.file)
+        .sort(),
+    ).toEqual([join('apps', 'web', 'src', 'index.ts'), join('packages', 'api', 'src', 'index.ts')]);
+    for (const src of [
+      "export { createAuthForTest } from '@git-migrator/auth/testing';\n",
+      "export * from '@git-migrator/auth/testing/helpers';\n",
+      "const t = await import('@git-migrator/auth/testing');\n",
+    ]) {
+      const messages = checkDependencies(pkgs(src)).map((v) => v.message);
+      expect(messages, src).toHaveLength(2);
+      expect(messages[0], src).toContain('test seams');
+    }
+    const allowed = pkgs(
+      [
+        // Type-only imports are erased, so no seam is reachable at run time.
+        "import type { AuthTestSeams } from '@git-migrator/auth/testing';",
+        "export type { AuthTestSeams } from '@git-migrator/auth/testing';",
+        "export type T = import('@git-migrator/auth/testing').AuthTestSeams;",
+        // Other sub-paths are not test seams.
+        "import { x } from '@git-migrator/auth/testing-free';",
+        '',
+      ].join('\n'),
+      {
+        'packages/jobs': {
+          deps: ['db'],
+          files: { 'src/a.test.ts': "import '@git-migrator/db/testing';\n" },
+        },
+        'packages/db': {},
+        'testing/integration': {
+          deps: ['db'],
+          src: "import { createTestDatabase } from '@git-migrator/db/testing';\n",
+        },
+      },
+    );
+    expect(checkDependencies(allowed)).toEqual([]);
+  });
+
   it('[ARC-012] a test/ directory is not a test file, and re-exporting test files is rejected', () => {
     const helperDir = fixture({
       'packages/core': {
@@ -435,6 +483,11 @@ describe('ARC-012 dependency-rule check', () => {
       'const r = createRequire(import.meta.url); r(name);',
       `let r; r = createRequire(import.meta.url); r(\`\${a}\`);`,
       `await import(\`\${dir}/x\`);`,
+      'createRequire(import.meta.url)(name);',
+      `module.createRequire(import.meta.url)(\`\${name}\`);`,
+      "await import('@git-migrator/' + name);",
+      "await import(name + '.json');",
+      'const r = createRequire(import.meta.url); const r2 = r; r2(name);',
     ]) {
       const root = fixture({ 'packages/core': { src: `${src}\n` } });
       expect(
@@ -444,10 +497,32 @@ describe('ARC-012 dependency-rule check', () => {
     }
     const ok = fixture({
       'packages/core': {
-        src: `await import('node:fs');\nawait import(\`./locales/\${l}.json\`);\n`,
+        src: [
+          "await import('node:fs');",
+          `await import(\`./locales/\${l}.json\`);`,
+          "await import('./locales/' + l + '.json');",
+          "await import('./x' + '.json');",
+          'const compose = (f) => (x) => f(x); compose(f)(name);',
+          '',
+        ].join('\n'),
       },
     });
     expect(checkDependencies(ok)).toEqual([]);
+  });
+
+  it('[ARC-012] catches aliases of createRequire results and concatenated package names', () => {
+    for (const src of [
+      "const r = createRequire(import.meta.url); const r2 = r; r2('@git-migrator/db');",
+      "const r = createRequire(import.meta.url); let r2; r2 = r; const r3 = r2; r3('@git-migrator/db');",
+      "const r = createRequire(import.meta.url); r.resolve('@git-migrator/db');",
+      "await import('@git-migrator/' + 'db');",
+    ]) {
+      const root = fixture({ 'packages/core': { src: `${src}\n` }, 'packages/db': {} });
+      expect(
+        checkDependencies(root).map((v) => v.message),
+        src,
+      ).toEqual([expect.stringContaining('must not depend on @git-migrator/db')]);
+    }
   });
 
   it('[ARC-012] skips build output directories only at the workspace root', () => {
@@ -514,7 +589,63 @@ describe('ADP-060 adapters make no direct HTTP calls', () => {
     expect(findDirectHttp("const isBrowser = typeof window !== 'undefined';")).toEqual([]);
     expect(findDirectHttp('const self = { a: 1 }; export const b = self.a;')).toEqual([]);
     expect(findDirectHttp('export function f(self: number) { return self + 1; }')).toEqual([]);
-    expect(findDirectHttp('function fetch(x: number) { return x; } fetch(1);')).toEqual([]);
+    expect(findDirectHttp('function f(self: number) { return self; } export const s = f;')).toEqual(
+      [],
+    );
+  });
+
+  it('[ADP-060] a binding named fetch, XMLHttpRequest, WebSocket or EventSource never exempts it', () => {
+    expect(findDirectHttp('function fetch(x: number) { return x; } fetch(1);')).toEqual(['fetch']);
+    expect(findDirectHttp("function f(fetch) { return fetch(1); } fetch('https://x');")).toEqual([
+      'fetch',
+    ]);
+    expect(findDirectHttp('const { WebSocket } = deps; new WebSocket(u);')).toEqual(['WebSocket']);
+    expect(findDirectHttp('let EventSource = 1; export { EventSource };')).toEqual(['EventSource']);
+  });
+
+  it('[ADP-060] a local binding of the global object shadows it only in its own scope', () => {
+    expect(findDirectHttp('function f(self) { return self.a; } self.fetch(u);')).toEqual([
+      'globalThis.fetch',
+    ]);
+    expect(findDirectHttp('function f(self) { return self.a; } export const g = self;')).toEqual([
+      'use of the global object (self)',
+    ]);
+    expect(findDirectHttp('{ const window = { a: 1 }; window.a; } window.fetch(u);')).toEqual([
+      'globalThis.fetch',
+    ]);
+    expect(findDirectHttp('try { x(); } catch (global) { global.a; } global.fetch(u);')).toEqual([
+      'globalThis.fetch',
+    ]);
+    expect(findDirectHttp('function f(eval) { return eval; } eval(s);')).toEqual([
+      'eval (dynamic code)',
+    ]);
+    // `var` is visible in the whole function, also outside the block that declares it.
+    expect(findDirectHttp('function f() { { var self = { a: 1 }; } return self.a; }')).toEqual([]);
+    expect(findDirectHttp("import { navigator } from './n.ts'; navigator.sendBeacon(u);")).toEqual(
+      [],
+    );
+  });
+
+  it('[ADP-060] flags computed import() and require(), process.binding and constructor calls', () => {
+    expect(findDirectHttp('await import(name);')).toEqual(['computed module specifier']);
+    expect(findDirectHttp(`await import(\`./locales/\${l}.json\`);`)).toEqual([
+      'computed module specifier',
+    ]);
+    expect(findDirectHttp("await import('./locales/' + l);")).toEqual([
+      'computed module specifier',
+    ]);
+    expect(findDirectHttp('require(name);')).toEqual(['computed module specifier']);
+    expect(findDirectHttp("await import('./x.ts');")).toEqual([]);
+    expect(findDirectHttp("process.binding('tcp_wrap');")).toEqual(['process.binding']);
+    expect(findDirectHttp("process['_linkedBinding']('x');")).toEqual(['process.binding']);
+    expect(findDirectHttp("(() => {}).constructor('return fetch')();")).toEqual([
+      'constructor call (dynamic code)',
+    ]);
+    expect(findDirectHttp("f['constructor']['constructor']('return 1')();")).toEqual([
+      'constructor call (dynamic code)',
+    ]);
+    expect(findDirectHttp('new x.constructor();')).toEqual(['constructor call (dynamic code)']);
+    expect(findDirectHttp('const c = x.constructor; export const n = c.name;')).toEqual([]);
   });
 
   it('[ADP-060] flags the remaining bypasses', () => {
