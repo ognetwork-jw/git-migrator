@@ -18,6 +18,9 @@ T-080 adds Next.js, antd and Tailwind (pins from ADR-0002) and needs a screensho
 - `tsconfig.tests.json` gains the DOM lib (component tests); one cast in a provider-fakes test keeps it compiling.
 - `@parcel/watcher` and `@swc/core` (optional next-intl tooling) have install scripts disabled in `pnpm-workspace.yaml`.
 
+- **Playwright is excluded from pnpm's release-age policy.** `pnpm-workspace.yaml` lists `@playwright/test@1.64.0`, `playwright@1.64.0` and `playwright-core@1.64.0` under `minimumReleaseAgeExclude`. ADR-0002 pins `@playwright/test` 1.64.0, and that release was younger than pnpm's minimum release age when T-080 added it, so the install refused it. `playwright` and `playwright-core` are its exact-version dependencies. The exclusions name exact versions, so any other version still goes through the policy; remove them once 1.64.0 is older than the window (as for `@hono/node-server`, ADR-0061).
+- **Server-only modules.** `src/server/api.ts` and `src/server/settings.ts` must never reach a browser bundle. They do not import `server-only`: `api.ts` is also loaded outside Next.js, by `src/web.ts` (ADR-0500) and the integration stack, where that package throws because the `react-server` condition is not set, and the package is not a dependency. Instead `src/server-boundary.test.ts` walks the run-time imports of every `'use client'` module, transitively, and fails if any reaches `src/server/` (type-only imports are erased and allowed). This also catches a path through a shared helper, which a marker in the two files would only catch at build time.
+
 ## Affected requirements
 
 UI-001, UI-010, UI-036, TST-005.
