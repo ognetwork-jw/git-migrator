@@ -53,7 +53,7 @@ export interface CapabilityMatrix {
   readonly rows: readonly MatrixRow[];
 }
 
-const SUPPORTED: FieldSupport = { kind: 'supported' };
+const SUPPORTED: FieldSupport = Object.freeze({ kind: 'supported' });
 
 /** Severity order, best first. */
 const ORDER: readonly Fidelity[] = ['exact', 'translated', 'lossy', 'unreadable', 'unsupported'];

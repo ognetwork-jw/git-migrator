@@ -31,9 +31,11 @@ const HOST_PATTERN = /^[A-Za-z0-9.-]+(:\d{1,5})?$|^\[[0-9A-Fa-f:.]+\](:\d{1,5})?
 export const ASKPASS_DIR_PREFIX = '.gm-askpass-';
 
 /**
- * Directories of the sessions this process is using right now. The sweep never touches them, so a
- * long-running command keeps its credential. (The scratch volume is per worker pod, JOB-015; a
- * volume shared between processes would need owner tokens instead.)
+ * Directory names (the random-UUID basename) of the sessions this process is using right now. The
+ * sweep never touches them, so a long-running command keeps its credential. Keyed by basename, not
+ * path, so a sweep that names the scratch directory differently (relative, symlinked) still sees
+ * them. (The scratch volume is per worker pod, JOB-015; a volume shared between processes would
+ * need owner tokens instead.)
  */
 const liveSessions = new Set<string>();
 
@@ -65,9 +67,8 @@ export async function sweepStaleCredentialFiles(
   }
   const removed: string[] = [];
   for (const name of names) {
-    if (!name.startsWith(ASKPASS_DIR_PREFIX)) continue;
+    if (!name.startsWith(ASKPASS_DIR_PREFIX) || liveSessions.has(name)) continue;
     const path = join(scratchDir, name);
-    if (liveSessions.has(path)) continue;
     try {
       const info = await stat(path);
       if (!info.isDirectory() || now - info.mtimeMs < olderThan) continue;
@@ -183,7 +184,8 @@ export async function createAskpassSession(options: {
   assertUsableCredential(options.credential);
   if (!HOST_PATTERN.test(options.host)) throw new Error('Invalid git remote host');
   await mkdir(options.scratchDir, { recursive: true, mode: 0o700 });
-  const dir = join(options.scratchDir, `${ASKPASS_DIR_PREFIX}${randomUUID()}`);
+  const name = `${ASKPASS_DIR_PREFIX}${randomUUID()}`;
+  const dir = join(options.scratchDir, name);
   await mkdir(dir, { mode: 0o700 });
   const credentialFile = join(dir, 'credential');
   const scriptFile = join(dir, 'askpass.sh');
@@ -201,13 +203,13 @@ export async function createAskpassSession(options: {
     throw error;
   }
   const { username, password } = options.credential;
-  liveSessions.add(dir);
+  liveSessions.add(name);
   return {
     dir,
     env: { ...baseGitEnv(dir, options.extraConfig), GIT_ASKPASS: scriptFile },
     secrets: [password, `${username}:${password}`],
     dispose: () => {
-      liveSessions.delete(dir);
+      liveSessions.delete(name);
       return rm(dir, { recursive: true, force: true });
     },
   };

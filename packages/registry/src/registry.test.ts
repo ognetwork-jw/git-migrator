@@ -186,4 +186,77 @@ describe('ProviderRegistry', () => {
     expect(matrix.rows[0]?.cells.every((c) => c.fields.length === 0)).toBe(true);
     expect(reg.capabilities('m').facets['git-refs']?.fields).toEqual({});
   });
+
+  it('[API-020] [ADP-032] what the registry returns cannot change its capabilities, matrix or facet order', () => {
+    const reg = new ProviderRegistry({ facets, adapters: [A, B] });
+    const before = reg.capabilityMatrix();
+    const attempt = (fn: () => void) => {
+      try {
+        fn();
+      } catch {
+        // frozen: strict mode throws, which is the point
+      }
+    };
+    const caps = reg.capabilities('b');
+    attempt(() => {
+      (caps.facets['git-refs']?.fields['/defaultBranch'] as { kind: string }).kind = 'supported';
+    });
+    attempt(() => {
+      (caps.facets['git-refs'] as { write: boolean }).write = false;
+    });
+    const cells = reg.capabilityMatrix().rows[0]?.cells ?? [];
+    for (const cell of cells) {
+      for (const field of cell.fields) {
+        attempt(() => {
+          (field.source as { kind: string }).kind = 'unsupported';
+        });
+        attempt(() => {
+          (field.target as { kind: string }).kind = 'unsupported';
+        });
+      }
+    }
+    const def = reg.facets.get('git-refs');
+    const dependsOn = [...def.dependsOn];
+    const policyKeys = [...def.policyKeys];
+    attempt(() => {
+      (def.dependsOn as string[]).push('repository-settings');
+    });
+    attempt(() => {
+      (def.policyKeys as string[]).push('git-refs.x');
+    });
+    attempt(() => {
+      (reg.facets.ordered()[0] as { dependsOn: unknown }).dependsOn = ['repository-settings'];
+    });
+    expect(reg.capabilityMatrix()).toEqual(before);
+    expect(reg.capabilities('b').facets['git-refs']).toEqual(B.capabilities.facets['git-refs']);
+    expect(reg.facets.get('git-refs').dependsOn).toEqual(dependsOn);
+    expect(reg.facets.get('git-refs').policyKeys).toEqual(policyKeys);
+    expect(gitRefsDefinition.dependsOn).toEqual(dependsOn);
+    expect(reg.facets.ordered().map((d) => d.key)).toEqual(['git-refs', 'repository-settings']);
+    // The caller's definitions are not frozen by registering them.
+    expect(Object.isFrozen(gitRefsDefinition)).toBe(false);
+  });
+
+  it('[ADP-032] capabilities or limits that are not plain data fail as a RegistryError naming the adapter', () => {
+    const odd = adapter('odd', {
+      'git-refs': { read: true, write: true, fields: {}, note: () => 'x' } as never,
+    });
+    const error = (() => {
+      try {
+        new ProviderRegistry({ facets, adapters: [odd] });
+      } catch (e) {
+        return e;
+      }
+    })();
+    expect(error).toBeInstanceOf(RegistryError);
+    expect((error as Error).message).toMatch(/adapter odd/);
+    expect(
+      () =>
+        new ProviderRegistry({
+          facets,
+          adapters: [A],
+          limits: { a: { repositoryName: { check: () => true } } as never },
+        }),
+    ).toThrow(/limits of adapter a/);
+  });
 });

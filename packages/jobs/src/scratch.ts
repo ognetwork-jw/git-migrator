@@ -1,6 +1,11 @@
 import { randomBytes } from 'node:crypto';
 import { lstat, mkdir, readdir, rm, rmdir, statfs } from 'node:fs/promises';
 import { join } from 'node:path';
+import {
+  ASKPASS_DIR_PREFIX,
+  scratchNeededBytes,
+  sweepStaleCredentialFiles,
+} from '@git-migrator/git';
 import type { Logger } from '@git-migrator/observability';
 import { CronExpressionParser } from 'cron-parser';
 
@@ -44,8 +49,7 @@ export function classifySize(
 
 /** Estimated scratch need before `git.prepare`: `sizeBytes x 2.2 + lfsBytes` (JOB-015). */
 export function estimateScratchNeed(sizeBytes: Bytes, lfsBytes: Bytes): number {
-  // 22 / 10 rather than 2.2: the product of integers is exact, so 100 bytes need exactly 220.
-  return Math.ceil(((toNumber(sizeBytes) ?? 0) * 22) / 10 + (toNumber(lfsBytes) ?? 0));
+  return scratchNeededBytes({ sizeBytes, lfsBytes });
 }
 
 /** `$GM_SCRATCH_DIR/<runId>`. The Run id must be a plain name: no separators or dots-only. */
@@ -194,13 +198,39 @@ export interface CleanScratchOptions {
   readonly log?: Logger;
 }
 
+/** Real (not symlinked) subdirectories of `dir`; none when it is unreadable. */
+async function subdirectories(dir: string): Promise<string[]> {
+  const entries = await readdir(dir, { withFileTypes: true }).catch(() => []);
+  return entries.filter((entry) => entry.isDirectory()).map((entry) => entry.name);
+}
+
 /**
- * Removes scratch directories not modified for 24 h (JOB-015). Only direct children that are real
- * directories are touched: a symlink or a stray file is left alone. Returns the removed names.
+ * Removes the credential directories a killed process left (ADP-071: SIGKILL skips `dispose`) where
+ * git creates them: the scratch root (analysis) and each job directory `<runId>/<job>`. The sweep
+ * keeps the sessions this process is using. Returns the removed paths relative to the root.
+ */
+async function sweepCredentials(root: string, now: () => number): Promise<string[]> {
+  const removed = await sweepStaleCredentialFiles(root, { now });
+  for (const run of await subdirectories(root)) {
+    if (run.startsWith(ASKPASS_DIR_PREFIX)) continue;
+    for (const job of await subdirectories(join(root, run))) {
+      const names = await sweepStaleCredentialFiles(join(root, run, job), { now });
+      removed.push(...names.map((name) => join(run, job, name)));
+    }
+  }
+  return removed;
+}
+
+/**
+ * Removes scratch directories not modified for 24 h (JOB-015), after the stale credential
+ * directories (ADP-071). Only direct children that are real directories are touched: a symlink or a
+ * stray file is left alone. Credential directories are left to the sweep, which knows the live
+ * ones. Returns the removed names.
  */
 export async function cleanScratch(options: CleanScratchOptions): Promise<string[]> {
   const maxAge = options.maxAgeMs ?? SCRATCH_MAX_AGE_MS;
-  const now = (options.now ?? Date.now)();
+  const clock = options.now ?? Date.now;
+  const now = clock();
   let names: string[];
   try {
     names = await readdir(options.root);
@@ -208,8 +238,9 @@ export async function cleanScratch(options: CleanScratchOptions): Promise<string
     if ((error as NodeJS.ErrnoException).code === 'ENOENT') return [];
     throw error;
   }
-  const removed: string[] = [];
+  const removed = await sweepCredentials(options.root, clock);
   for (const name of names) {
+    if (name.startsWith(ASKPASS_DIR_PREFIX)) continue;
     const path = join(options.root, name);
     try {
       const stats = await lstat(path);

@@ -1,8 +1,8 @@
 import { execFile } from 'node:child_process';
 import { existsSync, readFileSync, statSync } from 'node:fs';
-import { mkdir, mkdtemp, rm, utimes } from 'node:fs/promises';
+import { mkdir, mkdtemp, rm, symlink, utimes } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { basename, join, relative } from 'node:path';
 import { promisify } from 'node:util';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import {
@@ -202,5 +202,25 @@ describe('origin matching and stale credential files', () => {
     expect(existsSync(join(session.dir, 'credential'))).toBe(true);
     await session.dispose();
     expect(existsSync(session.dir)).toBe(false);
+  });
+
+  it('[ADP-071] a live session survives a sweep that names the scratch directory by another path (symlink, relative)', async () => {
+    const real = await mkdtemp(join(work, 'sweep-alias-'));
+    const link = `${real}-link`;
+    await symlink(real, link);
+    const session = await createAskpassSession({
+      scratchDir: link,
+      host: '127.0.0.1:4030',
+      credential: { username: 'bot', password: PASSWORD },
+    });
+    const longAgo = new Date(Date.now() - 3_600_000);
+    await utimes(session.dir, longAgo, longAgo);
+    expect(await sweepStaleCredentialFiles(real, { olderThanMs: 1000 })).toEqual([]);
+    expect(
+      await sweepStaleCredentialFiles(relative(process.cwd(), real), { olderThanMs: 1000 }),
+    ).toEqual([]);
+    expect(existsSync(join(session.dir, 'credential'))).toBe(true);
+    await session.dispose();
+    expect(existsSync(join(real, basename(session.dir)))).toBe(false);
   });
 });

@@ -65,6 +65,50 @@ export interface RegistryParts {
 /** A detect-only Facet is never written (FAC-EXT-001), so the target's declarations do not matter. */
 const DETECT_ONLY_TARGET: FacetCapability = { read: false, write: false, fields: {} };
 
+/**
+ * A copy of plain data. What `structuredClone` refuses (a function, a host object) becomes a
+ * `RegistryError` naming the adapter; the clone error's text is left out, since it can quote the
+ * offending value.
+ */
+function cloneData<T>(value: T, what: string): T {
+  try {
+    return structuredClone(value);
+  } catch {
+    throw new RegistryError(`${what} must be plain data (no functions or host objects)`);
+  }
+}
+
+/**
+ * A frozen copy of the arrays and plain objects in `value`, all the way down; anything else
+ * (functions, parsers, primitives) is kept as is. What the registry hands out then cannot change
+ * what it validated at construction.
+ */
+function freezeCopy<T>(value: T): T {
+  if (Array.isArray(value)) return Object.freeze(value.map(freezeCopy)) as T;
+  if (value === null || typeof value !== 'object') return value;
+  const proto = Object.getPrototypeOf(value);
+  if (proto !== Object.prototype && proto !== null) return value;
+  const copy: Record<string, unknown> = {};
+  for (const [key, entry] of Object.entries(value)) copy[key] = freezeCopy(entry);
+  return Object.freeze(copy) as T;
+}
+
+/**
+ * A frozen copy of a Facet definition with its data (dependencies, policy keys, collections,
+ * finding codes) frozen too. The schema and the functions are shared; the caller's object is left
+ * unfrozen.
+ */
+function frozenDefinition(def: FacetDefinition<unknown>): FacetDefinition<unknown> {
+  return Object.freeze({
+    ...def,
+    collections: freezeCopy(def.collections),
+    dependsOn: freezeCopy(def.dependsOn),
+    findingCodes: freezeCopy(def.findingCodes),
+    policyKeys: freezeCopy(def.policyKeys),
+    ...(def.sets !== undefined ? { sets: freezeCopy(def.sets) } : {}),
+  });
+}
+
 /** The read-only side of the Facet registry: lookups only, so validation at construction holds. */
 export type FacetView = Pick<
   FacetRegistry,
@@ -82,7 +126,10 @@ export class ProviderRegistry {
   readonly facets: FacetView;
   readonly #facets = new FacetRegistry();
   readonly #adapters = new Map<string, ProviderAdapter>();
-  /** Capabilities copied at construction, so a later change to an adapter object cannot alter the matrix. */
+  /**
+   * Capabilities copied and frozen at construction, so neither a later change to an adapter object
+   * nor a caller of `capabilities()` or `capabilityMatrix()` can alter the matrix.
+   */
   readonly #capabilities = new Map<string, ProviderCapabilities>();
   readonly #limits = new Map<string, ProviderLimits>();
   readonly #deliveries = new Map<string, PipelinesDelivery>();
@@ -99,7 +146,9 @@ export class ProviderRegistry {
       unknownPolicyKeys: (k) => reg.unknownPolicyKeys(k),
       ordered: () => reg.ordered(),
     } satisfies FacetView);
-    for (const def of parts.facets) this.#facets.register(def as FacetDefinition<unknown>);
+    for (const def of parts.facets) {
+      this.#facets.register(frozenDefinition(def as FacetDefinition<unknown>));
+    }
     for (const adapter of parts.adapters) {
       if (this.#adapters.has(adapter.type)) {
         throw new RegistryError(`adapter ${adapter.type} is already registered`);
@@ -112,13 +161,16 @@ export class ProviderRegistry {
         }
       }
       this.#adapters.set(adapter.type, adapter);
-      this.#capabilities.set(adapter.type, structuredClone(adapter.capabilities));
+      this.#capabilities.set(
+        adapter.type,
+        freezeCopy(cloneData(adapter.capabilities, `capabilities of adapter ${adapter.type}`)),
+      );
     }
     for (const [type, limits] of Object.entries(parts.limits ?? {})) {
       if (!this.#adapters.has(type)) {
         throw new RegistryError(`limits given for unregistered adapter ${type}`);
       }
-      this.#limits.set(type, structuredClone(limits));
+      this.#limits.set(type, freezeCopy(cloneData(limits, `limits of adapter ${type}`)));
     }
     for (const override of parts.overrides ?? []) {
       for (const side of [override.source, override.target]) {
