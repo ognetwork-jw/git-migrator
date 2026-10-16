@@ -57,14 +57,14 @@ Publish with `publishEvent(pool, event)` or, inside a ZenStack transaction, `pub
 
 ## Bulk actions (T-088, ADR-0405 to ADR-0407)
 
-`src/bulk.ts` (`createBulk`): `POST /migrations/bulk` with `{ids | filter, action, waveId?}` for `analyze`, `migrate-ready`, `assign-to-wave` and `remove-from-wave` (LIF-090). At most 200 Migrations per request (422 above). Every item is re-validated against the database; the answer is `{accepted, skipped: [{id, reason}]}` with a reason code per skipped item. `migrate-ready` creates its Runs through `createRun` (`@git-migrator/jobs`) and enqueues them with `enqueueRun`; `bulkMigrate` is exported for the Run endpoint to reuse. Each accepted item is audited.
+`src/bulk.ts` (`createBulk`): `POST /migrations/bulk` with `{ids | filter, action, waveId?}` for `analyze`, `migrate-ready`, `assign-to-wave` and `remove-from-wave` (LIF-090). At most 200 Migrations per request (422 above). Every item is re-validated against the database; the answer is `{accepted, skipped: [{id, reason}]}` with a reason code per skipped item. `migrate-ready` starts its Runs through `launchRun` (`src/run-start.ts`), the same guard, audit, enqueue and cancel path as `POST /migrations/{id}/runs`. Each accepted item is audited.
 
 ### The bulk contract
 
 - Body: exactly one of `ids` (1 to 1000 entries; more than 200 distinct ids is a 422) and `filter` (`routeId` required; `namespaceId`, `status` default `unmigrated`, `readiness`, `sizeClass`, `waveId`, `blockerCode`, `hasOpenTasks`, `search`), plus `action` and, for `assign-to-wave`, `waveId`. `remove-from-wave` with a `waveId` removes only Migrations in that Wave.
 - Neither or both of `ids` and `filter`, a missing `waveId`, an unknown action, or a selection above 200 is a 422 `validation_failed` whose `errors` give `{path, message}` (`ids`, `filter` or `waveId`); an unknown Wave is a 404; nothing is acted on. A role below operator is a 403. A missing job service is a 503 `not_ready`.
 - Answer: `{accepted: [id], skipped: [{id, reason}]}`. Reasons: `not_found`, `not_repository`, `source_missing`, `route_retired`, `not_ready`, `not_analyzed`, `analysis_stale`, `run_active`, `not_permitted`, `already_in_wave`, `not_in_wave`, `queue_unavailable`.
-- After one failed enqueue the remaining items are skipped as `queue_unavailable` without being tried. A Run created before that failure is cancelled and audited (`run.create`, then `run.cancel`).
+- After one failed enqueue the remaining items are skipped as `queue_unavailable` without being tried. The Run whose enqueue failed is cancelled and audited (`run.create`, committed with the Run, then `run.cancel` with the cancel's outcome); if a worker had already started it, it is accepted.
 - Wave changes run in one transaction: the Wave is locked against deletion, each Migration is locked and re-read, and the audit rows carry the `previousWaveId` read under the lock.
 
 ## Invitation batches (AUTH-060, AUTH-061, T-085)

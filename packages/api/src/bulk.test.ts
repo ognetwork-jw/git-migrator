@@ -22,6 +22,8 @@ const analysisJobs: string[] = [];
 const runJobs: { runId: string; routing: unknown }[] = [];
 let enqueueRunCalls = 0;
 let enqueueAnalysisCalls = 0;
+/** Runs before a failing run enqueue rejects (a worker may already hold the Run). */
+let beforeFailedRunEnqueue: ((runId: string) => Promise<void>) | undefined;
 
 const services: ApiServices = {
   jobs: {
@@ -32,11 +34,14 @@ const services: ApiServices = {
       analysisJobs.push(migrationId);
       return Promise.resolve({} as never);
     },
-    enqueueRun: (runId: string, routing: unknown) => {
+    enqueueRun: async (runId: string, routing: unknown) => {
       enqueueRunCalls++;
-      if (failQueue) return Promise.reject(new Error('queue down'));
+      if (failQueue) {
+        await beforeFailedRunEnqueue?.(runId);
+        throw new Error('queue down');
+      }
       runJobs.push({ runId, routing });
-      return Promise.resolve({} as never);
+      return {} as never;
     },
     queue: () => ({ getJobs: () => Promise.resolve([]) }) as never,
   } as never,
@@ -164,6 +169,7 @@ beforeAll(async () => {
 
 beforeEach(() => {
   failQueue = false;
+  beforeFailedRunEnqueue = undefined;
   enqueueRunCalls = 0;
   enqueueAnalysisCalls = 0;
   analysisJobs.length = 0;
@@ -277,6 +283,56 @@ describe('POST /migrations/bulk', () => {
     const again = await ok(await bulk({ ids: [a, b], action: 'analyze' }));
     expect(again.accepted).toEqual([]);
     expect(enqueueAnalysisCalls).toBe(1);
+  });
+
+  it('[LIF-090] a Run a worker already started when the enqueue failed is accepted, and the rest are not tried', async () => {
+    const a = await mig();
+    const b = await mig();
+    failQueue = true;
+    beforeFailedRunEnqueue = async (runId) => {
+      await t.db.privileged.run.update({
+        where: { id: runId },
+        data: { status: 'running', startedAt: new Date(), leaseOwner: 'worker-token' },
+      });
+    };
+    const out = await ok(await bulk({ ids: [a, b], action: 'migrate-ready' }));
+    expect(out.accepted).toEqual([a]);
+    expect(reasons(out)).toEqual({ [b]: 'queue_unavailable' });
+    const run = await t.db.privileged.run.findFirstOrThrow({ where: { migrationId: a } });
+    expect(run.status).toBe('running');
+    const cancel = await t.db.privileged.auditEvent.findFirstOrThrow({
+      where: { action: 'run.cancel', subjectId: run.id },
+    });
+    expect(cancel.data).toMatchObject({
+      outcome: 'requested',
+      reason: 'enqueue_failed',
+      bulk: true,
+    });
+  });
+
+  it('[LIF-090] the run.create audit row commits with the Run: when it fails, no Run is left behind', async () => {
+    const m = await mig();
+    await t.db.pool.query(`
+      CREATE OR REPLACE FUNCTION app.gm_test_refuse_audit() RETURNS trigger AS $$
+      BEGIN
+        IF NEW.action = 'run.create' AND NEW.data->>'migrationId' = '${m}' THEN
+          RAISE EXCEPTION 'audit refused for a test';
+        END IF;
+        RETURN NEW;
+      END $$ LANGUAGE plpgsql;
+      CREATE TRIGGER gm_test_refuse_audit BEFORE INSERT ON app.audit_event
+        FOR EACH ROW EXECUTE FUNCTION app.gm_test_refuse_audit();`);
+    try {
+      const res = await bulk({ ids: [m], action: 'migrate-ready' });
+      expect(res.status).toBe(500);
+    } finally {
+      await t.db.pool.query('DROP TRIGGER gm_test_refuse_audit ON app.audit_event');
+    }
+    expect(await t.db.privileged.run.count({ where: { migrationId: m } })).toBe(0);
+    expect((await t.db.privileged.migration.findUniqueOrThrow({ where: { id: m } })).status).toBe(
+      'analyzed',
+    );
+    expect(enqueueRunCalls).toBe(0);
   });
 
   it('[LIF-090] audits the previous Wave read under the lock and answers 404 for a Wave deleted since', async () => {
