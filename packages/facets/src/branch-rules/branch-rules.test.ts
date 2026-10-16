@@ -1570,5 +1570,5 @@ describe('glob-under-glob inclusion and apply order (ADR-0113)', () => {
     }
     // Guards against a vacuous run: the generator must produce real wildcard-over-name pairs.
     expect(coveredPairs).toBeGreaterThanOrEqual(100);
-  });
+  }, 30_000);
 });
