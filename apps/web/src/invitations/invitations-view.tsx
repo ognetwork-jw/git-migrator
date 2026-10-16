@@ -11,8 +11,8 @@ import { Button, Drawer, Input, Select, Space, Table, Typography } from 'antd';
 import Link from 'next/link';
 import { useTranslations } from 'next-intl';
 import { useState } from 'react';
-import { useLiveInvalidation } from '../live/index.ts';
 import { ErrorAlert, RouteSelect, useRouteChoice } from '../mapping/shared.tsx';
+import { useLiveTopics } from '../shell/live-topics.tsx';
 import {
   BATCH_STATUSES,
   type Batch,
@@ -36,10 +36,8 @@ export function InvitationsView() {
   const [status, setStatus] = useState('');
   const [creating, setCreating] = useState(false);
   const { routes, routeId, query: routesQuery } = useRouteChoice(chosenRoute);
-  useLiveInvalidation({
-    topics: invitationTopics(),
-    queryKeysFor: () => [invitationsKey],
-  });
+  // The shell's one connection carries the topics (ADR-0350): a page never opens its own stream.
+  useLiveTopics(invitationTopics(), () => [invitationsKey]);
 
   const list = useInfiniteQuery({
     queryKey: batchesKey(routeId ?? '', status),

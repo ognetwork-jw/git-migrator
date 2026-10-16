@@ -3,6 +3,7 @@
 import { QueryClient } from '@tanstack/react-query';
 import { cleanup, fireEvent, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { LiveTopicsProvider } from '../shell/live-topics.tsx';
 import { installMatchMedia, renderWithApp } from '../test-render.tsx';
 import { BatchView } from './batch-view.tsx';
 import { InvitationsView } from './invitations-view.tsx';
@@ -343,5 +344,49 @@ describe('[UI-029] invitation batch detail', () => {
     mockApi(() => json({ type: 'x', title: 'x', status: 404, code: 'not_found' }, 404));
     renderWithApp(<BatchView batchId="b1" />, fresh());
     expect(await screen.findByText('The item you asked for does not exist.')).toBeTruthy();
+  });
+});
+
+describe('[JOB-060] invitation pages and the live connection', () => {
+  class FakeEventSource {
+    static instances: FakeEventSource[] = [];
+    onopen: (() => void) | null = null;
+    onerror: (() => void) | null = null;
+    constructor(readonly url: string) {
+      FakeEventSource.instances.push(this);
+    }
+    addEventListener() {}
+    close() {}
+  }
+
+  it('[JOB-060] the batch list and a batch add their topics to the shell connection', async () => {
+    FakeEventSource.instances = [];
+    vi.stubGlobal('EventSource', FakeEventSource);
+    mockApi(() => json({ items: [], nextCursor: null }));
+    renderWithApp(
+      <LiveTopicsProvider>
+        <InvitationsView />
+      </LiveTopicsProvider>,
+      fresh(),
+    );
+    await waitFor(() => expect(FakeEventSource.instances).toHaveLength(1));
+    await new Promise((resolve) => setTimeout(resolve, 250));
+    expect(FakeEventSource.instances.map((s) => s.url)).toEqual([
+      '/api/v1/events?topics=list%3Ainvitations,list%3Aruns',
+    ]);
+    cleanup();
+
+    FakeEventSource.instances = [];
+    renderWithApp(
+      <LiveTopicsProvider>
+        <BatchView batchId="b1" />
+      </LiveTopicsProvider>,
+      fresh(),
+    );
+    await waitFor(() => expect(FakeEventSource.instances).toHaveLength(1));
+    await new Promise((resolve) => setTimeout(resolve, 250));
+    expect(FakeEventSource.instances.map((s) => s.url)).toEqual([
+      '/api/v1/events?topics=invitation%3Ab1,list%3Ainvitations,list%3Aruns',
+    ]);
   });
 });
