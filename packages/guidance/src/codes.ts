@@ -533,7 +533,7 @@ export const FINDING_SPECS = [
     facet: 'lifecycle',
     severity: 'blocker',
     verifiable: false,
-    ref: 'LIF-031 (pending spec)',
+    ref: 'LIF-031',
   },
 ] as const satisfies readonly FindingSpec[];
 
