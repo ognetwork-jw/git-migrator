@@ -8,6 +8,7 @@ import { fileURLToPath } from 'node:url';
 import type {
   EndpointConnection,
   IdentityRecord,
+  NamespaceRecord,
   RepositoryRecord,
 } from '@git-migrator/adapter-sdk';
 import { type Config, resolveConfig } from '@git-migrator/config';
@@ -67,6 +68,7 @@ interface Tweaks {
   loopNamespaces?: boolean;
   /** Every namespace page names a next cursor never seen before. */
   endlessNamespaces?: boolean;
+  mapNamespace?: (record: NamespaceRecord) => NamespaceRecord;
 }
 let tweaks: Tweaks = {};
 let freshCursors = 0;
@@ -83,6 +85,7 @@ function tweaked(real: EndpointConnector): EndpointConnector {
           const repeat = tweaks.loopNamespaces || tweaks.endlessNamespaces;
           const page = await connection.inventory.listNamespaces(repeat ? undefined : cursor);
           if (tweaks.endlessNamespaces) return { ...page, nextCursor: `fresh-${++freshCursors}` };
+          if (tweaks.mapNamespace) return { ...page, items: page.items.map(tweaks.mapNamespace) };
           return tweaks.loopNamespaces ? { ...page, nextCursor: 'same' } : page;
         },
         async listRepositories(ns, cursor) {
@@ -894,6 +897,32 @@ describe('inventory against the fixture world', () => {
       (await t.db.privileged.route.findUniqueOrThrow({ where: { id: 'r-auto' } }))
         .targetNamespaceId,
     ).not.toBeNull();
+  }, 120_000);
+
+  it('[JOB-030] resolves the target namespace again when the provider replaces it under the same slug', async () => {
+    const before = (await t.db.privileged.route.findUniqueOrThrow({ where: { id: 'r-auto' } }))
+      .targetNamespaceId;
+    expect(before).not.toBeNull();
+    tweaks = {
+      mapNamespace: (r) => (r.slug === 'acme' ? { ...r, providerId: `${r.providerId}-new` } : r),
+    };
+    try {
+      await run(TARGET);
+    } finally {
+      tweaks = {};
+    }
+    const replaced = await t.db.privileged.route.findUniqueOrThrow({
+      where: { id: 'r-auto' },
+      include: { targetNamespace: true },
+    });
+    expect(replaced.targetNamespaceId).not.toBe(before);
+    expect(replaced.targetNamespace?.providerId).toMatch(/-new$/);
+    // The original comes back: the Route follows it again.
+    await run(TARGET);
+    expect(
+      (await t.db.privileged.route.findUniqueOrThrow({ where: { id: 'r-auto' } }))
+        .targetNamespaceId,
+    ).toBe(before);
   }, 120_000);
 
   it('[JOB-030] skips an Endpoint that is retired or unknown, and one that another pass is running', async () => {

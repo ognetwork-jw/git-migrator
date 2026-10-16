@@ -430,7 +430,7 @@ export async function runInventory(
   /**
    * `Route.targetNamespaceId` is resolved from the target inventory: the top-level namespace whose
    * slug or key equals the Route's `targetNamespacePath`. It is resolved again when the stored id
-   * is no longer one of this Endpoint's namespaces, and an unresolved or ambiguous path is warned
+   * is not one of the namespaces this pass listed, and an unresolved or ambiguous path is warned
    * about, never guessed.
    */
   async function resolveTargetNamespaces(
@@ -438,7 +438,9 @@ export async function runInventory(
     records: readonly NamespaceRecord[],
     ids: ReadonlyMap<string, string>,
   ): Promise<void> {
-    const known = new Set(ids.values());
+    // Only namespaces listed in this pass count: one the provider replaced (a new provider id under
+    // the same slug) still has its old row, which must not keep the Route pointing at it.
+    const known = new Set(records.flatMap((r) => ids.get(r.providerId) ?? []));
     for (const route of routeRows) {
       if (route.targetEndpointId !== endpointId) continue;
       if (route.targetNamespaceId && known.has(route.targetNamespaceId)) continue;
