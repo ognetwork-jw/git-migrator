@@ -2,6 +2,7 @@
 
 - Status: accepted (spec updated)
 - Date: 2026-10-08
+- Amended: 2026-10-16 (agent-decided)
 - Task: T-090
 - Affects: DEP-060, DEP-033, DEP-001, DEP-003
 
@@ -21,6 +22,11 @@ DEP-060 lists the jobs of `ci.yml` and the shape of `release.yml` but leaves the
 
 - Tagging `latest` and `<major>.<minor>`: moving tags make rollbacks harder to reason about; add later if wanted.
 - `azure/setup-helm` or the helm-unittest plugin install: another third-party action, and Helm 4 plugin verification rules.
+
+## Amendment (2026-10-16, agent-decided)
+
+1. **The overwrite guard fails closed.** Both existence checks run through `.github/scripts/require-absent.sh <what> -- <lookup>`. A lookup that succeeds means the release exists (fail). A lookup that fails with a registry not-found answer (`: not found`, `404 Not Found`, `manifest unknown`, `name unknown`) means absent (continue). Any other failure (401, 403, 5xx, DNS, timeouts, or exit 126/127 for a missing lookup tool, whatever its message) stops the release and prints the lookup's output. This replaces the last sentence of decision 5: a transient lookup error was read as "absent", and a push that then succeeded would overwrite a release. If the first release of a new package ever fails here because the registry answers a missing repository with something other than not-found, the printed output says so; widen the pattern in the script, with a test, rather than skipping the guard.
+2. **The CI image job also builds the `dev` target** (no load, no push), so the Compose image (DEV-020) is built on every change, not only on a developer's machine. Its own `RUN` steps check `secretspec --version` and `pnpm --version`.
 
 ## Affected requirements
 

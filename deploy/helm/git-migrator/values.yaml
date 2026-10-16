@@ -36,7 +36,7 @@ postgres:
 
 web:
   replicas: 2
-  terminationGracePeriodSeconds: 30
+  terminationGracePeriodSeconds: 30   # at least 25: 5 s preStop + 20 s drain, or the render fails
   resources: { requests: { cpu: 250m, memory: 512Mi }, limits: { cpu: "1", memory: 1Gi } }
   nodeSelector: {}
   tolerations: []

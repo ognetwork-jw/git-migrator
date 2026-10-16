@@ -92,6 +92,14 @@ if docker run --rm "${hardening[@]}" -e GM_SECRETSPEC_PROVIDER=dotenv:/run/gm-se
   cat "$work/missing.log" >&2
   exit 1
 fi
+# Any non-zero exit is not enough (a crash or a bad flag also exits non-zero): secretspec itself must
+# have refused, with its RequiredSecretMissing message, before node ran. Its error report wraps long
+# lines, so squeeze whitespace (newlines included) before matching.
+if ! tr -s '[:space:]' ' ' <"$work/missing.log" | grep -q 'is required but not set'; then
+  echo "migrate failed without its secrets, but not because secretspec refused them:" >&2
+  cat "$work/missing.log" >&2
+  exit 1
+fi
 
 echo "== migrate"
 migrated=0

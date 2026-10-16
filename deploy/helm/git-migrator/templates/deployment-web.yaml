@@ -1,5 +1,10 @@
 {{- $name := printf "%s-web" (include "git-migrator.fullname" .) }}
 {{- $ctx := dict "root" . "component" "web" }}
+{{- /* The 5 s preStop sleep plus the 20 s drain of web.ts (DRAIN_MS) must fit in the grace period,
+       or the kubelet's SIGKILL cuts in-flight requests short (ADR-0291 amendment). */}}
+{{- if lt (int .Values.web.terminationGracePeriodSeconds) 25 }}
+{{- fail "web.terminationGracePeriodSeconds must be at least 25: the 5 s preStop sleep plus the 20 s drain of the web server need it" }}
+{{- end }}
 apiVersion: apps/v1
 kind: Deployment
 metadata:

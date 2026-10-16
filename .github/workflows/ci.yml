@@ -281,3 +281,17 @@ jobs:
         env:
           GM_SMOKE_POSTGRES_IMAGE: mirror.gcr.io/library/postgres:16@sha256:ca0bd484cb98bf4b24eb1010e73fb3fcbd6714d240fbc1a10eea5b7dbecb641d
         run: deploy/docker/smoke.sh git-migrator:ci
+
+      # DEV-020: the Compose `dev` target is built too, so a broken dev image fails CI rather than a
+      # developer's `docker compose up`. Its own build steps run `secretspec --version` and
+      # `pnpm --version`. Nothing is loaded or pushed.
+      - name: Build dev image (Compose target)
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+        with:
+          context: .
+          file: deploy/docker/Dockerfile
+          target: dev
+          push: false
+          tags: git-migrator:ci-dev
+          cache-from: type=gha
+          cache-to: type=gha,mode=max

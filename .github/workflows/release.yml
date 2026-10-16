@@ -111,16 +111,14 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      # Releases are immutable: refuse to overwrite a published tag.
+      # Releases are immutable: refuse to overwrite a published tag. Fails closed: only a registry
+      # "not found" counts as absent; a 401, a 5xx or a network error stops the release.
       - name: Refuse to overwrite an existing image tag
         env:
           IMAGE: ghcr.io/${{ needs.verify.outputs.owner }}/git-migrator:${{ github.ref_name }}
         run: |
           set -euo pipefail
-          if docker buildx imagetools inspect "${IMAGE}" >/dev/null 2>&1; then
-            echo "${IMAGE} already exists" >&2
-            exit 1
-          fi
+          .github/scripts/require-absent.sh "image ${IMAGE}" -- docker buildx imagetools inspect "${IMAGE}"
 
       - name: Image tags and labels
         id: meta
@@ -183,13 +181,12 @@ jobs:
           set -euo pipefail
           printf '%s' "${REGISTRY_TOKEN}" | helm registry login ghcr.io --username "${GITHUB_ACTOR}" --password-stdin
 
+      # Fails closed, as for the image: only a registry "not found" counts as absent.
       - name: Refuse to overwrite an existing chart version
         run: |
           set -euo pipefail
-          if helm show chart "oci://ghcr.io/${OWNER}/charts/git-migrator" --version "${VERSION}" >/dev/null 2>&1; then
-            echo "chart version ${VERSION} already exists" >&2
-            exit 1
-          fi
+          .github/scripts/require-absent.sh "chart version ${VERSION}" -- \
+            helm show chart "oci://ghcr.io/${OWNER}/charts/git-migrator" --version "${VERSION}"
 
       - name: Push
         run: |
