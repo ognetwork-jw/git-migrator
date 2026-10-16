@@ -7,7 +7,8 @@
  * dependencies of ARC-012, and that no file reaches into another package by relative path.
  *
  * Only `*.test.*` and `*.spec.*` files count as test files; they may use test-support packages, and
- * non-test files may not import them (or any test file).
+ * non-test files may not import them (or any test file). A package's `/testing` entry point (test
+ * seams) is likewise loaded only from test files and `testing/*` packages.
  *
  * Usage: node tools/check-deps.ts [--root <dir>]
  * Exit codes: 0 ok, 1 violations, 2 usage error or no workspaces found (never "OK" on nothing).
@@ -68,6 +69,13 @@ export const RULES: Readonly<Record<string, readonly string[]>> = {
   observability: [],
   guidance: ['core', 'canonical'],
 };
+
+/**
+ * A package's test entry point (`@git-migrator/auth/testing`, `@git-migrator/db/testing`). It
+ * exposes test seams (`createAuthForTest` can redirect the sign-in authority and rewrite role
+ * decisions), so only test files and `testing/*` packages may load it; type-only imports are fine.
+ */
+const TESTING_ENTRY = /^@git-migrator\/[^/]+\/testing(?:\/|$)/;
 
 /** Test-support packages any package may use as a devDependency, from test files only. */
 export const TEST_SUPPORT = ['provider-fakes', 'fixtures'] as const;
@@ -250,6 +258,8 @@ function targetShort(specifier: string): string {
 export interface ModuleReference {
   specifier: string;
   dynamic: boolean;
+  /** `import type`, `export type … from`, `import('x').T` types and `/// <reference>`: erased at run time. */
+  typeOnly?: boolean;
 }
 
 const MODULE_CALL_NAMES = new Set([
@@ -288,9 +298,9 @@ export function findModuleReferences(
 ): { references: ModuleReference[]; ok: boolean } {
   const { program, comments, ok } = parse(source, filename);
   const references: ModuleReference[] = [];
-  const add = (node: Node | undefined) => {
+  const add = (node: Node | undefined, typeOnly = false) => {
     const str = stringValue(node);
-    if (str) references.push({ specifier: str.value, dynamic: str.dynamic });
+    if (str) references.push({ specifier: str.value, dynamic: str.dynamic, typeOnly });
   };
 
   /** import()/require() arguments: anything that is not a string is a computed specifier (fail closed). */
@@ -330,9 +340,11 @@ export function findModuleReferences(
   walkAst(program, (n) => {
     switch (n.type) {
       case 'ImportDeclaration':
+        add(n.source, n.importKind === 'type');
+        break;
       case 'ExportAllDeclaration':
       case 'ExportNamedDeclaration':
-        if (n.source) add(n.source);
+        if (n.source) add(n.source, n.exportKind === 'type');
         break;
       case 'ImportExpression':
         addDynamic(n.source);
@@ -342,7 +354,7 @@ export function findModuleReferences(
           add(n.moduleReference.expression);
         break;
       case 'TSImportType':
-        add(n.source ?? n.argument?.literal ?? n.argument);
+        add(n.source ?? n.argument?.literal ?? n.argument, true);
         break;
       case 'NewExpression':
         if (
@@ -383,7 +395,7 @@ export function findModuleReferences(
 
   for (const c of comments) {
     const m = /^\/\s*<reference\s+(?:types|path)\s*=\s*["']([^"']+)["']/.exec(c.value);
-    if (m?.[1]) references.push({ specifier: m[1], dynamic: false });
+    if (m?.[1]) references.push({ specifier: m[1], dynamic: false, typeOnly: true });
   }
   return { references, ok };
 }
@@ -710,6 +722,11 @@ export function checkDependencies(root: string): Violation[] {
             testFile,
           });
           if (problem) add(file, `'${specifier}': ${problem}`);
+          else if (TESTING_ENTRY.test(specifier) && !testFile && !ws.isTesting && !ref.typeOnly)
+            add(
+              file,
+              `'${specifier}' exposes test seams; import it only from *.test.* files or testing/* packages`,
+            );
         } else if (specifier.startsWith('/') || specifier.startsWith('file:')) {
           add(file, `'${specifier}' is an absolute specifier; import the package by name`);
         } else if (specifier.startsWith('.')) {

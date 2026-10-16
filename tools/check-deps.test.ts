@@ -251,6 +251,54 @@ describe('ARC-012 dependency-rule check', () => {
     expect(checkDependencies(otherTesting)).toHaveLength(1);
   });
 
+  it('[ARC-012] a package /testing entry point is imported only from test files and testing packages', () => {
+    const seams = "import { createAuthForTest } from '@git-migrator/auth/testing';\n";
+    const pkgs = (src: string, extra: Record<string, Pkg> = {}) =>
+      fixture({
+        'packages/auth': {},
+        'packages/api': { deps: ['auth'], src },
+        'apps/web': { deps: ['auth'], src },
+        ...extra,
+      });
+    expect(
+      checkDependencies(pkgs(seams))
+        .map((v) => v.file)
+        .sort(),
+    ).toEqual([join('apps', 'web', 'src', 'index.ts'), join('packages', 'api', 'src', 'index.ts')]);
+    for (const src of [
+      "export { createAuthForTest } from '@git-migrator/auth/testing';\n",
+      "export * from '@git-migrator/auth/testing/helpers';\n",
+      "const t = await import('@git-migrator/auth/testing');\n",
+    ]) {
+      const messages = checkDependencies(pkgs(src)).map((v) => v.message);
+      expect(messages, src).toHaveLength(2);
+      expect(messages[0], src).toContain('test seams');
+    }
+    const allowed = pkgs(
+      [
+        // Type-only imports are erased, so no seam is reachable at run time.
+        "import type { AuthTestSeams } from '@git-migrator/auth/testing';",
+        "export type { AuthTestSeams } from '@git-migrator/auth/testing';",
+        "export type T = import('@git-migrator/auth/testing').AuthTestSeams;",
+        // Other sub-paths are not test seams.
+        "import { x } from '@git-migrator/auth/testing-free';",
+        '',
+      ].join('\n'),
+      {
+        'packages/jobs': {
+          deps: ['db'],
+          files: { 'src/a.test.ts': "import '@git-migrator/db/testing';\n" },
+        },
+        'packages/db': {},
+        'testing/integration': {
+          deps: ['db'],
+          src: "import { createTestDatabase } from '@git-migrator/db/testing';\n",
+        },
+      },
+    );
+    expect(checkDependencies(allowed)).toEqual([]);
+  });
+
   it('[ARC-012] a test/ directory is not a test file, and re-exporting test files is rejected', () => {
     const helperDir = fixture({
       'packages/core': {
