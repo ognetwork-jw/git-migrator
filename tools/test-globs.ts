@@ -22,8 +22,8 @@ export const INTEGRATION_INCLUDE = [`testing/integration/**/*.test.${EXT}`];
 /**
  * Files that only the integration project runs. The other files of the tier also stay in the unit
  * project, because the TST-005 thresholds of `jobs` and the adapters are measured from them
- * (ADR-0475). UNIT_INCLUDE's `testing/*\/src` glob would match these as well, so the unit project
- * excludes them.
+ * (ADR-0475; running them twice in CI is a known cost, see its amendment). UNIT_INCLUDE's
+ * `testing/*\/src` glob would match these as well, so the unit project excludes them.
  */
 export const INTEGRATION_ONLY = [`testing/integration/**/phase1*.test.${EXT}`];
 

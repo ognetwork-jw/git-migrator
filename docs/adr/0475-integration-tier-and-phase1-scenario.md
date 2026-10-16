@@ -19,6 +19,17 @@
 6. The scenario is composed from the processes' own composition roots, so it exercises the real API and worker code paths: `runMigrate` and `runSeed` (the `db:migrate` and `db:seed` commands), `buildApiRuntime` (the web process's API with real Better Auth test sign-in and the producer-side job runtime) and `startWorker` with role `all` (every queue handler on BullMQ-on-Postgres). They are exported through new `exports` entries of `apps/worker` and `apps/web`. Configuration is a YAML file named by `GM_CONFIG_FILE`, and secrets are environment values, as in a deployment. The existing suites (`migrate`, `source-read-only`, `endpoint-migration`) keep driving the executor directly and are not duplicated.
 7. Step 3 triggers analysis explicitly through `POST /migrations/{id}/analyze` for Migrations with no or a stale Analysis (TST-020 allows "the background feeder or an explicit analyze"), so the test does not depend on the feeder's schedule.
 
+## Amendment (2026-10-16, follow-ups of T-075): the double run is a known cost
+
+Decision 2 stands, and its cost is accepted: every file of `testing/integration` except `phase1*` runs twice in CI, once in the `checks` job (`pnpm test`) and once in the `integration` job (`pnpm test:integration`). The two jobs run side by side, so the cost is runner minutes, not time to a result; the whole tier took about 130 s locally on 2026-10-16.
+
+Moving the files out of `pnpm test` was re-measured on 2026-10-16: without them `pnpm test` fails TST-005 (`packages/jobs/src/**` at 63.5% lines against 80%). It needs one of these, each a change to what the spec states, so it is left to a human:
+
+- `pnpm test` merges a coverage report from the integration run before it checks thresholds, which makes `pnpm test` depend on a prior integration run (TST-005 says `pnpm test` enforces the thresholds);
+- CI checks the thresholds on a merged report in a third job instead of in `pnpm test` (also TST-005);
+- `pnpm test` runs both projects and CI drops the separate integration step (DEP-060 lists `test:integration` as its own CI step);
+- unit tests for `packages/jobs` raise it above 80% without the integration tier.
+
 ## Alternatives
 
 - Keep the files in the unit project too: `pnpm test` stays slow and every integration file runs twice in CI.
