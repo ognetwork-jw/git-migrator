@@ -15,7 +15,7 @@ import type { ResourceGroup } from './config.ts';
 
 export const WINDOW_SECONDS = 3600;
 
-/** Documented defaults (provider doc, "Rate limits"; unverified, ADR-0036 item 11). */
+/** Documented defaults (provider doc, "Rate limits"; verified against Atlassian docs, ADR-0036 item 11). */
 export const DEFAULT_LIMITS: Readonly<Record<ResourceGroup, number>> = {
   'repository-data': 1000,
   webhooks: 1000,
