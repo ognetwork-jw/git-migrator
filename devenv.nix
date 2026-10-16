@@ -40,10 +40,16 @@ in
     git-lfs
     secretspec
     postgresql_16
-    kubernetes-helm
+    # helm with the helm-unittest plugin, so `pnpm helm:check` runs the chart's unit-test suites
+    # locally (`helm unittest`, which tools/helm-check.ts falls back to) instead of only warning.
+    (wrapHelm kubernetes-helm { plugins = [ kubernetes-helmPlugins.helm-unittest ]; })
     kubeconform
     jq
   ];
+
+  # The devenv Postgres has no TLS, while `postgres.sslmode` defaults to `require` for production.
+  # Set for the whole environment, so web, worker, migrate and the shell all connect (ADR-0213).
+  env.GM_POSTGRES_SSLMODE = "disable";
 
   languages.javascript = {
     enable = true;
@@ -115,9 +121,9 @@ in
     worker = {
       # Migrate first (idempotent, retried every 2 s, at most 60 times, until the password is set and
       # Postgres is up), then start the worker. NODE_ENV=development makes the worker wait for ever for
-      # the database instead of exiting after 3 minutes (ADR-0213). The devenv Postgres has no TLS, so
-      # this dev process overrides the production default `postgres.sslmode: require`.
-      exec = "secretspec run -- sh -c 'export GM_POSTGRES_SSLMODE=disable; i=0; until pnpm db:migrate; do i=$((i+1)); [ $i -ge 60 ] && exit 1; sleep 2; done; export NODE_ENV=development; exec pnpm --filter @git-migrator/worker dev -- --role all'";
+      # the database instead of exiting after 3 minutes (ADR-0213). The TLS-less sslmode comes
+      # from the top-level `env`.
+      exec = "secretspec run -- sh -c 'i=0; until pnpm db:migrate; do i=$((i+1)); [ $i -ge 60 ] && exit 1; sleep 2; done; export NODE_ENV=development; exec pnpm --filter @git-migrator/worker dev -- --role all'";
       # The worker's health server (DEP-030) answers /readyz with 200 once the queue workers run.
       ready = {
         http.get = {
@@ -162,6 +168,8 @@ in
     pnpm lint
     pnpm typecheck
     pnpm test
+    # The chart check with its unit-test suites, which must run here: devenv provides helm-unittest.
+    pnpm helm:check --require-unittest
   '';
 
   # Report only: the hook never rewrites staged files (ADR-0066).

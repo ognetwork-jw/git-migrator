@@ -2,6 +2,7 @@
 
 - Status: accepted (no spec change needed)
 - Date: 2026-10-08
+- Amended: 2026-10-16 (agent-decided; follow-up rows of T-093)
 
 ## Context
 
@@ -37,6 +38,14 @@ ADR-0066 verified devenv 2.4.0 and recorded that version. It did not pin the CLI
 
 - A maintainer commits `devenv.lock` from a machine that can reach the inputs. Then the lock is used as the pin.
 - Confirm from the run log that the cache serves the build (decision 6). If it does not, record the missing store paths here.
+
+## Amendment (2026-10-16, agent-decided)
+
+1. **The CLI is pinned to a commit, not the tag.** `nix profile install --accept-flake-config github:cachix/devenv/b904dcb51fe48c30db250038241507f60752f222`. `git ls-remote https://github.com/cachix/devenv refs/tags/v2.4.0` returns that commit (a lightweight tag, so it is the commit itself), and it matches the `+b904dcb` build suffix the runner printed. The tag stays in a comment next to the install; bump both together. A tag can be moved, a commit cannot. The test now accepts only a 40-hex revision. This replaces decision 1's `github:cachix/devenv/v2.4.0`.
+2. **`cachix.cachix.org` stays, as an accepted risk.** The pinned flake's own `nixConfig` lists it, and `--accept-flake-config` applies that `nixConfig` anyway, so removing it from `extra_nix_config` would not remove it from the install. Trusting it means trusting Cachix's signing key for that cache, the same party that signs the devenv cache. The workflow comment says so.
+3. **Nix syntax check.** The workflow runs `nix-instantiate --parse devenv.nix` right after Nix is installed and before devenv is installed, so a syntax error fails in seconds with a clear message. The tests in `tools/dev-environment.test.ts` remain string checks; `devenv test` in this workflow is the behavioural check.
+4. The worker `pgrep` self-match raised in review no longer applies: ADR-0213 replaced the probe with an HTTP probe on `/readyz`, and a test asserts the worker has no `pgrep`.
+5. `devenv.lock` is still not committed (decision 2): the devenv CLI, its GitHub tarball inputs and `devenv.cachix.org` were unreachable from this session too.
 
 ## Affected requirements
 

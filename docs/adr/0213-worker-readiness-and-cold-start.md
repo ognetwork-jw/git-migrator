@@ -2,6 +2,7 @@
 
 - Status: accepted (spec updated)
 - Date: 2026-10-08
+- Amended: 2026-10-16 (agent-decided)
 - Task: T-028
 - Affects: DEV-010, DEV-030, DEP-030, DEP-002
 
@@ -26,6 +27,10 @@ ADR-0137 gave the devenv `worker` process a `pgrep -f src/dev-worker.ts` probe, 
 
 - Keep the `pgrep` probe against `src/worker.ts`: reports ready while the worker is still waiting for the database.
 - Let the worker run migrations itself: the migrate Job owns schema changes (DATA-030).
+
+## Amendment (2026-10-16, agent-decided)
+
+The devenv `web` process also talks to Postgres (sign-in and every API call), and it had no sslmode override, so its first database request used the production default `require` against the TLS-less devenv Postgres; the readiness probe only fetches `/`, so nothing noticed. `devenv.nix` now sets `env.GM_POSTGRES_SSLMODE = "disable"` at the top level, which devenv exports to every process and to `devenv shell`. The worker's own `export GM_POSTGRES_SSLMODE=disable` is removed, so there is one source. Compose `dev`, which runs web and worker in one container, already sets the same. The production default stays `require`.
 
 ## Affected requirements
 

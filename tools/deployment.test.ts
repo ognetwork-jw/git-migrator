@@ -315,6 +315,22 @@ describe('chart values (DEP-031)', () => {
     expect(helpers).toContain('allowPrivilegeEscalation: false');
     expect(helpers).toContain('drop: ["ALL"]');
   });
+
+  it('[DEP-030] the web grace-period floor equals the preStop sleep plus the web drain', () => {
+    const web = read('deploy/helm/git-migrator/templates/deployment-web.yaml');
+    const drainMs = /export const DRAIN_MS = ([\d_]+);/.exec(read('apps/web/src/web.ts'))?.[1];
+    expect(drainMs).toBeDefined();
+    const preStop = /command: \["sleep", "(\d+)"\]/.exec(web)?.[1];
+    expect(preStop).toBeDefined();
+    const floor = Number(preStop) + Number(drainMs?.replaceAll('_', '')) / 1000;
+    expect(web).toContain(`lt (int .Values.web.terminationGracePeriodSeconds) ${floor}`);
+    expect(web).toContain(`web.terminationGracePeriodSeconds must be at least ${floor}`);
+    // The default leaves headroom above the floor.
+    const values = parse(read('deploy/helm/git-migrator/values.yaml')) as {
+      web: { terminationGracePeriodSeconds: number };
+    };
+    expect(values.web.terminationGracePeriodSeconds).toBeGreaterThanOrEqual(floor);
+  });
 });
 
 describe('helm:check (DEP-033)', () => {
@@ -392,6 +408,15 @@ describe('workflows (DEP-060)', () => {
     expect(build.with.push).toBe(false);
     expect(build.with.target).toBe('runtime');
     expect(image.steps.some((s: any) => /deploy\/docker\/smoke\.sh/.test(s.run ?? ''))).toBe(true);
+  });
+
+  it('[DEP-060][DEV-020] ci.yml also builds the Compose dev target, without pushing', () => {
+    const steps = ci.jobs.image.steps as Array<{ uses?: string; with?: Record<string, unknown> }>;
+    const dev = steps.find(
+      (s) => s.uses?.startsWith('docker/build-push-action') && s.with?.target === 'dev',
+    );
+    expect(dev?.with?.push).toBe(false);
+    expect(dev?.with?.file).toBe('deploy/docker/Dockerfile');
   });
 
   it('[DEP-033][DEP-060] ci.yml runs helm:check with helm-unittest installed', () => {
@@ -518,6 +543,10 @@ describe('secretspec in the image (DEP-002, DEP-020)', () => {
     expect(smoke).toContain('GM_SECRETSPEC_PROVIDER=dotenv:/run/gm-secrets/prod.env');
     expect(smoke).toContain('GM_SECRETSPEC_PROFILE=production');
     expect(smoke).toMatch(/missing\.env/);
+    // The refusal must be secretspec's own (RequiredSecretMissing), not any non-zero exit.
+    expect(smoke).toContain(
+      `tr -s '[:space:]' ' ' <"$work/missing.log" | grep -q 'is required but not set'`,
+    );
     for (const key of [
       'POSTGRES_PASSWORD',
       'BETTER_AUTH_SECRET',
@@ -604,5 +633,62 @@ describe('release gate (DEP-060)', () => {
     expect(names.indexOf('Refuse to overwrite an existing image tag')).toBeLessThan(
       names.indexOf('Build and push'),
     );
+  });
+
+  it('[DEP-060] both existence checks go through the fail-closed guard, never a bare `if lookup`', () => {
+    expect(text).toContain(
+      `.github/scripts/require-absent.sh "image \${IMAGE}" -- docker buildx imagetools inspect "\${IMAGE}"`,
+    );
+    expect(text).toMatch(
+      /require-absent\.sh "chart version \$\{VERSION\}" -- \\\n\s+helm show chart/,
+    );
+    expect(text).not.toMatch(/if (docker buildx imagetools inspect|helm show chart)/);
+  });
+});
+
+describe('release overwrite guard (DEP-060)', () => {
+  const guard = join(root, '.github/scripts/require-absent.sh');
+  const runGuard = (script: string) =>
+    spawnSync(guard, ['thing v1', '--', 'sh', '-c', script], { encoding: 'utf8' });
+
+  it('[DEP-060] a lookup that succeeds means the release exists, so the guard fails', () => {
+    const result = runGuard('echo found');
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain('thing v1 already exists');
+  });
+
+  it.each([
+    'ERROR: ghcr.io/o/git-migrator:v1.0.0: not found',
+    'Error: ghcr.io/o/charts/git-migrator:1.0.0: not found',
+    'unexpected status: 404 Not Found',
+    'MANIFEST_UNKNOWN: manifest unknown',
+    'NAME_UNKNOWN: repository name not known to registry; name unknown',
+  ])('[DEP-060] only a registry not-found answer counts as absent: %s', (message) => {
+    const result = runGuard(`echo '${message}' >&2; exit 1`);
+    expect(result.status).toBe(0);
+    expect(result.stdout).toContain('thing v1 does not exist yet');
+  });
+
+  it.each([
+    'unexpected status: 401 Unauthorized',
+    'failed to authorize: denied: denied',
+    'unexpected status code 503 Service Unavailable',
+    'dial tcp: lookup ghcr.io: no such host',
+    '',
+  ])('[DEP-060] any other lookup failure fails closed: %j', (message) => {
+    const result = runGuard(`echo '${message}' >&2; exit 1`);
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain('could not tell whether thing v1 exists');
+  });
+
+  it('[DEP-060] a missing lookup tool fails closed, even when its message says not found', () => {
+    const result = runGuard("echo 'sh: 1: docker: not found' >&2; exit 127");
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain('could not run the lookup for thing v1');
+  });
+
+  it('[DEP-060] a call without the -- separator is a usage error', () => {
+    const result = spawnSync(guard, ['thing v1', 'true'], { encoding: 'utf8' });
+    expect(result.status).toBe(2);
   });
 });

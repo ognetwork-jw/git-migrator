@@ -2,6 +2,7 @@
 
 - Status: accepted (spec updated)
 - Date: 2026-10-08
+- Amended: 2026-10-16 (agent-decided)
 - Task: T-090
 - Affects: DEP-030, DEP-031, DEP-033, DEP-040, DEP-020
 
@@ -25,6 +26,11 @@ The spec fixes the templates, hooks, probes and values surface but not resource 
 - Fixed resource names (`git-migrator-web`): two releases in one namespace would clash.
 - `values.config` winning over the top-level values: the same setting would silently have two sources of truth in `values.yaml`.
 - Adding helm-unittest to `devenv.nix`: outside this task's files, and the spec lists devenv packages.
+
+## Amendment (2026-10-16, agent-decided)
+
+1. **Web grace-period floor.** The render fails with `web.terminationGracePeriodSeconds must be at least 25: the 5 s preStop sleep plus the 20 s drain of the web server need it` when the value is below 25 (the 5 s `preStop` plus `DRAIN_MS`, 20 s, in `apps/web/src/web.ts`). A lower value would let the kubelet's SIGKILL cut in-flight requests that the drain would have finished. DEP-030's list of render failures does not name this one; it is an addition in the spirit of the existing required-value failures. A test ties the floor to the `preStop` value and `DRAIN_MS`, so changing either without the other fails. Workers get no floor: their grace period is the only bound by design (ADR-0213).
+2. **helm-unittest in devenv.** `devenv.nix` installs helm through `wrapHelm` with `kubernetes-helmPlugins.helm-unittest`, so `pnpm helm:check` runs the suites through the `helm unittest` plugin path instead of warning. `enterTest` runs `pnpm helm:check --require-unittest`, so the devenv CI job checks that the plugin works. This replaces the last sentence of decision 7 and the "Adding helm-unittest to devenv.nix" alternative. Checked in this session against the nixpkgs revision that `cachix/devenv-nixpkgs` (rolling) pointed at: helm 4.3.0 with helm-unittest 1.2.1, fetched from the binary cache, passed every suite through `tools/helm-check.ts --require-unittest`. CI's standalone binary stays at 1.0.3.
 
 ## Affected requirements
 

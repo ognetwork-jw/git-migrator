@@ -2,6 +2,7 @@
 
 - Status: accepted (spec updated)
 - Date: 2026-10-08
+- Amended: 2026-10-16 (agent-decided)
 
 ## Context
 
@@ -29,6 +30,11 @@ DEP-001 wants a pinned secretspec "release binary, verified by checksum". This s
 - The committed `Dockerfile` was not built here: the `rust` stage needs `static.crates.io` (blocked) and the `base` stage needs Debian mirrors (403). CI's Docker build (T-003) is the first real build of these stages.
 - Review round 1 did the same substitution again (base from nixpkgs-cached tools, the `rust` and `apt` steps removed, `USER node` kept). The non-root path was not exercised: the sandbox's repository files are owned by root, so the run used `UID=0 GID=0`. Non-root behaviour is covered by the config tests only.
 - For local verification only, a copy with the `rust` and `apt` steps replaced by a base image built from nixpkgs-cached `git`, `git-lfs`, `tini`, `curl` and `secretspec` (plus the sandbox proxy CA) was built with `docker compose build dev`, started, and ran `pnpm install` and `pnpm dev` to a healthy state. That copy is not committed.
+
+## Amendment (2026-10-16, agent-decided)
+
+- CI now builds the `dev` target as well as `runtime` (ADR-0292 amendment), which closes the "never built" part of the Verification section once that job has run.
+- Decision 8 is still open. The v0.21.1 tag resolves (`git ls-remote https://github.com/cachix/secretspec` gives `5a8927d2…`), and its `cli-artifacts.yml` workflow builds the CLI archives with cargo-dist, but the release asset pages and downloads still return 403 from the agent sessions, so no SHA-256 could be read and pinned. The cargo build stays.
 
 ## Affected requirements
 

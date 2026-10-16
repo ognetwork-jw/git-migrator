@@ -64,6 +64,18 @@ tests:
         template: templates/deployment-worker-standard.yaml
       - equal: { path: "spec.template.spec.terminationGracePeriodSeconds", value: 600 }
         template: templates/deployment-worker-large.yaml
+  - it: "[DEP-030] the render fails when the web grace period cannot hold the 5 s preStop and the 20 s drain"
+    template: templates/deployment-web.yaml
+    set:
+      web.terminationGracePeriodSeconds: 24
+    asserts:
+      - failedTemplate: { errorMessage: "web.terminationGracePeriodSeconds must be at least 25: the 5 s preStop sleep plus the 20 s drain of the web server need it" }
+  - it: "[DEP-030] a web grace period of exactly 25 s renders"
+    template: templates/deployment-web.yaml
+    set:
+      web.terminationGracePeriodSeconds: 25
+    asserts:
+      - equal: { path: "spec.template.spec.terminationGracePeriodSeconds", value: 25 }
   - it: "[DEP-030] web probes: startup and readiness on /api/readyz, liveness on /api/healthz"
     template: templates/deployment-web.yaml
     asserts:

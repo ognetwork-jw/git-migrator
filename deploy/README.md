@@ -11,4 +11,4 @@ docker build -f deploy/docker/Dockerfile -t git-migrator:local .
 deploy/docker/smoke.sh git-migrator:local
 ```
 
-`helm:check` needs `helm` and `kubeconform` (devenv provides both) and, for the unit tests, the `helm-unittest` binary or the `helm unittest` plugin; CI installs it.
+`helm:check` needs `helm` and `kubeconform` and, for the unit tests, the `helm-unittest` binary or the `helm unittest` plugin. devenv provides all three (helm with the plugin); CI installs the standalone binary.

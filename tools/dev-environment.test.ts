@@ -25,6 +25,12 @@ type Manifest = {
 const compose = (): Compose => parseYaml(read('compose.yaml')) as Compose;
 const manifest = (): Manifest => parseToml(read('secretspec.toml')) as Manifest;
 
+/**
+ * The commit of the cachix/devenv v2.4.0 tag (`git ls-remote https://github.com/cachix/devenv
+ * refs/tags/v2.4.0`, a lightweight tag). The first CI run printed `devenv 2.4.0+b904dcb`.
+ */
+const DEVENV_V2_4_0_COMMIT = 'b904dcb51fe48c30db250038241507f60752f222';
+
 /** DEV-030: every secret the spec names, with its requiredness. */
 const DEV_030_SECRETS = [
   'POSTGRES_PASSWORD',
@@ -135,11 +141,6 @@ describe('development environment files', () => {
     expect(worker).toContain('pnpm db:migrate');
     expect(worker).toContain('[ $i -ge 60 ] && exit 1');
     expect(worker).toContain('NODE_ENV=development');
-    // The devenv Postgres has no TLS: migrate and the worker must not use the default `require`.
-    expect(worker).toContain('export GM_POSTGRES_SSLMODE=disable;');
-    expect(worker.indexOf('GM_POSTGRES_SSLMODE=disable')).toBeLessThan(
-      worker.indexOf('pnpm db:migrate'),
-    );
     expect(worker).toMatch(/timeout = \d+;/);
     // The one-shot has no readiness probe and never restarts, so devenv does not wait on it.
     const oneShot = nix.slice(nix.indexOf('    postgres-password = {'), nix.indexOf('    web = {'));
@@ -192,11 +193,14 @@ describe('development environment files', () => {
     expect(read('.github/workflows/devenv.yml')).not.toContain('GITHUB_ENV');
   });
 
-  it('[DEP-060] devenv.yml pins the devenv CLI to a tag or 40-hex revision and checks its version', () => {
+  it('[DEP-060] devenv.yml pins the devenv CLI to the 40-hex commit of v2.4.0 and checks its version', () => {
     const text = read('.github/workflows/devenv.yml');
     const install = text.split('\n').find((line) => line.includes('nix profile install'));
     expect(install).toBeDefined();
-    expect(install).toMatch(/github:cachix\/devenv\/(v\d+\.\d+\.\d+|[0-9a-f]{40})\s*$/);
+    // A tag can move; only the commit pins what runs (ADR-0136). The tag stays in a comment.
+    expect(install).toMatch(/github:cachix\/devenv\/[0-9a-f]{40}\s*$/);
+    expect(install).toContain(DEVENV_V2_4_0_COMMIT);
+    expect(text).toContain(`Tag v2.4.0 = ${DEVENV_V2_4_0_COMMIT}`);
     expect(install).not.toContain('nixpkgs#devenv');
     expect(install).toContain('--accept-flake-config');
     // Accepts the release line and the `+<commit>` build suffix; 2.4.01 and 2.4.1 do not match.
@@ -223,6 +227,13 @@ describe('development environment files', () => {
     ]) {
       expect(text).toContain(path);
     }
+  });
+
+  it('[DEP-060] devenv.yml parses devenv.nix with nix-instantiate before it installs devenv (ADR-0136)', () => {
+    const text = read('.github/workflows/devenv.yml');
+    const parse = text.indexOf('nix-instantiate --parse devenv.nix');
+    expect(parse).toBeGreaterThan(text.indexOf('cachix/install-nix-action@'));
+    expect(parse).toBeLessThan(text.indexOf('nix profile install'));
   });
 
   it('[DEP-060] the workflow checks the test profile before devenv test and prints logs on failure', () => {
@@ -332,6 +343,29 @@ describe('development environment files', () => {
     expect(c.services.dev?.depends_on).toMatchObject({
       install: { condition: 'service_completed_successfully' },
     });
+  });
+
+  it('[DEV-010] devenv sets GM_POSTGRES_SSLMODE=disable for every process, web included (ADR-0213)', () => {
+    const nix = read('devenv.nix');
+    // Top-level `env`: devenv exports it to the shell and to every process, so the web's first
+    // database request does not fail on the production default `require` against the TLS-less Postgres.
+    expect(nix).toMatch(/^ {2}env\.GM_POSTGRES_SSLMODE = "disable";$/m);
+    const processes = nix.slice(nix.indexOf('  processes = {'), nix.indexOf('enterTest = '));
+    // No process sets its own value, which could disagree with the top-level one.
+    expect(processes).not.toContain('GM_POSTGRES_SSLMODE');
+    // Compose `dev` (web and worker in one container) sets the same.
+    expect(compose().services.dev?.environment).toMatchObject({ GM_POSTGRES_SSLMODE: 'disable' });
+  });
+
+  it('[DEP-033] devenv provides helm-unittest and enterTest runs helm:check requiring it (ADR-0291)', () => {
+    const nix = read('devenv.nix');
+    expect(nix).toContain(
+      '(wrapHelm kubernetes-helm { plugins = [ kubernetes-helmPlugins.helm-unittest ]; })',
+    );
+    const enterTest = nix.slice(nix.indexOf('enterTest = '));
+    expect(enterTest.indexOf('pnpm helm:check --require-unittest')).toBeGreaterThan(
+      enterTest.indexOf('pnpm test\n'),
+    );
   });
 
   it('[DEV-010] devenv.yaml enables secretspec for the development profile with the git-hooks input', () => {
