@@ -164,7 +164,7 @@ describe('Run leases', () => {
   it('[LIF-046] aborts `lost` 90 s after the last renewal that succeeded was sent, at the production tick', async () => {
     const id = await makeRun();
     vi.useFakeTimers({
-      toFake: ['setTimeout', 'setInterval', 'clearTimeout', 'clearInterval', 'Date'],
+      toFake: ['setTimeout', 'setInterval', 'clearTimeout', 'clearInterval', 'Date', 'performance'],
     });
     try {
       let failing = false;
@@ -198,10 +198,36 @@ describe('Run leases', () => {
     }
   }, 60_000);
 
+  it('[LIF-046] a backward wall-clock step does not stop re-arming or abort `lost`', async () => {
+    const id = await makeRun();
+    vi.useFakeTimers({
+      toFake: ['setTimeout', 'setInterval', 'clearTimeout', 'clearInterval', 'Date', 'performance'],
+    });
+    try {
+      const pool = {
+        query: async (...args: unknown[]) => {
+          if (String(args[0]).includes('SET lease_expires_at = clock_timestamp()')) {
+            return { rowCount: 1 }; // every renewal succeeds
+          }
+          return (t.db.pool.query as (...a: unknown[]) => Promise<unknown>).apply(t.db.pool, args);
+        },
+      } as unknown as typeof t.db.pool;
+      const handle = await keepRunLease({ pool, runId: id, workerId: 'w1', log });
+      await vi.advanceTimersByTimeAsync(31_000);
+      // NTP steps the wall clock back two minutes; monotonic time keeps going.
+      vi.setSystemTime(Date.now() - 120_000);
+      await vi.advanceTimersByTimeAsync(300_000);
+      expect(handle?.lost.aborted).toBe(false);
+      handle?.stop();
+    } finally {
+      vi.useRealTimers();
+    }
+  }, 60_000);
+
   it('[LIF-046] a slow renewal answering after a faster later one never moves the deadline earlier', async () => {
     const id = await makeRun();
     vi.useFakeTimers({
-      toFake: ['setTimeout', 'setInterval', 'clearTimeout', 'clearInterval', 'Date'],
+      toFake: ['setTimeout', 'setInterval', 'clearTimeout', 'clearInterval', 'Date', 'performance'],
     });
     try {
       let renewals = 0;
@@ -238,7 +264,7 @@ describe('Run leases', () => {
   it('[LIF-046] aborts `lost` at 90 s when renewals hang and never answer', async () => {
     const id = await makeRun();
     vi.useFakeTimers({
-      toFake: ['setTimeout', 'setInterval', 'clearTimeout', 'clearInterval', 'Date'],
+      toFake: ['setTimeout', 'setInterval', 'clearTimeout', 'clearInterval', 'Date', 'performance'],
     });
     try {
       let hang = false;
