@@ -19833,165 +19833,6 @@
     "format": "uri"
    }
   },
-  "responses": {
-   "accepted": {
-    "description": "Accepted",
-    "content": {
-     "application/json": {
-      "schema": {
-       "type": "object"
-      },
-      "examples": {
-       "default": {
-        "value": null
-       }
-      }
-     }
-    }
-   },
-   "bad_request": {
-    "description": "Bad Request",
-    "content": {
-     "application/json": {
-      "schema": {
-       "$ref": "#/components/schemas/basic-error"
-      }
-     },
-     "application/scim+json": {
-      "schema": {
-       "$ref": "#/components/schemas/scim-error"
-      }
-     }
-    }
-   },
-   "conflict": {
-    "description": "Conflict",
-    "content": {
-     "application/json": {
-      "schema": {
-       "$ref": "#/components/schemas/basic-error"
-      }
-     }
-    }
-   },
-   "forbidden": {
-    "description": "Forbidden",
-    "content": {
-     "application/json": {
-      "schema": {
-       "$ref": "#/components/schemas/basic-error"
-      }
-     }
-    }
-   },
-   "found": {
-    "description": "Found"
-   },
-   "internal_error": {
-    "description": "Internal Error",
-    "content": {
-     "application/json": {
-      "schema": {
-       "$ref": "#/components/schemas/basic-error"
-      }
-     }
-    }
-   },
-   "moved_permanently": {
-    "description": "Moved permanently",
-    "content": {
-     "application/json": {
-      "schema": {
-       "$ref": "#/components/schemas/basic-error"
-      }
-     }
-    }
-   },
-   "not_found": {
-    "description": "Resource not found",
-    "content": {
-     "application/json": {
-      "schema": {
-       "$ref": "#/components/schemas/basic-error"
-      }
-     }
-    }
-   },
-   "not_modified": {
-    "description": "Not modified"
-   },
-   "requires_authentication": {
-    "description": "Requires authentication",
-    "content": {
-     "application/json": {
-      "schema": {
-       "$ref": "#/components/schemas/basic-error"
-      }
-     }
-    }
-   },
-   "service_unavailable": {
-    "description": "Service unavailable",
-    "content": {
-     "application/json": {
-      "schema": {
-       "type": "object",
-       "properties": {
-        "code": {
-         "type": "string"
-        },
-        "message": {
-         "type": "string"
-        },
-        "documentation_url": {
-         "type": "string"
-        }
-       }
-      }
-     }
-    }
-   },
-   "temporary_redirect": {
-    "description": "Temporary Redirect",
-    "content": {
-     "application/json": {
-      "schema": {
-       "$ref": "#/components/schemas/basic-error"
-      }
-     }
-    }
-   },
-   "unacceptable": {
-    "description": "Unacceptable",
-    "content": {
-     "application/json": {
-      "schema": {
-       "$ref": "#/components/schemas/basic-error"
-      }
-     }
-    }
-   },
-   "validation_failed": {
-    "description": "Validation failed, or the endpoint has been spammed.",
-    "content": {
-     "application/json": {
-      "schema": {
-       "$ref": "#/components/schemas/validation-error"
-      }
-     }
-    }
-   },
-   "validation_failed_simple": {
-    "description": "Validation failed, or the endpoint has been spammed.",
-    "content": {
-     "application/json": {
-      "schema": {
-       "$ref": "#/components/schemas/validation-error-simple"
-      }
-     }
-    }
-   }
-  },
   "examples": {
    "actions-public-key": {
     "value": {
@@ -25073,6 +24914,165 @@
       "success",
       "failure"
      ]
+    }
+   }
+  },
+  "responses": {
+   "accepted": {
+    "description": "Accepted",
+    "content": {
+     "application/json": {
+      "schema": {
+       "type": "object"
+      },
+      "examples": {
+       "default": {
+        "value": null
+       }
+      }
+     }
+    }
+   },
+   "bad_request": {
+    "description": "Bad Request",
+    "content": {
+     "application/json": {
+      "schema": {
+       "$ref": "#/components/schemas/basic-error"
+      }
+     },
+     "application/scim+json": {
+      "schema": {
+       "$ref": "#/components/schemas/scim-error"
+      }
+     }
+    }
+   },
+   "conflict": {
+    "description": "Conflict",
+    "content": {
+     "application/json": {
+      "schema": {
+       "$ref": "#/components/schemas/basic-error"
+      }
+     }
+    }
+   },
+   "forbidden": {
+    "description": "Forbidden",
+    "content": {
+     "application/json": {
+      "schema": {
+       "$ref": "#/components/schemas/basic-error"
+      }
+     }
+    }
+   },
+   "found": {
+    "description": "Found"
+   },
+   "internal_error": {
+    "description": "Internal Error",
+    "content": {
+     "application/json": {
+      "schema": {
+       "$ref": "#/components/schemas/basic-error"
+      }
+     }
+    }
+   },
+   "moved_permanently": {
+    "description": "Moved permanently",
+    "content": {
+     "application/json": {
+      "schema": {
+       "$ref": "#/components/schemas/basic-error"
+      }
+     }
+    }
+   },
+   "not_found": {
+    "description": "Resource not found",
+    "content": {
+     "application/json": {
+      "schema": {
+       "$ref": "#/components/schemas/basic-error"
+      }
+     }
+    }
+   },
+   "not_modified": {
+    "description": "Not modified"
+   },
+   "requires_authentication": {
+    "description": "Requires authentication",
+    "content": {
+     "application/json": {
+      "schema": {
+       "$ref": "#/components/schemas/basic-error"
+      }
+     }
+    }
+   },
+   "service_unavailable": {
+    "description": "Service unavailable",
+    "content": {
+     "application/json": {
+      "schema": {
+       "type": "object",
+       "properties": {
+        "code": {
+         "type": "string"
+        },
+        "message": {
+         "type": "string"
+        },
+        "documentation_url": {
+         "type": "string"
+        }
+       }
+      }
+     }
+    }
+   },
+   "temporary_redirect": {
+    "description": "Temporary Redirect",
+    "content": {
+     "application/json": {
+      "schema": {
+       "$ref": "#/components/schemas/basic-error"
+      }
+     }
+    }
+   },
+   "unacceptable": {
+    "description": "Unacceptable",
+    "content": {
+     "application/json": {
+      "schema": {
+       "$ref": "#/components/schemas/basic-error"
+      }
+     }
+    }
+   },
+   "validation_failed": {
+    "description": "Validation failed, or the endpoint has been spammed.",
+    "content": {
+     "application/json": {
+      "schema": {
+       "$ref": "#/components/schemas/validation-error"
+      }
+     }
+    }
+   },
+   "validation_failed_simple": {
+    "description": "Validation failed, or the endpoint has been spammed.",
+    "content": {
+     "application/json": {
+      "schema": {
+       "$ref": "#/components/schemas/validation-error-simple"
+      }
+     }
     }
    }
   },

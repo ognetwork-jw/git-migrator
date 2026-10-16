@@ -87,7 +87,9 @@ for r in seen:
     nc.setdefault(sec,{})[name]=comp[sec][name]
 for k in ('securitySchemes',):
     if k in comp: nc[k]=comp[k]
-for s in nc: nc[s]=dict(sorted(nc[s].items()))
+# Byte-reproducible output: `seen` is a set (string hash order varies per run), so lay the sections out in
+# the source document's order and sort the entries inside each section.
+nc={s:dict(sorted(nc[s].items())) for s in comp if s in nc}
 spec['components']=nc
 spec['tags']=[t for t in d.get('tags',[])]
 # drop unused top-level tags? keep
