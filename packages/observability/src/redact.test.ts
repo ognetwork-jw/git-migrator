@@ -942,6 +942,20 @@ describe('YAML node properties before a value (DEP-050, T-097 round 3)', () => {
     );
   });
 
+  it('[DEP-050] a block indicator followed by a comment of any length does not hide the block', () => {
+    for (const length of [10, 300, 1100, 5000]) {
+      const comment = `#${'c'.repeat(length)}`;
+      for (const props of ['', '&a ', '!!binary ', '&a !!str ']) {
+        expect(redactString(`password: ${props}| ${comment}\n  LEAK\nnext: ok`), props).toBe(
+          `password: ${REDACTED}\nnext: ok`,
+        );
+        expect(redactString(`password: ${props}>- ${comment}\n  LEAK\nnext: ok`), props).toBe(
+          `password: ${REDACTED}\nnext: ok`,
+        );
+      }
+    }
+  });
+
   it('[DEP-050] a comment after node properties ends the key line: the value on the next lines is redacted', () => {
     expect(redactString('password: &a # c\n  LEAK1\nnext: ok')).toBe(
       `password: ${REDACTED}\nnext: ok`,
