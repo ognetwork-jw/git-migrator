@@ -6,7 +6,9 @@ const hostname = process.env.FAKES_HOST ?? '127.0.0.1';
 const fake = await startFakeGitHub({
   port,
   hostname,
-  gitBaseUrl: process.env.FAKE_GIT_BASE_URL ? `${process.env.FAKE_GIT_BASE_URL}/target` : undefined,
+  gitBaseUrl: process.env.FAKE_GIT_BASE_URL
+    ? `${process.env.FAKE_GIT_BASE_URL.replace(/\/+$/, '')}/target`
+    : undefined,
 });
 console.log(`fake GitHub listening on ${fake.url}`);
 for (const signal of ['SIGINT', 'SIGTERM'] as const)

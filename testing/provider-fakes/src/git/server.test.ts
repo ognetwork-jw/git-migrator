@@ -274,6 +274,29 @@ describe('fake git server', () => {
     expect((await readFile(join(other, 'big.dat'))).equals(payload)).toBe(true);
   });
 
+  it('[TST-013] the seeder writes LFS patterns to .gitattributes and reports the commit of each tag', async () => {
+    const path = server.repoDir('source', 'acme/patterns');
+    await createBareRepo(path);
+    const seeded = await seedBareRepo(
+      path,
+      {
+        commits: 1,
+        lfsFiles: [{ path: 'assets/sample.bin', bytes: 10 }],
+        lfsPatterns: ['*.bin'],
+        tags: [
+          { name: 'v1', annotated: true },
+          { name: 'v2', annotated: false },
+        ],
+      },
+      { store: server.lfsStore('source'), repo: 'acme/patterns' },
+    );
+    const attributes = await git(['show', 'main:.gitattributes'], path);
+    expect(attributes.stdout).toBe('*.bin filter=lfs diff=lfs merge=lfs -text\n');
+    expect(seeded.gitattributes).toBe(attributes.stdout);
+    expect(seeded.tags.v1).not.toBe(seeded.heads.main); // the tag object
+    expect(seeded.tagCommits).toEqual({ v1: seeded.heads.main, v2: seeded.heads.main });
+  });
+
   it('[TST-013] fetches seeded LFS objects and pointers', async () => {
     await createBareRepo(server.repoDir('source', 'acme/seeded'));
     const seeded = await seedBareRepo(
@@ -488,6 +511,59 @@ describe('fake git server', () => {
     }
     expect(() => server.repoDir('target', '../escape')).toThrow();
     expect(() => server.repoDir('target', 'a/%2e%2e/b')).toThrow();
+  });
+
+  it('[TST-013] answers 404, not an empty 500, for repository paths with empty segments', async () => {
+    const basic = `Basic ${Buffer.from(`u:${TOKEN}`).toString('base64')}`;
+    const get = (path: string) =>
+      new Promise<number>((resolve, reject) => {
+        const req = request(
+          { host: '127.0.0.1', port: server.port, path, headers: { authorization: basic } },
+          (res) => {
+            res.resume();
+            resolve(res.statusCode ?? 0);
+          },
+        );
+        req.on('error', reject);
+        req.end();
+      });
+    for (const path of [
+      '/source/acme//app.git/info/refs?service=git-upload-pack',
+      '/source//acme/app.git/info/refs?service=git-upload-pack',
+      '/source/acme/app.git//info/refs?service=git-upload-pack',
+      '/source/acme/app.git/info/refs/?service=git-upload-pack',
+    ]) {
+      expect(await get(path), path).toBe(404);
+    }
+  });
+
+  it('[TST-013] close() kills CGI processes still in flight', async () => {
+    const pids: number[] = [];
+    const own = await startFakeGitServer({
+      rootDir: join(work, 'root-close'),
+      port: 0,
+      source: { tokens: [TOKEN], onCgiSpawn: ({ pid }) => pids.push(pid) },
+    });
+    await createBareRepo(own.repoDir('source', 'acme/app'));
+    await seedBareRepo(own.repoDir('source', 'acme/app'), { commits: 1 });
+    // An upload-pack request whose body never ends keeps `git http-backend` waiting on stdin.
+    const req = request({
+      host: '127.0.0.1',
+      port: own.port,
+      method: 'POST',
+      path: '/source/acme/app.git/git-upload-pack',
+      headers: {
+        authorization: `Basic ${Buffer.from(`u:${TOKEN}`).toString('base64')}`,
+        'content-type': 'application/x-git-upload-pack-request',
+      },
+    });
+    req.on('error', () => {});
+    req.write('0000');
+    await vi.waitFor(() => expect(pids).toHaveLength(1));
+    const pid = pids[0] as number;
+    expect(() => process.kill(pid, 0)).not.toThrow();
+    await own.close();
+    await vi.waitFor(() => expect(() => process.kill(pid, 0)).toThrow());
   });
 
   it('[TST-013] keeps the source side read-only by default', async () => {

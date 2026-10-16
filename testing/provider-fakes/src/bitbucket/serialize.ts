@@ -9,6 +9,7 @@ import type {
   FakeProject,
   FakePullRequest,
   FakeRepository,
+  FakeTag,
   FakeUser,
   FakeVariable,
   FakeWebhook,
@@ -161,6 +162,19 @@ export class Serializer {
       target: this.commitRef(b.hash),
       merge_strategies: b.mergeStrategies,
       default_merge_strategy: b.defaultMergeStrategy,
+      links: {},
+    };
+  }
+
+  /** `tag` schema: a ref whose target is the commit; annotated tags add message, tagger, date. */
+  tag(t: FakeTag): Obj {
+    return {
+      type: 'tag',
+      name: t.name,
+      target: this.commitRef(t.hash),
+      ...(t.message !== undefined ? { message: t.message } : {}),
+      ...(t.tagger !== undefined ? { tagger: { type: 'author', raw: t.tagger } } : {}),
+      ...(t.date !== undefined ? { date: t.date } : {}),
       links: {},
     };
   }

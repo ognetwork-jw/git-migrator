@@ -47,6 +47,8 @@ export const REQUIRED_SCOPES: Readonly<Record<string, readonly string[]>> = {
   ],
   'GET /repositories/{workspace}/{repo_slug}/refs/branches': ['read:repository:bitbucket'],
   'GET /repositories/{workspace}/{repo_slug}/refs/branches/{name}': ['read:repository:bitbucket'],
+  'GET /repositories/{workspace}/{repo_slug}/refs/tags': ['read:repository:bitbucket'],
+  'GET /repositories/{workspace}/{repo_slug}/refs/tags/{name}': ['read:repository:bitbucket'],
   'GET /repositories/{workspace}/{repo_slug}/branching-model/settings': [
     'admin:repository:bitbucket',
   ],

@@ -18,12 +18,14 @@ import {
   startFakeGitServer,
 } from './git/index.ts';
 import { githubGitAccess } from './github/git-access.ts';
+import { importBareRepository } from './github/git-import.ts';
 import {
   createFakeGitHub,
   type FakeGitHub,
   type FakeGitHubOptions,
   type GitHubState,
 } from './github/index.ts';
+import type { RepoRec } from './github/types.ts';
 
 /** Ports from DEV-020. */
 export const DEFAULT_PORTS = { bitbucket: 4010, github: 4020, git: 4030 } as const;
@@ -63,7 +65,7 @@ export interface RunningFakes {
  * repositories created, renamed and deleted with the REST repository (with their LFS objects), LFS
  * existence from the target LFS store.
  */
-function githubGitWiring(git: FakeGitServer): FakeGitHubOptions {
+function githubGitWiring(git: FakeGitServer, pushes: PushTracker): FakeGitHubOptions {
   const dir = (repo: { owner: string; name: string }, name = repo.name) =>
     git.repoDir('target', `${repo.owner}/${name}`);
   const lfsDir = (repo: { owner: string; name: string }, name = repo.name) =>
@@ -77,6 +79,7 @@ function githubGitWiring(git: FakeGitServer): FakeGitHubOptions {
   };
   return {
     gitBaseUrl: `${git.baseUrl}/target`,
+    syncGit: (repo) => pushes.sync(repo, () => importBareRepository(dir(repo), repo.git)),
     lfsHas: (repo, oid) => git.lfsStore('target').size(`${repo.owner}/${repo.name}`, oid),
     repositoryHooks: {
       // Keeps the pre-receive policy flag in step with the rules (the hook reads it when it runs).
@@ -101,9 +104,79 @@ function githubGitWiring(git: FakeGitServer): FakeGitHubOptions {
   };
 }
 
+type RepositoryHooks = NonNullable<FakeGitHubOptions['repositoryHooks']>;
+
+/**
+ * A caller's repository hooks run after the git wiring's, so passing some does not drop the bare
+ * repository management or the policy flag.
+ */
+function mergeHooks(
+  wiring: RepositoryHooks | undefined,
+  caller: RepositoryHooks | undefined,
+): RepositoryHooks | undefined {
+  if (!wiring || !caller) return caller ?? wiring;
+  return {
+    created: async (repo) => {
+      await wiring.created?.(repo);
+      await caller.created?.(repo);
+    },
+    renamed: async (repo, oldName) => {
+      await wiring.renamed?.(repo, oldName);
+      await caller.renamed?.(repo, oldName);
+    },
+    deleted: async (repo) => {
+      await wiring.deleted?.(repo);
+      await caller.deleted?.(repo);
+    },
+    policyChanged: (repo, active) => {
+      wiring.policyChanged?.(repo, active);
+      caller.policyChanged?.(repo, active);
+    },
+  };
+}
+
+/**
+ * Repositories pushed to since the fake GitHub last read their bare repository. A push marks the
+ * repository before its response ends; the next REST request on it reads the bare repository once
+ * (concurrent requests share that read).
+ */
+class PushTracker {
+  private readonly dirty = new WeakSet<RepoRec>();
+  private readonly reading = new WeakMap<RepoRec, Promise<void>>();
+
+  pushed(repo: RepoRec | undefined): void {
+    if (repo) this.dirty.add(repo);
+  }
+
+  async sync(repo: RepoRec, read: () => Promise<void>): Promise<void> {
+    for (;;) {
+      const running = this.reading.get(repo);
+      if (running) {
+        await running.catch(() => {});
+        continue;
+      }
+      if (!this.dirty.has(repo)) return;
+      this.dirty.delete(repo);
+      const next = read().finally(() => this.reading.delete(repo));
+      this.reading.set(repo, next);
+      await next;
+      return;
+    }
+  }
+}
+
 /** Git server target side options that tie access and pushes to the fake GitHub's tokens and rules. */
-function githubGitServerSide(getState: () => GitHubState | undefined): GitSideOptions {
-  return githubGitAccess(getState);
+function githubGitServerSide(
+  getState: () => GitHubState | undefined,
+  pushes: PushTracker,
+): GitSideOptions {
+  return {
+    ...githubGitAccess(getState),
+    onPushed: ({ repo }) => {
+      const [owner, name] = repo.split('/');
+      pushes.pushed(owner && name ? getState()?.findRepo(owner, name) : undefined);
+    },
+  };
 }
 
 function listen(
@@ -130,11 +203,14 @@ export async function startFakes(options: StartOptions = {}): Promise<RunningFak
   // branch protection decisions.
   let githubState: GitHubState | undefined;
   const withGitHub = options.githubPort !== undefined || options.github !== undefined;
+  const pushes = new PushTracker();
   if (options.git !== false) {
     git = await startFakeGitServer({
       ...options.git,
       ...(withGitHub
-        ? { target: { ...githubGitServerSide(() => githubState), ...options.git?.target } }
+        ? {
+            target: { ...githubGitServerSide(() => githubState, pushes), ...options.git?.target },
+          }
         : {}),
       rootDir: options.gitRootDir ?? (await mkdtemp(join(tmpdir(), 'fake-git-'))),
       port: options.gitPort ?? DEFAULT_PORTS.git,
@@ -145,10 +221,12 @@ export async function startFakes(options: StartOptions = {}): Promise<RunningFak
     ...(git ? { gitBaseUrl: `${git.baseUrl}/source` } : {}),
     ...options.bitbucket,
   });
+  const wiring = git ? githubGitWiring(git, pushes) : {};
   const github = withGitHub
     ? createFakeGitHub({
-        ...(git ? githubGitWiring(git) : {}),
+        ...wiring,
         ...options.github,
+        repositoryHooks: mergeHooks(wiring.repositoryHooks, options.github?.repositoryHooks),
       })
     : undefined;
   githubState = github?.state;
@@ -178,10 +256,39 @@ export async function startFakes(options: StartOptions = {}): Promise<RunningFak
     bitbucket: Object.assign(bitbucket, { port: bb.port }),
     github: github && ghServer ? Object.assign(github, { port: ghServer.port }) : undefined,
     git,
+    // Every server is closed even when an earlier one fails; the first failure is rethrown.
     close: async () => {
-      await closeServer(bb.server);
-      if (ghServer) await closeServer(ghServer.server);
-      await git?.close();
+      const results = await Promise.allSettled([
+        closeServer(bb.server),
+        ...(ghServer ? [closeServer(ghServer.server)] : []),
+        ...(git ? [git.close()] : []),
+      ]);
+      const failed = results.find((r): r is PromiseRejectedResult => r.status === 'rejected');
+      if (failed) throw failed.reason;
     },
+  };
+}
+
+/** Strips trailing slashes from a base URL. */
+const trimSlash = (url: string) => url.replace(/\/+$/, '');
+
+/**
+ * Options of `src/main.ts` from its environment: `FAKE_BITBUCKET_PORT`, `FAKE_GITHUB_PORT` (default
+ * 4020, so the fake GitHub always starts), `FAKE_GIT_PORT`, `FAKE_GIT_ROOT`, `FAKES_HOST`,
+ * `FAKE_GIT_PUBLIC_URL` (the git server's advertised root, used for LFS and both fakes' clone links)
+ * and `FAKE_GIT_BASE_URL` (the git server root for the clone links only: Bitbucket's under `/source`,
+ * GitHub's under `/target`; it overrides `FAKE_GIT_PUBLIC_URL` for them).
+ */
+export function startOptionsFromEnv(env: NodeJS.ProcessEnv): StartOptions {
+  const base = env.FAKE_GIT_BASE_URL ? trimSlash(env.FAKE_GIT_BASE_URL) : undefined;
+  return {
+    bitbucketPort: env.FAKE_BITBUCKET_PORT ? Number(env.FAKE_BITBUCKET_PORT) : undefined,
+    githubPort: env.FAKE_GITHUB_PORT ? Number(env.FAKE_GITHUB_PORT) : DEFAULT_PORTS.github,
+    gitPort: env.FAKE_GIT_PORT ? Number(env.FAKE_GIT_PORT) : undefined,
+    gitRootDir: env.FAKE_GIT_ROOT,
+    hostname: env.FAKES_HOST,
+    bitbucket: base ? { gitBaseUrl: `${base}/source` } : {},
+    github: base ? { gitBaseUrl: `${base}/target` } : {},
+    git: env.FAKE_GIT_PUBLIC_URL ? { publicUrl: env.FAKE_GIT_PUBLIC_URL } : {},
   };
 }

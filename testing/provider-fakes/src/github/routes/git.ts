@@ -23,7 +23,9 @@ function refBody(q: Req, repo: RepoRec, ref: string, sha: string) {
     ref,
     node_id: `REF_${Buffer.from(ref).toString('base64url')}`,
     url: `${api}/git/${ref}`,
-    object: { type: 'commit', sha, url: `${api}/git/commits/${sha}` },
+    object: repo.git.tags.has(sha)
+      ? { type: 'tag', sha, url: `${api}/git/tags/${sha}` }
+      : { type: 'commit', sha, url: `${api}/git/commits/${sha}` },
   };
 }
 

@@ -47,16 +47,22 @@ export interface GitSideOptions {
   /**
    * With `refPolicyFlag` the pre-receive hook only calls `refPolicy` when the file
    * `{bare repo}/gm-policy-active` exists when the hook runs (faster pushes for repositories without
-   * rules). The provider fake keeps the file in step with its rules (`syncPolicyFlag`), so a rule
+   * rules). The provider fake keeps the file in step with its rules (`repositoryHooks.policyChanged`, `fake.syncPolicy`), so a rule
    * committed before the hook runs is always enforced. Pushes to `refs/pull/*` are denied by the hook
    * itself whenever `refPolicy` is set, flag or not.
    */
   refPolicyFlag?: boolean;
   /**
    * Called when a CGI process (`git http-backend`) is started for a request, before the body is
-   * consumed. A test seam to observe that a push is in flight.
+   * consumed. A test seam to observe that a push is in flight (`pid` is the CGI process).
    */
-  onCgiSpawn?: (info: { repo: string; operation: 'read' | 'write' }) => void;
+  onCgiSpawn?: (info: { repo: string; operation: 'read' | 'write'; pid: number }) => void;
+  /**
+   * Called when a push (`git-receive-pack` POST) has finished, before its response ends, so a client
+   * that reads the provider's REST API right after the push sees what it pushed. `repo` is the
+   * repository path without `.git`. Called for rejected pushes too (the repository is then unchanged).
+   */
+  onPushed?: (info: { repo: string }) => void | Promise<void>;
   /**
    * Ref policy for pushes (pre-receive hook): called per updated ref, return a message to reject the
    * push or nothing to accept. `old`/`new` are object ids (all zeros = absent); `fastForward` is
@@ -101,6 +107,7 @@ interface SideState {
   refPolicy?: GitSideOptions['refPolicy'];
   refPolicyFlag?: GitSideOptions['refPolicyFlag'];
   onCgiSpawn?: GitSideOptions['onCgiSpawn'];
+  onPushed?: GitSideOptions['onPushed'];
   maxBlobBytes: number | null;
   maxPushBytes: number | null;
   allowPush: boolean;
@@ -177,6 +184,7 @@ export async function startFakeGitServer(options: FakeGitServerOptions): Promise
       refPolicy: o.refPolicy,
       refPolicyFlag: o.refPolicyFlag,
       onCgiSpawn: o.onCgiSpawn,
+      onPushed: o.onPushed,
       maxBlobBytes:
         o.maxBlobBytes === undefined ? (isTarget ? DEFAULT_MAX_BLOB_BYTES : null) : o.maxBlobBytes,
       maxPushBytes:
@@ -188,6 +196,8 @@ export async function startFakeGitServer(options: FakeGitServerOptions): Promise
   }
   let baseUrl = '';
   const requestLog: GitRequestRecord[] = [];
+  /** CGI processes still running; `close()` kills them. */
+  const children = new Set<ChildProcess>();
   const maxBatch = options.maxLfsBatchObjects ?? 100;
 
   const server: Server = createServer((req, res) => {
@@ -362,7 +372,12 @@ export async function startFakeGitServer(options: FakeGitServerOptions): Promise
         },
       });
     }
-    if (!/^[A-Za-z0-9._/-]+$/.test(rest) || rest.split('/').some((seg) => seg === '..')) {
+    // Empty segments (`acme//app.git`) are no repository path: `git http-backend` would answer with
+    // an empty 500.
+    if (
+      !/^[A-Za-z0-9._/-]+$/.test(rest) ||
+      rest.split('/').some((seg) => seg === '..' || seg === '')
+    ) {
       return text(res, 404, 'Not found\n');
     }
     return cgi(req, res, side, `/${rest}`, url.search.slice(1), user, creds);
@@ -418,12 +433,22 @@ export async function startFakeGitServer(options: FakeGitServerOptions): Promise
     for (const k of Object.keys(env)) if (env[k] === undefined) delete env[k];
 
     const child = spawn('git', ['http-backend'], { env, stdio: ['pipe', 'pipe', 'pipe'] });
+    children.add(child);
+    child.on('close', () => children.delete(child));
     side.onCgiSpawn?.({
       repo: policyRepo,
       operation: pathInfo.endsWith('/git-receive-pack') ? 'write' : 'read',
+      pid: child.pid ?? -1,
     });
     const isPush = req.method === 'POST' && pathInfo.endsWith('/git-receive-pack');
-    const done = pumpCgi(req, res, child, isPush ? side.maxPushBytes : null);
+    const onPushed = side.onPushed;
+    const done = pumpCgi(
+      req,
+      res,
+      child,
+      isPush ? side.maxPushBytes : null,
+      isPush && onPushed ? () => onPushed({ repo: policyRepo }) : undefined,
+    );
     return ticketId ? done.finally(() => tickets.delete(ticketId as string)) : done;
   }
 
@@ -461,6 +486,7 @@ export async function startFakeGitServer(options: FakeGitServerOptions): Promise
       new Promise<void>((resolve, reject) => {
         server.close((err) => (err ? reject(err) : resolve()));
         server.closeAllConnections();
+        for (const child of children) child.kill();
       }),
   };
 }
@@ -487,13 +513,15 @@ function text(res: ServerResponse, status: number, body: string): void {
 /**
  * Pipes the request into the CGI process and translates its CGI headers into an HTTP response.
  * With `pushLimit`, a request body larger than the limit is drained, the CGI process is killed (so
- * nothing is applied) and the answer is a fixed `413` (ADR-0071).
+ * nothing is applied) and the answer is a fixed `413` (ADR-0071). `beforeEnd` runs after the CGI
+ * exited and before the response ends (its failure does not change the response).
  */
 function pumpCgi(
   req: IncomingMessage,
   res: ServerResponse,
   child: ChildProcess,
   pushLimit: number | null,
+  beforeEnd?: () => void | Promise<void>,
 ): Promise<void> {
   return new Promise((resolve) => {
     const stdin = child.stdin;
@@ -535,6 +563,10 @@ function pumpCgi(
       });
     }
     req.on('aborted', () => child.kill());
+    // A client that goes away leaves a paused CGI blocked on its output: stop it.
+    res.on('close', () => {
+      if (child.exitCode === null && child.signalCode === null) child.kill();
+    });
     let stderr = '';
     child.stderr?.on('data', (d: Buffer) => {
       stderr += d.toString();
@@ -549,6 +581,13 @@ function pumpCgi(
     // The CGI prints its headers before receive-pack has read the pack, so the response head is held
     // back until the first body byte (or the end); that keeps a 413 possible while the body streams in.
     let pendingHead: { status: number; headers: Record<string, string> } | undefined;
+    /** Writes to the response, pausing the CGI output until a slow client has drained it. */
+    const forward = (chunk: Buffer) => {
+      if (!res.write(chunk)) {
+        stdout.pause();
+        res.once('drain', () => stdout.resume());
+      }
+    };
     const flushHead = () => {
       if (!pendingHead) return;
       res.writeHead(pendingHead.status, pendingHead.headers);
@@ -558,7 +597,7 @@ function pumpCgi(
       if (exceeded) return;
       if (started) {
         flushHead();
-        res.write(chunk);
+        forward(chunk);
         return;
       }
       head = Buffer.concat([head, chunk]);
@@ -586,15 +625,20 @@ function pumpCgi(
       const body = head.subarray(sep.at + sep.len);
       if (body.length) {
         flushHead();
-        res.write(body);
+        forward(body);
       }
     });
-    child.on('close', () => {
+    child.on('close', async () => {
       if (exceeded || res.writableEnded) return;
       if (!started) {
         res.writeHead(500, { 'content-type': 'text/plain' });
         res.end(`git http-backend failed: ${stderr.trim()}\n`);
       } else {
+        try {
+          await beforeEnd?.();
+        } catch {
+          // The push itself is done; the observer's failure is not the client's.
+        }
         flushHead();
         res.end();
       }

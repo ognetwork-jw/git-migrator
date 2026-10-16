@@ -34,4 +34,4 @@ TST-012 names `testing/fixtures/world.ts` and requires the world to be built by 
 
 ## Consequences
 
-`GET /__state` output is deterministic apart from rate-limit usage counters. Plain `worldFixtures()` without `startWorldFakes` does not clean git state on other resets.
+`GET /__state` output is deterministic apart from rate-limit usage counters. Plain `worldFixtures()` without `startWorldFakes` does not clean git state on other resets, so the package no longer exports it (only `startWorldFakes` and `resetWorld`).

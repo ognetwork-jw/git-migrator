@@ -12,10 +12,10 @@ import { QueryError } from '../common/query.ts';
 import { BUILTIN_FIXTURES, type FixtureRegistry } from './fixtures.ts';
 import {
   classify,
-  LIMIT_CATEGORIES,
-  type LimitCategory,
   type LimitConfig,
+  LimitConfigError,
   RateLimiter,
+  validateLimitConfig,
 } from './rate-limit.ts';
 import { requiredScopes } from './scopes.ts';
 import { Serializer } from './serialize.ts';
@@ -157,6 +157,8 @@ export function createFakeBitbucket(options: FakeBitbucketOptions = {}): FakeBit
         const run = () => fake.reset(fixture, overrides);
         return pendingReset.then(run, run);
       }
+      // Refuse bad limits before anything is reset.
+      if (overrides.limits) validateLimitConfig(overrides.limits);
       Object.assign(config, defaults());
       if (overrides.groupsEndpoint) config.groupsEndpoint = overrides.groupsEndpoint;
       if (overrides.putSemantics) config.putSemantics = overrides.putSemantics;
@@ -272,14 +274,14 @@ export function createFakeBitbucket(options: FakeBitbucketOptions = {}): FakeBit
       });
     }
     c.set('user', user);
-    if (!limiter.consume(user.accountId, classify(c.req.method, c.req.path, isSrcDirectory))) {
+    // A HEAD is served by the GET route: it is counted and scope-checked as that GET.
+    const method = c.req.method === 'HEAD' ? 'GET' : c.req.method;
+    if (!limiter.consume(user.accountId, classify(method, c.req.path, isSrcDirectory))) {
       return c.json(errorBody('Rate limit for this resource has been exceeded'), 429);
     }
     // Scopes: the matched route (not the middleware) decides what is required.
-    const matched = c.req.matchedRoutes
-      .filter((r) => r.method === c.req.method && r.path !== '*')
-      .pop();
-    const required = matched ? requiredScopes(c.req.method, matched.path) : [];
+    const matched = c.req.matchedRoutes.filter((r) => r.method === method && r.path !== '*').pop();
+    const required = matched ? requiredScopes(method, matched.path) : [];
     if (cred.scopes) {
       const missing = required.filter((s) => !(cred.scopes as string[]).includes(s));
       if (missing.length > 0) {
@@ -788,6 +790,27 @@ export function createFakeBitbucket(options: FakeBitbucketOptions = {}): FakeBit
     return one(c, ser(c).branch(b));
   });
 
+  // `q` and `sort` are defined for this operation (natural `sort=name` ordering is not modelled).
+  api.get('/2.0/repositories/:ws/:slug/refs/tags', (c) => {
+    const { repo } = getRepo(c);
+    const s = ser(c);
+    return list(
+      c,
+      [...repo.tags]
+        .sort((a, b) => (a.name < b.name ? -1 : a.name > b.name ? 1 : 0))
+        .map((t) => s.tag(t)),
+      { filterable: true },
+    );
+  });
+
+  api.get('/2.0/repositories/:ws/:slug/refs/tags/:name', (c) => {
+    const { repo } = getRepo(c);
+    const name = c.req.param('name') ?? '';
+    const t = repo.tags.find((x) => x.name === name);
+    if (!t) throw notFound(`Tag '${name}' not found`);
+    return one(c, ser(c).tag(t));
+  });
+
   api.get('/2.0/repositories/:ws/:slug/hooks', (c) => {
     const { ws, repo } = getRepo(c);
     const s = ser(c);
@@ -899,6 +922,18 @@ export function createFakeBitbucket(options: FakeBitbucketOptions = {}): FakeBit
     const prefix = `/2.0/repositories/${ws.slug}/${repo.slug}/src/`;
     const raw = c.req.path.startsWith(prefix) ? c.req.path.slice(prefix.length) : '';
     const rest = raw.split('/').slice(1).map(decodeURIComponent).join('/').replace(/\/+$/, '');
+    if (rest !== '' && rest in repo.files && c.req.query('format') === 'meta') {
+      // `?format=meta`: the file's properties instead of its contents (`commit_file`).
+      const commit =
+        repo.branches.find((b) => b.name === ref || b.hash === ref) ?? repo.branches[0];
+      return one(c, {
+        type: 'commit_file',
+        path: rest,
+        commit: ser(c).commitRef(commit?.hash ?? ''),
+        attributes: [],
+        size: Buffer.byteLength(repo.files[rest] as string),
+      });
+    }
     if (rest !== '' && rest in repo.files) {
       return c.body(repo.files[rest] as string, 200, {
         'Content-Type': 'text/plain; charset=utf-8',
@@ -951,21 +986,16 @@ function toOverrides(body: Body): ResetOverrides {
   if (l !== undefined) {
     if (!l || typeof l !== 'object') throw new HttpError(400, 'limits must be an object');
     const { windowMs, ...cats } = l as Record<string, unknown>;
-    const limits: LimitConfig['limits'] = {};
-    for (const [k, v] of Object.entries(cats)) {
-      if (!(LIMIT_CATEGORIES as readonly string[]).includes(k))
-        throw new HttpError(400, `Unknown limit category '${k}'`);
-      if (v !== null && (typeof v !== 'number' || v < 0))
-        throw new HttpError(400, `Invalid limit for '${k}'`);
-      limits[k as LimitCategory] = v as number | null;
+    const patch = {
+      limits: cats as LimitConfig['limits'],
+      ...(windowMs !== undefined ? { windowMs: windowMs as number } : {}),
+    };
+    try {
+      out.limits = validateLimitConfig(patch);
+    } catch (error) {
+      if (error instanceof LimitConfigError) throw new HttpError(400, error.message);
+      throw error;
     }
-    if (
-      windowMs !== undefined &&
-      (typeof windowMs !== 'number' || !Number.isFinite(windowMs) || windowMs <= 0)
-    ) {
-      throw new HttpError(400, 'windowMs must be a positive finite number');
-    }
-    out.limits = { limits, ...(windowMs !== undefined ? { windowMs: windowMs as number } : {}) };
   }
   return out;
 }

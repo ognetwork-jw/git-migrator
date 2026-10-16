@@ -468,7 +468,7 @@ describe('Phase-1 scenario (TST-020)', () => {
     }
     // Deploy key, variables and the environment.
     expect(repo?.keys.map((k) => k.title)).toEqual(['e2e-key']);
-    expect(repo?.variables.map((v) => v.name).sort()).toEqual(['E2E_VAR', 'RELEASE_CHANNEL']);
+    expect(repo?.variables.map((v) => v.name).sort()).toEqual(['E2E_VAR']);
     expect(repo?.environments.map((e) => e.name)).toEqual(['production']);
   });
 

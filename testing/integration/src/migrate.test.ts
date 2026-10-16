@@ -580,7 +580,7 @@ describe('plat/auto-ok migrates against the fakes', () => {
     const applied = repoState.repositories.find((r) => r.fullName === `${ORG}/plat-auto-ok`);
     expect(applied?.deployKeys.map((k) => k.title)).toEqual(['e2e-key']);
     expect(applied?.environments.map((e) => e.name)).toEqual(['production']);
-    expect(applied?.variables.map((v) => v.name).sort()).toEqual(['E2E_VAR', 'RELEASE_CHANNEL']);
+    expect(applied?.variables.map((v) => v.name).sort()).toEqual(['E2E_VAR']);
     expect(applied?.branchProtectionRules).toMatchObject([
       { pattern: 'main', allowsForcePushes: false, allowsDeletions: false },
     ]);

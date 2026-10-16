@@ -10,6 +10,7 @@ import type {
   FakeProject,
   FakePullRequest,
   FakeRepository,
+  FakeTag,
   FakeUser,
   FakeVariable,
   FakeWebhook,
@@ -250,6 +251,7 @@ export class BitbucketState {
       files: input.files ?? {},
       branches:
         input.branches ?? (mainbranch ? [this.makeBranch(workspace, input.slug, mainbranch)] : []),
+      tags: input.tags ?? [],
       userPermissions: input.userPermissions ?? [],
       groupPermissions: input.groupPermissions ?? [],
       branchRestrictions: input.branchRestrictions ?? [],
@@ -301,6 +303,11 @@ export class BitbucketState {
     const branch = this.makeBranch(workspace, slug, name, patch);
     this.repo(workspace, slug).branches.push(branch);
     return branch;
+  }
+
+  addTag(workspace: string, slug: string, tag: FakeTag): FakeTag {
+    this.repo(workspace, slug).tags.push(tag);
+    return tag;
   }
 
   addBranchRestriction(

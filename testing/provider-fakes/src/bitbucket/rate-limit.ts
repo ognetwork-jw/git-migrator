@@ -64,6 +64,33 @@ export function classify(
   return [];
 }
 
+/** A limit option the fake cannot apply (unknown category, negative limit, bad window). */
+export class LimitConfigError extends Error {}
+
+/**
+ * Checks a limit patch from any entry (constructor, `reset`, `configure`, `/__reset`, `/__config`).
+ * `null` disables a category; limits are non-negative numbers (`Infinity` is no limit: use `null`).
+ */
+export function validateLimitConfig(patch: unknown): Partial<LimitConfig> {
+  if (!patch || typeof patch !== 'object') throw new LimitConfigError('limits must be an object');
+  const { windowMs, limits } = patch as { windowMs?: unknown; limits?: unknown };
+  if (limits !== undefined && (!limits || typeof limits !== 'object'))
+    throw new LimitConfigError('limits must be an object');
+  for (const [k, v] of Object.entries((limits ?? {}) as Record<string, unknown>)) {
+    if (!(LIMIT_CATEGORIES as readonly string[]).includes(k))
+      throw new LimitConfigError(`Unknown limit category '${k}'`);
+    if (v !== null && (typeof v !== 'number' || !Number.isFinite(v) || v < 0))
+      throw new LimitConfigError(`Invalid limit for '${k}'`);
+  }
+  if (
+    windowMs !== undefined &&
+    (typeof windowMs !== 'number' || !Number.isFinite(windowMs) || windowMs <= 0)
+  ) {
+    throw new LimitConfigError('windowMs must be a positive finite number');
+  }
+  return patch as Partial<LimitConfig>;
+}
+
 export class RateLimiter {
   private config: LimitConfig;
   private hits = new Map<string, number[]>();
@@ -75,6 +102,7 @@ export class RateLimiter {
   }
 
   private static merge(base: LimitConfig, patch: Partial<LimitConfig>): LimitConfig {
+    validateLimitConfig(patch);
     return {
       windowMs: patch.windowMs ?? base.windowMs,
       limits: { ...base.limits, ...(patch.limits ?? {}) },

@@ -25,6 +25,23 @@ describe('async fixture builders (ADR-0130)', () => {
     expect(fake.state.workspace('acme')).toBeDefined();
   });
 
+  it('[TST-012] a builder that throws synchronously keeps REST and /__state on 503 until a reset succeeds', async () => {
+    const fake = createFakeBitbucket({
+      fixtures: {
+        broken: (s) => {
+          s.addWorkspace({ slug: 'acme' });
+          throw new Error('builder failed');
+        },
+      },
+    });
+    expect(() => fake.reset('broken')).toThrow('builder failed');
+    expect((await get(fake, '/2.0/user')).status).toBe(503);
+    expect((await fake.app.request('/__state')).status).toBe(503);
+    expect(fake.reset('empty')).toBeUndefined();
+    expect((await get(fake, '/2.0/user')).status).toBe(200);
+    expect((await fake.app.request('/__state')).status).toBe(200);
+  });
+
   it('[TST-012] answers exactly 503 on REST and /__state while an async reset is pending, the control plane keeps working', async () => {
     const g = gate();
     const fake = createFakeBitbucket({

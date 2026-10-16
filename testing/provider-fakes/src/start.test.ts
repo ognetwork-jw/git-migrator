@@ -1,5 +1,11 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { DEFAULT_HOSTNAME, DEFAULT_PORTS, type RunningFakes, startFakes } from './start.ts';
+import {
+  DEFAULT_HOSTNAME,
+  DEFAULT_PORTS,
+  type RunningFakes,
+  startFakes,
+  startOptionsFromEnv,
+} from './start.ts';
 
 // These tests start the git server; a loaded machine needs more than the 5 s default.
 vi.setConfig({ testTimeout: 60_000 });
@@ -83,5 +89,49 @@ describe('[TST-010] binding', () => {
     running = await startFakes({ bitbucketPort: 0, gitPort: 0 });
     const res = await fetch(`http://127.0.0.1:${running.bitbucket.port}/__state`);
     expect(res.status).toBe(200);
+  });
+});
+
+describe('[TST-013] shutdown', () => {
+  it('[TST-013] close() still closes the git server when closing the fake Bitbucket fails', async () => {
+    const fakes = await startFakes({ bitbucketPort: 0, gitPort: 0, githubPort: 0 });
+    await fakes.close();
+    // A second close fails on the (already closed) Bitbucket server; the others must still be tried.
+    const git = fakes.git;
+    expect(git).toBeDefined();
+    const gitClose = vi.spyOn(git as NonNullable<typeof git>, 'close').mockResolvedValue();
+    await expect(fakes.close()).rejects.toThrow();
+    expect(gitClose).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('[TST-013] entry environment', () => {
+  it('[TST-013] FAKE_GIT_BASE_URL is the git server root for both fakes: /source for Bitbucket, /target for GitHub', () => {
+    const options = startOptionsFromEnv({ FAKE_GIT_BASE_URL: 'http://localhost:4030/' });
+    expect(options.bitbucket?.gitBaseUrl).toBe('http://localhost:4030/source');
+    expect(options.github?.gitBaseUrl).toBe('http://localhost:4030/target');
+    const none = startOptionsFromEnv({});
+    expect(none.bitbucket).toEqual({});
+    expect(none.github).toEqual({});
+    expect(none.githubPort).toBe(DEFAULT_PORTS.github);
+  });
+
+  it('[TST-013] reads ports, host, git root and public URL from the documented variables', () => {
+    const options = startOptionsFromEnv({
+      FAKE_BITBUCKET_PORT: '5010',
+      FAKE_GITHUB_PORT: '5020',
+      FAKE_GIT_PORT: '5030',
+      FAKE_GIT_ROOT: '/tmp/x',
+      FAKES_HOST: '0.0.0.0',
+      FAKE_GIT_PUBLIC_URL: 'http://fakes:4030',
+    });
+    expect(options).toMatchObject({
+      bitbucketPort: 5010,
+      githubPort: 5020,
+      gitPort: 5030,
+      gitRootDir: '/tmp/x',
+      hostname: '0.0.0.0',
+      git: { publicUrl: 'http://fakes:4030' },
+    });
   });
 });

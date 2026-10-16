@@ -85,6 +85,10 @@ export function createRouter({ app, state, limiter }: RouterDeps) {
           if (path !== '/rate_limit') limiter.consumePrimary(auth, 'core');
         }
         const req = makeReq(c, auth, state, new Serializer(state, base));
+        // Repository routes see what was pushed over git (the git server is the source of truth).
+        const repoName = c.req.param('repo');
+        const pushed = repoName && state.findRepo(c.req.param('owner') ?? '', repoName);
+        if (pushed && state.options.syncGit) await state.options.syncGit(pushed);
         out = await handler(req);
       } catch (e) {
         if (e instanceof GhError) {

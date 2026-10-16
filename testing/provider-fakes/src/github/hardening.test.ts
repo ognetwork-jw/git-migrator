@@ -1,4 +1,6 @@
+import { createHash } from 'node:crypto';
 import { describe, expect, it } from 'vitest';
+import type { FakeGitHub } from './app.ts';
 import { must, world } from './harness.ts';
 
 const OID = 'c'.repeat(64);
@@ -231,5 +233,115 @@ describe('reset races', () => {
     expect(Date.now() - started).toBeLessThan(5000);
     expect(w.fake.state.repos.size).toBe(0);
     expect((await w.call('GET', '/__state', { token: null })).status).toBe(200);
+  });
+});
+
+/** A request whose body is held back until `finish()`, so the request stays in flight. */
+function stalledRequest(
+  fake: FakeGitHub,
+  method: string,
+  path: string,
+  token: string,
+  body: string,
+) {
+  let finish: () => void = () => {};
+  const stream = new ReadableStream<Uint8Array>({
+    start(controller) {
+      finish = () => {
+        controller.enqueue(new TextEncoder().encode(body));
+        controller.close();
+      };
+    },
+  });
+  const response = fake.app.request(path, {
+    method,
+    headers: { authorization: `Bearer ${token}`, 'content-type': 'application/json' },
+    body: stream,
+    duplex: 'half',
+  } as RequestInit);
+  return { response, finish: () => finish() };
+}
+
+const tick = () => new Promise((r) => setTimeout(r, 20));
+
+describe('reset races beyond REST', () => {
+  it('[TST-011] a straggler left behind by a timed-out drain does not make later resets wait for the bound', async () => {
+    const w = world({ resetDrainMs: 300 });
+    const stuck = stalledRequest(w.fake, 'POST', '/graphql', w.token, '{"query":"{ viewer }"}');
+    await tick();
+    await w.fake.reset(); // waits the full bound for the straggler
+    const started = Date.now();
+    await w.fake.reset();
+    expect(Date.now() - started).toBeLessThan(250);
+    stuck.finish();
+    await stuck.response;
+  });
+
+  it('[TST-011] a GraphQL mutation that straddles a timed-out reset is a 409 and writes nothing into the new world', async () => {
+    const w = world({
+      resetDrainMs: 50,
+      fixtures: {
+        again: (s) => {
+          s.addRepository('acme', { name: 'auto-ok', private: true, files: { 'a.txt': 'a' } });
+        },
+      },
+    });
+    const oldNodeId = w.repo.nodeId;
+    const mutation = JSON.stringify({
+      query:
+        'mutation($input: CreateBranchProtectionRuleInput!) { createBranchProtectionRule(input: $input) { branchProtectionRule { id } } }',
+      variables: { input: { repositoryId: oldNodeId, pattern: 'main' } },
+    });
+    const straggler = stalledRequest(w.fake, 'POST', '/graphql', w.token, mutation);
+    await tick();
+    await w.fake.reset('again');
+    const fresh = must(w.fake.state.findRepo('acme', 'auto-ok'));
+    expect(fresh.nodeId).toBe(oldNodeId); // deterministic ids: the stale write would land here
+    straggler.finish();
+    expect((await straggler.response).status).toBe(409);
+    expect(fresh.rules).toEqual([]);
+  });
+
+  it('[TST-011] an LFS upload that straddles a timed-out reset is a 409', async () => {
+    const w = world({
+      resetDrainMs: 50,
+      fixtures: { again: (s) => void s.addRepository('acme', { name: 'auto-ok', private: true }) },
+    });
+    const content = 'lfs object';
+    const oid = createHash('sha256').update(content).digest('hex');
+    const straggler = stalledRequest(
+      w.fake,
+      'PUT',
+      `/lfs-objects/acme/auto-ok/${oid}`,
+      w.token,
+      content,
+    );
+    await tick();
+    await w.fake.reset('again');
+    straggler.finish();
+    expect((await straggler.response).status).toBe(409);
+    expect(must(w.fake.state.findRepo('acme', 'auto-ok')).lfs.has(oid)).toBe(false);
+  });
+
+  it('[TST-011] a failed fixture builder leaves the API and /__state at 503 until a reset succeeds', async () => {
+    const w = world({
+      fixtures: {
+        broken: async (s) => {
+          s.addRepository('acme', { name: 'half', private: true });
+          throw new Error('builder failed');
+        },
+      },
+    });
+    await expect(w.fake.reset('broken')).rejects.toThrow('builder failed');
+    expect((await w.call('GET', '/repos/acme/half', { token: w.fake.token() })).status).toBe(503);
+    expect((await w.call('GET', '/__state', { token: null })).status).toBe(503);
+    const viaControl = await w.fake.app.request('/__reset', {
+      method: 'POST',
+      body: JSON.stringify({ fixture: 'broken' }),
+    });
+    expect(viaControl.status).toBe(500);
+    await w.fake.reset();
+    expect((await w.call('GET', '/__state', { token: null })).status).toBe(200);
+    expect((await w.call('GET', '/repos/acme/half', { token: w.fake.token() })).status).toBe(404);
   });
 });
