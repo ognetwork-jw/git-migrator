@@ -2,7 +2,7 @@ import { type Config, resolveConfig } from '@git-migrator/config';
 import { TEST_ACTORS } from '@git-migrator/db';
 import { createTestDatabase, type TestDatabase } from '@git-migrator/db/testing';
 import { createLogger } from '@git-migrator/observability';
-import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { afterAll, beforeAll, describe, expect, inject, it } from 'vitest';
 import {
   AUTH_BASE_PATH,
   AUTH_ERROR_CODES,
@@ -25,6 +25,9 @@ import {
   signInWithEntra,
   startEntraStub,
 } from './testing/index.ts';
+
+/** Wall-clock budgets scale with GM_TEST_TIME_FACTOR (ADR-0507). */
+const budget = (ms: number): number => ms * inject('timeFactor');
 
 const TENANT = '11111111-2222-3333-4444-555555555555';
 const CLIENT_ID = 'client-id-fake';
@@ -704,7 +707,7 @@ describe('tenant id and logging (AUTH-002, DEP-050)', () => {
         }),
       );
       expect(response.status).toBe(403);
-      expect(performance.now() - started).toBeLessThan(1_500);
+      expect(performance.now() - started).toBeLessThan(budget(1_500));
     } finally {
       await logged.close();
     }
