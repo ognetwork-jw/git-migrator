@@ -404,6 +404,50 @@ describe('[UI-022] the Overview, Tasks, Facets, Runs and Audit tabs', () => {
     expect(await screen.findByText(/has not been analyzed yet/)).toBeTruthy();
   });
 
+  it('[UI-022] a Facet badge names its worst finding in the hover text', async () => {
+    start();
+    await ready();
+    const badge = screen.getByRole('button', { name: /^secrets: / });
+    expect(badge.getAttribute('title')).toBe(
+      'secrets: 1 finding, worst is Tasks after the run: Set secret values. Open the Facet.',
+    );
+    // A code without guidance is named by its code.
+    cleanup();
+    world.migration = migration({
+      latestAnalysis: {
+        id: 'a1',
+        createdAt: '2026-10-01T10:00:00.000Z',
+        items: [
+          {
+            id: 'x',
+            facetKey: 'hooks',
+            kind: 'blocker',
+            code: 'hooks.unknown-code',
+            fieldPaths: [],
+            params: {},
+            order: 1,
+          },
+        ],
+      },
+    });
+    start();
+    await ready();
+    expect(screen.getByRole('button', { name: /^hooks: / }).getAttribute('title')).toContain(
+      'worst is Blockers: hooks.unknown-code.',
+    );
+  });
+
+  it('[UI-001] a Facet badge shows its severity as an icon, not only as a color', async () => {
+    start();
+    await ready();
+    const strip = screen.getByRole('list', { name: 'Facets' });
+    const icon = (facet: RegExp) =>
+      within(strip).getByRole('button', { name: facet }).querySelector('.anticon')?.className;
+    expect(icon(/^secrets: /)).toContain('anticon-clock-circle');
+    expect(icon(/^branch-rules: /)).toContain('anticon-warning');
+    expect(icon(/^git-refs: /)).toContain('anticon-check-circle');
+  });
+
   it('[UI-022] clicking a Facet badge opens that Facet in the Facets tab', async () => {
     start();
     await ready();

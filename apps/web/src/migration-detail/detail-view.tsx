@@ -7,8 +7,10 @@ import Link from 'next/link';
 import { useTranslations } from 'next-intl';
 import { type ReactNode, useState } from 'react';
 import { formatDateTime } from '../format.ts';
+import { guidanceTitle } from '../guidance/guidance-view.tsx';
 import { ErrorAlert } from '../mapping/shared.tsx';
-import { facetBadges } from '../repositories/facet-strip.tsx';
+import { GUIDANCE_NAMESPACE } from '../messages.ts';
+import { FACET_ICON, facetBadges } from '../repositories/facet-strip.tsx';
 import { MigrationStatusTag, ReadinessTag } from '../repositories/tags.tsx';
 import { useActor } from '../shell/actor-context.tsx';
 import { useLiveTopics } from '../shell/live-topics.tsx';
@@ -52,6 +54,7 @@ function FacetJump({
 }) {
   const t = useTranslations('migrationDetail.strip');
   const tKind = useTranslations('migrationDetail.findingKind');
+  const guidance = useTranslations(GUIDANCE_NAMESPACE);
   const badges = facetBadges(migration.latestAnalysis);
   if (badges.length === 0) return null;
   return (
@@ -64,6 +67,11 @@ function FacetJump({
                 facet: badge.facetKey,
                 count: badge.count,
                 kind: tKind(badge.worst),
+                // UI-022: the hover text gives the reason, the worst finding's title (or its code).
+                reason: badge.reason
+                  ? (guidanceTitle(badge.reason.code, badge.reason.params, guidance) ??
+                    badge.reason.code)
+                  : '',
               });
         return (
           <li key={badge.facetKey}>
@@ -76,6 +84,7 @@ function FacetJump({
             >
               <Tag
                 color={badge.worst === null ? 'success' : FACET_COLOR[badge.worst]}
+                icon={FACET_ICON[badge.worst ?? 'clean']}
                 className="me-0"
               >
                 {badge.facetKey}

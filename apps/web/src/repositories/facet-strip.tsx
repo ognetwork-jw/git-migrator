@@ -1,7 +1,15 @@
 'use client';
 
+import {
+  CheckCircleOutlined,
+  ClockCircleOutlined,
+  ExclamationCircleOutlined,
+  StopOutlined,
+  WarningOutlined,
+} from '@ant-design/icons';
 import { Tag } from 'antd';
 import { useTranslations } from 'next-intl';
+import type { ReactNode } from 'react';
 import type { PlanItemKind, RepositoryRow } from './api.ts';
 
 const SEVERITY: readonly PlanItemKind[] = ['blocker', 'pre_task', 'post_task', 'warning'];
@@ -12,20 +20,45 @@ const COLOR: Partial<Record<PlanItemKind, string>> = {
   warning: 'default',
 };
 
+/**
+ * A badge's icon by its worst finding, so the severity has a shape and not only a color (UI-001).
+ * `clean`: no findings.
+ */
+export const FACET_ICON: Record<PlanItemKind | 'clean', ReactNode> = {
+  blocker: <StopOutlined aria-hidden />,
+  pre_task: <ExclamationCircleOutlined aria-hidden />,
+  post_task: <ClockCircleOutlined aria-hidden />,
+  warning: <WarningOutlined aria-hidden />,
+  step: null,
+  clean: <CheckCircleOutlined aria-hidden />,
+};
+
 export interface FacetBadge {
   readonly facetKey: string;
   /** `null`: the Facet is in the plan and has no findings. */
   readonly worst: PlanItemKind | null;
   readonly count: number;
+  /** The first finding of the worst kind, when the items carry their codes (the hover reason). */
+  readonly reason?: { readonly code: string; readonly params: unknown };
+}
+
+interface BadgeItem {
+  readonly facetKey: string;
+  readonly kind: PlanItemKind;
+  readonly code?: string;
+  readonly params?: unknown;
 }
 
 /** One badge per Facet in the plan, colored by its worst finding; plain steps are not findings (UI-021, UI-022). */
-export function facetBadges(analysis: RepositoryRow['latestAnalysis']): FacetBadge[] {
-  const byFacet = new Map<string, { worst: number; count: number }>();
+export function facetBadges(
+  analysis: { readonly items: readonly BadgeItem[] } | null | undefined,
+): FacetBadge[] {
+  const byFacet = new Map<string, { worst: number; count: number; reason?: BadgeItem }>();
   for (const item of analysis?.items ?? []) {
     const rank = SEVERITY.indexOf(item.kind);
     const entry = byFacet.get(item.facetKey) ?? { worst: SEVERITY.length, count: 0 };
     if (rank >= 0) {
+      if (rank < entry.worst) entry.reason = item;
       entry.worst = Math.min(entry.worst, rank);
       entry.count += 1;
     }
@@ -36,11 +69,17 @@ export function facetBadges(analysis: RepositoryRow['latestAnalysis']): FacetBad
       facetKey,
       worst: SEVERITY[v.worst] ?? null,
       count: v.count,
+      ...(v.reason?.code === undefined
+        ? {}
+        : { reason: { code: v.reason.code, params: v.reason.params } }),
     }))
     .sort((a, b) => a.facetKey.localeCompare(b.facetKey));
 }
 
-/** The Facet badge strip. Each badge says its worst finding in words, the color only reinforces it. */
+/**
+ * The Facet badge strip. Each badge says its worst finding in words and an icon; the color only
+ * reinforces it (UI-001).
+ */
 export function FacetStrip({ analysis }: { readonly analysis: RepositoryRow['latestAnalysis'] }) {
   const t = useTranslations('repositories');
   const badges = facetBadges(analysis);
@@ -56,6 +95,7 @@ export function FacetStrip({ analysis }: { readonly analysis: RepositoryRow['lat
           <li key={b.facetKey}>
             <Tag
               color={b.worst === null ? 'success' : COLOR[b.worst]}
+              icon={FACET_ICON[b.worst ?? 'clean']}
               title={hint}
               aria-label={hint}
               className="me-0"

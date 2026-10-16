@@ -1145,7 +1145,7 @@
     "strip": {
       "label": "Facets",
       "clean": "{facet}: no findings. Open the Facet.",
-      "hint": "{facet}: {count, plural, one {# finding} other {# findings}}, worst is {kind}. Open the Facet."
+      "hint": "{facet}: {count, plural, one {# finding} other {# findings}}, worst is {kind}: {reason}. Open the Facet."
     },
     "header": {
       "source": "Source",
