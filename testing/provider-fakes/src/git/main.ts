@@ -4,15 +4,17 @@ import { join } from 'node:path';
 import { DEFAULT_GIT_PORT, startFakeGitServer } from './server.ts';
 
 /**
- * Standalone entry: `node src/git/main.ts`. Env: GM_FAKE_GIT_PORT (4030), GM_FAKE_GIT_ROOT
- * (a fresh temp dir), GM_FAKE_GIT_HOST (127.0.0.1), GM_FAKE_GIT_TOKEN (fake-token, both sides).
+ * Standalone entry: `node src/git/main.ts`. Env (same names as `src/main.ts`): FAKE_GIT_PORT (4030),
+ * FAKE_GIT_ROOT (a fresh temp dir), FAKES_HOST (127.0.0.1), FAKE_GIT_PUBLIC_URL (the listening
+ * address), FAKE_GIT_TOKEN (fake-token, both sides).
  */
-const rootDir = process.env.GM_FAKE_GIT_ROOT ?? (await mkdtemp(join(tmpdir(), 'fake-git-')));
-const token = process.env.GM_FAKE_GIT_TOKEN ?? 'fake-token';
+const rootDir = process.env.FAKE_GIT_ROOT ?? (await mkdtemp(join(tmpdir(), 'fake-git-')));
+const token = process.env.FAKE_GIT_TOKEN ?? 'fake-token';
 const server = await startFakeGitServer({
   rootDir,
-  port: Number(process.env.GM_FAKE_GIT_PORT ?? DEFAULT_GIT_PORT),
-  host: process.env.GM_FAKE_GIT_HOST,
+  port: Number(process.env.FAKE_GIT_PORT ?? DEFAULT_GIT_PORT),
+  host: process.env.FAKES_HOST,
+  publicUrl: process.env.FAKE_GIT_PUBLIC_URL,
   source: { tokens: [token] },
   target: { tokens: [token] },
 });

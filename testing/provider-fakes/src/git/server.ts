@@ -54,9 +54,9 @@ export interface GitSideOptions {
   refPolicyFlag?: boolean;
   /**
    * Called when a CGI process (`git http-backend`) is started for a request, before the body is
-   * consumed. A test seam to observe that a push is in flight.
+   * consumed. A test seam to observe that a push is in flight (`pid` is the CGI process).
    */
-  onCgiSpawn?: (info: { repo: string; operation: 'read' | 'write' }) => void;
+  onCgiSpawn?: (info: { repo: string; operation: 'read' | 'write'; pid: number }) => void;
   /**
    * Ref policy for pushes (pre-receive hook): called per updated ref, return a message to reject the
    * push or nothing to accept. `old`/`new` are object ids (all zeros = absent); `fastForward` is
@@ -188,6 +188,8 @@ export async function startFakeGitServer(options: FakeGitServerOptions): Promise
   }
   let baseUrl = '';
   const requestLog: GitRequestRecord[] = [];
+  /** CGI processes still running; `close()` kills them. */
+  const children = new Set<ChildProcess>();
   const maxBatch = options.maxLfsBatchObjects ?? 100;
 
   const server: Server = createServer((req, res) => {
@@ -362,7 +364,12 @@ export async function startFakeGitServer(options: FakeGitServerOptions): Promise
         },
       });
     }
-    if (!/^[A-Za-z0-9._/-]+$/.test(rest) || rest.split('/').some((seg) => seg === '..')) {
+    // Empty segments (`acme//app.git`) are no repository path: `git http-backend` would answer with
+    // an empty 500.
+    if (
+      !/^[A-Za-z0-9._/-]+$/.test(rest) ||
+      rest.split('/').some((seg) => seg === '..' || seg === '')
+    ) {
       return text(res, 404, 'Not found\n');
     }
     return cgi(req, res, side, `/${rest}`, url.search.slice(1), user, creds);
@@ -418,9 +425,12 @@ export async function startFakeGitServer(options: FakeGitServerOptions): Promise
     for (const k of Object.keys(env)) if (env[k] === undefined) delete env[k];
 
     const child = spawn('git', ['http-backend'], { env, stdio: ['pipe', 'pipe', 'pipe'] });
+    children.add(child);
+    child.on('close', () => children.delete(child));
     side.onCgiSpawn?.({
       repo: policyRepo,
       operation: pathInfo.endsWith('/git-receive-pack') ? 'write' : 'read',
+      pid: child.pid ?? -1,
     });
     const isPush = req.method === 'POST' && pathInfo.endsWith('/git-receive-pack');
     const done = pumpCgi(req, res, child, isPush ? side.maxPushBytes : null);
@@ -461,6 +471,7 @@ export async function startFakeGitServer(options: FakeGitServerOptions): Promise
       new Promise<void>((resolve, reject) => {
         server.close((err) => (err ? reject(err) : resolve()));
         server.closeAllConnections();
+        for (const child of children) child.kill();
       }),
   };
 }
@@ -535,6 +546,10 @@ function pumpCgi(
       });
     }
     req.on('aborted', () => child.kill());
+    // A client that goes away leaves a paused CGI blocked on its output: stop it.
+    res.on('close', () => {
+      if (child.exitCode === null && child.signalCode === null) child.kill();
+    });
     let stderr = '';
     child.stderr?.on('data', (d: Buffer) => {
       stderr += d.toString();
@@ -549,6 +564,13 @@ function pumpCgi(
     // The CGI prints its headers before receive-pack has read the pack, so the response head is held
     // back until the first body byte (or the end); that keeps a 413 possible while the body streams in.
     let pendingHead: { status: number; headers: Record<string, string> } | undefined;
+    /** Writes to the response, pausing the CGI output until a slow client has drained it. */
+    const forward = (chunk: Buffer) => {
+      if (!res.write(chunk)) {
+        stdout.pause();
+        res.once('drain', () => stdout.resume());
+      }
+    };
     const flushHead = () => {
       if (!pendingHead) return;
       res.writeHead(pendingHead.status, pendingHead.headers);
@@ -558,7 +580,7 @@ function pumpCgi(
       if (exceeded) return;
       if (started) {
         flushHead();
-        res.write(chunk);
+        forward(chunk);
         return;
       }
       head = Buffer.concat([head, chunk]);
@@ -586,7 +608,7 @@ function pumpCgi(
       const body = head.subarray(sep.at + sep.len);
       if (body.length) {
         flushHead();
-        res.write(body);
+        forward(body);
       }
     });
     child.on('close', () => {

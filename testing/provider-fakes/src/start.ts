@@ -178,10 +178,15 @@ export async function startFakes(options: StartOptions = {}): Promise<RunningFak
     bitbucket: Object.assign(bitbucket, { port: bb.port }),
     github: github && ghServer ? Object.assign(github, { port: ghServer.port }) : undefined,
     git,
+    // Every server is closed even when an earlier one fails; the first failure is rethrown.
     close: async () => {
-      await closeServer(bb.server);
-      if (ghServer) await closeServer(ghServer.server);
-      await git?.close();
+      const results = await Promise.allSettled([
+        closeServer(bb.server),
+        ...(ghServer ? [closeServer(ghServer.server)] : []),
+        ...(git ? [git.close()] : []),
+      ]);
+      const failed = results.find((r): r is PromiseRejectedResult => r.status === 'rejected');
+      if (failed) throw failed.reason;
     },
   };
 }

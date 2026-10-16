@@ -85,3 +85,16 @@ describe('[TST-010] binding', () => {
     expect(res.status).toBe(200);
   });
 });
+
+describe('[TST-013] shutdown', () => {
+  it('[TST-013] close() still closes the git server when closing the fake Bitbucket fails', async () => {
+    const fakes = await startFakes({ bitbucketPort: 0, gitPort: 0, githubPort: 0 });
+    await fakes.close();
+    // A second close fails on the (already closed) Bitbucket server; the others must still be tried.
+    const git = fakes.git;
+    expect(git).toBeDefined();
+    const gitClose = vi.spyOn(git as NonNullable<typeof git>, 'close').mockResolvedValue();
+    await expect(fakes.close()).rejects.toThrow();
+    expect(gitClose).toHaveBeenCalledTimes(1);
+  });
+});
