@@ -432,52 +432,171 @@ const BANNED_GLOBALS: ReadonlySet<string> = new Set([
 ]);
 const GLOBAL_OBJECTS: readonly string[] = ['globalThis', 'self', 'window', 'global'];
 
-/** Names bound anywhere in the file (variables, parameters, functions, classes, catch). */
-function boundNames(program: Node): Set<string> {
-  const bound = new Set<string>();
-  const pattern = (p: Node | undefined): void => {
-    if (!p) return;
-    switch (p.type) {
-      case 'Identifier':
-        bound.add(p.name as string);
-        break;
-      case 'ObjectPattern':
-        for (const prop of p.properties as Node[])
-          pattern(prop.type === 'Property' ? prop.value : prop);
-        break;
-      case 'ArrayPattern':
-        for (const el of p.elements as Node[]) pattern(el);
-        break;
-      case 'AssignmentPattern':
-        pattern(p.left);
-        break;
-      case 'RestElement':
-        pattern(p.argument);
-        break;
-    }
-  };
-  walkAst(program, (n) => {
-    if (n.type === 'VariableDeclarator') pattern(n.id);
-    else if (n.type === 'FunctionDeclaration' || n.type === 'ClassDeclaration') pattern(n.id);
-    else if (n.type === 'CatchClause') pattern(n.param);
-    if (
-      n.type === 'FunctionDeclaration' ||
-      n.type === 'FunctionExpression' ||
-      n.type === 'ArrowFunctionExpression'
-    ) {
-      for (const param of (n.params ?? []) as Node[]) pattern(param);
-    }
-  });
-  return bound;
+/** A lexical scope: the names it binds and the scope it is nested in. */
+interface Scope {
+  readonly names: ReadonlySet<string>;
+  readonly parent: Scope | undefined;
 }
+
+function isBound(scope: Scope | undefined, name: string): boolean {
+  for (let s = scope; s; s = s.parent) if (s.names.has(name)) return true;
+  return false;
+}
+
+/** Adds the names a binding pattern declares. */
+function patternNames(p: Node | undefined, out: Set<string>): void {
+  if (!p) return;
+  switch (p.type) {
+    case 'Identifier':
+      out.add(p.name as string);
+      break;
+    case 'ObjectPattern':
+      for (const prop of p.properties as Node[])
+        patternNames(prop.type === 'Property' ? prop.value : prop, out);
+      break;
+    case 'ArrayPattern':
+      for (const el of p.elements as Node[]) patternNames(el, out);
+      break;
+    case 'AssignmentPattern':
+      patternNames(p.left, out);
+      break;
+    case 'RestElement':
+      patternNames(p.argument, out);
+      break;
+    case 'TSParameterProperty':
+      patternNames(p.parameter, out);
+      break;
+  }
+}
+
+const FUNCTIONS: ReadonlySet<string> = new Set([
+  'FunctionDeclaration',
+  'FunctionExpression',
+  'ArrowFunctionExpression',
+]);
+
+/** `var` names declared in a function body or the program, not looking into nested functions. */
+function hoistedVars(node: unknown, out: Set<string>): void {
+  if (Array.isArray(node)) {
+    for (const child of node) hoistedVars(child, out);
+    return;
+  }
+  if (!node || typeof node !== 'object') return;
+  const n = node as Node;
+  if (FUNCTIONS.has(n.type)) return;
+  if (n.type === 'VariableDeclaration' && n.kind === 'var')
+    for (const d of n.declarations as Node[]) patternNames(d.id, out);
+  for (const key of Object.keys(n))
+    if (key !== 'type' && key !== 'start' && key !== 'end') hoistedVars(n[key], out);
+}
+
+/** Names declared directly in a statement list: variables, functions, classes and imports. */
+function lexicalNames(statements: readonly Node[], out: Set<string>): void {
+  for (const statement of statements) {
+    const s =
+      (statement.type === 'ExportNamedDeclaration' ||
+        statement.type === 'ExportDefaultDeclaration') &&
+      statement.declaration
+        ? (statement.declaration as Node)
+        : statement;
+    if (s.type === 'VariableDeclaration')
+      for (const d of s.declarations as Node[]) patternNames(d.id, out);
+    else if ((s.type === 'FunctionDeclaration' || s.type === 'ClassDeclaration') && s.id)
+      out.add(s.id.name as string);
+    else if (s.type === 'ImportDeclaration')
+      for (const spec of (s.specifiers ?? []) as Node[]) patternNames(spec.local, out);
+    else if (s.type === 'TSImportEqualsDeclaration') patternNames(s.id, out);
+  }
+}
+
+/** The names a node binds for its descendants, or undefined when it opens no scope. */
+function scopeNames(n: Node): Set<string> | undefined {
+  const out = new Set<string>();
+  switch (n.type) {
+    case 'Program':
+      lexicalNames(n.body as Node[], out);
+      hoistedVars(n.body, out);
+      return out;
+    case 'FunctionDeclaration':
+    case 'FunctionExpression':
+    case 'ArrowFunctionExpression':
+      for (const param of (n.params ?? []) as Node[]) patternNames(param, out);
+      if (n.type === 'FunctionExpression' && n.id) out.add(n.id.name as string);
+      hoistedVars(n.body, out);
+      return out;
+    case 'BlockStatement':
+    case 'FunctionBody':
+    case 'StaticBlock':
+      lexicalNames(n.body as Node[], out);
+      return out;
+    case 'SwitchStatement':
+      lexicalNames(
+        (n.cases as Node[]).flatMap((c) => c.consequent as Node[]),
+        out,
+      );
+      return out;
+    case 'ForStatement':
+    case 'ForInStatement':
+    case 'ForOfStatement': {
+      const head = (n.type === 'ForStatement' ? n.init : n.left) as Node | undefined;
+      if (head?.type === 'VariableDeclaration') lexicalNames([head], out);
+      return out;
+    }
+    case 'CatchClause':
+      patternNames(n.param, out);
+      return out;
+    case 'ClassExpression':
+      if (n.id) out.add(n.id.name as string);
+      return out;
+    default:
+      return undefined;
+  }
+}
+
+/** Like `walk` (parents first), also passing the scope each node is in. */
+function walkScoped(
+  node: unknown,
+  scope: Scope | undefined,
+  visit: (n: Node, scope: Scope | undefined) => void,
+): void {
+  if (Array.isArray(node)) {
+    for (const child of node) walkScoped(child, scope, visit);
+    return;
+  }
+  if (!node || typeof node !== 'object') return;
+  const n = node as Node;
+  let inner = scope;
+  if (typeof n.type === 'string') {
+    const names = scopeNames(n);
+    if (names) inner = { names, parent: scope };
+    visit(n, inner);
+  }
+  for (const key of Object.keys(n))
+    if (key !== 'type' && key !== 'start' && key !== 'end') walkScoped(n[key], inner, visit);
+}
+
+/** The static name of a member access: `a.b` and `a['b']`. */
+function memberName(n: Node): string | undefined {
+  if (n.type !== 'MemberExpression') return undefined;
+  if (!n.computed) return n.property?.name as string | undefined;
+  const key = stringValue(n.property as Node | undefined);
+  return key && !key.dynamic ? key.value : undefined;
+}
+
+/** Members of `process` that load native bindings, below every module check. */
+const BINDING_ACCESS: ReadonlySet<string> = new Set(['binding', '_linkedBinding']);
 
 /**
  * Direct HTTP in adapter source (ADP-060): the global `fetch`, `XMLHttpRequest`, `WebSocket` or
- * `EventSource` (bare or as a member of the global object), `navigator.sendBeacon`, `eval` and
- * the `Function` constructor, `process.getBuiltinModule` of a banned module, and imports of HTTP
- * and socket modules. Other members of the global object (`globalThis.crypto`, `typeof window`)
- * and names shadowed by a local binding are fine; aliasing, destructuring, computed access and
- * `Reflect` use of the global object are not, because they can reach `fetch` unnamed.
+ * `EventSource` (bare or as a member of the global object), `navigator.sendBeacon`, `eval`, the
+ * `Function` constructor and `.constructor(…)` calls, `process.binding`,
+ * `process.getBuiltinModule` of a banned module, imports of HTTP and socket modules, and
+ * `import()`/`require()` with a computed specifier. Other members of the global object
+ * (`globalThis.crypto`, `typeof window`) are fine, and so are the global object, `navigator`,
+ * `eval` and `Function` where a local binding shadows them (scope by scope, not file-wide). A
+ * binding named `fetch`, `XMLHttpRequest`, `WebSocket` or `EventSource` never exempts it.
+ * Aliasing, destructuring, computed access and `Reflect` use of the global object are flagged,
+ * because they can reach `fetch` unnamed.
  *
  * This is a lint-level guard, not a sandbox: determined code can still evade a static check. The
  * SDK's runtime origin pinning and host allowlist are the backstop.
@@ -488,24 +607,30 @@ export function findDirectHttp(source: string, filename = 'file.ts'): string[] {
   const found: string[] = [];
   const names = new Set<Node>();
   const explained = new Set<Node>();
-  const bound = boundNames(program);
-  const isGlobal = (name: unknown): boolean =>
-    typeof name === 'string' && GLOBAL_OBJECTS.includes(name) && !bound.has(name);
-  walkAst(program, (n) => {
+  const isGlobal = (name: unknown, scope: Scope | undefined): boolean =>
+    typeof name === 'string' && GLOBAL_OBJECTS.includes(name) && !isBound(scope, name);
+  walkScoped(program, undefined, (n, scope) => {
     if (n.type === 'MemberExpression' && !n.computed && n.property) names.add(n.property as Node);
     if ((n.type === 'Property' || n.type === 'PropertyDefinition') && !n.computed && n.key) {
       names.add(n.key as Node);
     }
-    if (n.type === 'MemberExpression' && n.object?.type === 'Identifier' && !n.computed) {
+    if (n.type === 'MemberExpression' && n.object?.type === 'Identifier') {
       const object = n.object.name as string;
-      const property = n.property?.name as string | undefined;
-      if (isGlobal(object) && property !== undefined) {
+      const property = memberName(n);
+      if (!n.computed && isGlobal(object, scope) && property !== undefined) {
         // A static member of the global object is fine unless it opens connections.
         explained.add(n.object as Node);
         if (BANNED_GLOBALS.has(property)) found.push('globalThis.fetch');
       }
-      if (object === 'navigator' && !bound.has('navigator') && property === 'sendBeacon') {
+      if (object === 'navigator' && !isBound(scope, 'navigator') && property === 'sendBeacon') {
         found.push('navigator.sendBeacon');
+      }
+      if (
+        object === 'process' &&
+        !isBound(scope, 'process') &&
+        BINDING_ACCESS.has(property ?? '')
+      ) {
+        found.push('process.binding');
       }
     }
     if (
@@ -515,14 +640,17 @@ export function findDirectHttp(source: string, filename = 'file.ts'): string[] {
     ) {
       explained.add(n.argument as Node);
     }
-    if (
-      (n.type === 'CallExpression' || n.type === 'NewExpression') &&
-      n.callee?.type === 'Identifier'
-    ) {
-      const callee = n.callee.name as string;
-      if ((callee === 'eval' || callee === 'Function') && !bound.has(callee)) {
-        found.push(`${callee} (dynamic code)`);
+    if (n.type === 'CallExpression' || n.type === 'NewExpression') {
+      const callee = n.callee as Node;
+      if (
+        callee.type === 'Identifier' &&
+        (callee.name === 'eval' || callee.name === 'Function') &&
+        !isBound(scope, callee.name as string)
+      ) {
+        found.push(`${callee.name} (dynamic code)`);
       }
+      // `(() => {}).constructor('return fetch')` is the Function constructor by another name.
+      if (memberName(callee) === 'constructor') found.push('constructor call (dynamic code)');
     }
     if (n.type === 'CallExpression' && n.callee?.type === 'MemberExpression') {
       const callee = n.callee as Node;
@@ -535,15 +663,15 @@ export function findDirectHttp(source: string, filename = 'file.ts'): string[] {
       }
     }
   });
-  walkAst(program, (n) => {
+  walkScoped(program, undefined, (n, scope) => {
     if (n.type !== 'Identifier' || names.has(n) || explained.has(n)) return;
     const name = n.name as string;
-    if (bound.has(name)) return;
     if (BANNED_GLOBALS.has(name)) found.push(name);
-    else if (isGlobal(name)) found.push(`use of the global object (${name})`);
+    else if (isGlobal(name, scope)) found.push(`use of the global object (${name})`);
   });
   const { references } = findModuleReferences(source, filename);
   for (const ref of references) {
+    if (ref.dynamic) found.push('computed module specifier');
     const first = ref.specifier.replace(/^node:/, '').split('/')[0] ?? '';
     if (FORBIDDEN_HTTP_MODULES.has(first)) found.push(`import of ${ref.specifier}`);
   }

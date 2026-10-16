@@ -589,7 +589,63 @@ describe('ADP-060 adapters make no direct HTTP calls', () => {
     expect(findDirectHttp("const isBrowser = typeof window !== 'undefined';")).toEqual([]);
     expect(findDirectHttp('const self = { a: 1 }; export const b = self.a;')).toEqual([]);
     expect(findDirectHttp('export function f(self: number) { return self + 1; }')).toEqual([]);
-    expect(findDirectHttp('function fetch(x: number) { return x; } fetch(1);')).toEqual([]);
+    expect(findDirectHttp('function f(self: number) { return self; } export const s = f;')).toEqual(
+      [],
+    );
+  });
+
+  it('[ADP-060] a binding named fetch, XMLHttpRequest, WebSocket or EventSource never exempts it', () => {
+    expect(findDirectHttp('function fetch(x: number) { return x; } fetch(1);')).toEqual(['fetch']);
+    expect(findDirectHttp("function f(fetch) { return fetch(1); } fetch('https://x');")).toEqual([
+      'fetch',
+    ]);
+    expect(findDirectHttp('const { WebSocket } = deps; new WebSocket(u);')).toEqual(['WebSocket']);
+    expect(findDirectHttp('let EventSource = 1; export { EventSource };')).toEqual(['EventSource']);
+  });
+
+  it('[ADP-060] a local binding of the global object shadows it only in its own scope', () => {
+    expect(findDirectHttp('function f(self) { return self.a; } self.fetch(u);')).toEqual([
+      'globalThis.fetch',
+    ]);
+    expect(findDirectHttp('function f(self) { return self.a; } export const g = self;')).toEqual([
+      'use of the global object (self)',
+    ]);
+    expect(findDirectHttp('{ const window = { a: 1 }; window.a; } window.fetch(u);')).toEqual([
+      'globalThis.fetch',
+    ]);
+    expect(findDirectHttp('try { x(); } catch (global) { global.a; } global.fetch(u);')).toEqual([
+      'globalThis.fetch',
+    ]);
+    expect(findDirectHttp('function f(eval) { return eval; } eval(s);')).toEqual([
+      'eval (dynamic code)',
+    ]);
+    // `var` is visible in the whole function, also outside the block that declares it.
+    expect(findDirectHttp('function f() { { var self = { a: 1 }; } return self.a; }')).toEqual([]);
+    expect(findDirectHttp("import { navigator } from './n.ts'; navigator.sendBeacon(u);")).toEqual(
+      [],
+    );
+  });
+
+  it('[ADP-060] flags computed import() and require(), process.binding and constructor calls', () => {
+    expect(findDirectHttp('await import(name);')).toEqual(['computed module specifier']);
+    expect(findDirectHttp(`await import(\`./locales/\${l}.json\`);`)).toEqual([
+      'computed module specifier',
+    ]);
+    expect(findDirectHttp("await import('./locales/' + l);")).toEqual([
+      'computed module specifier',
+    ]);
+    expect(findDirectHttp('require(name);')).toEqual(['computed module specifier']);
+    expect(findDirectHttp("await import('./x.ts');")).toEqual([]);
+    expect(findDirectHttp("process.binding('tcp_wrap');")).toEqual(['process.binding']);
+    expect(findDirectHttp("process['_linkedBinding']('x');")).toEqual(['process.binding']);
+    expect(findDirectHttp("(() => {}).constructor('return fetch')();")).toEqual([
+      'constructor call (dynamic code)',
+    ]);
+    expect(findDirectHttp("f['constructor']['constructor']('return 1')();")).toEqual([
+      'constructor call (dynamic code)',
+    ]);
+    expect(findDirectHttp('new x.constructor();')).toEqual(['constructor call (dynamic code)']);
+    expect(findDirectHttp('const c = x.constructor; export const n = c.name;')).toEqual([]);
   });
 
   it('[ADP-060] flags the remaining bypasses', () => {
