@@ -1,4 +1,4 @@
-import type { AccessControl, CodeOwnership, Teams } from '@git-migrator/canonical';
+import type { AccessControl, CodeOwnership, PrincipalRef, Teams } from '@git-migrator/canonical';
 import { compareFacet, FacetRegistry, satisfiedTasks, translateFacet } from '@git-migrator/core';
 import { describe, expect, it } from 'vitest';
 import { accessControl } from '../access-control/index.ts';
@@ -456,6 +456,63 @@ describe('code-ownership facet', () => {
     });
   });
 
+  describe('several source teams mapped to one target team', () => {
+    const tbl: ResolutionTable = {
+      ...teamTable,
+      'group:S1': mapped(group('T')),
+      'group:S2': mapped(group('T')),
+    };
+    const sources: Teams = {
+      teams: [
+        { slug: 'S1', name: 'S1', members: [{ principal: identity('Z') }] },
+        { slug: 'S2', name: 'S2', members: [{ principal: identity('Y') }] },
+      ],
+    };
+
+    it('[FAC-COD] a skipped member of a later source team leaves membership unknown: owner kept', () => {
+      for (const order of [sources.teams, [...sources.teams].reverse()]) {
+        const r = run(reviewers('1'), tbl, aclTeam, [], teamOf('T', 'Z'), { teams: order });
+        expect(r.desired.owners[0]?.principals).toEqual([{ principal: identity('A') }]);
+        expect(r.warnings.map((w) => w.code)).toEqual(['code-ownership.team-membership-unknown']);
+      }
+    });
+
+    it('[FAC-COD] when every mapped source team is complete, a missing owner is insufficient', () => {
+      const r = run(reviewers('1'), tbl, aclTeam, [], teamOf('T', 'Z', 'Y'), sources);
+      expect(r.desired).toEqual({ owners: [] });
+      expect(r.warnings).toEqual([]);
+    });
+  });
+
+  it('[FAC-COD] grants differing only in case: the best role counts, whatever the order', () => {
+    const source: CodeOwnership = {
+      owners: [{ pattern: '*', principals: [{ principal: group('g') }] }],
+    };
+    const grants: AccessControl['grants'] = [
+      { principal: group('dev'), role: 'read' },
+      { principal: group('Dev'), role: 'write' },
+    ];
+    for (const order of [grants, [...grants].reverse()]) {
+      const r = run(source, { 'group:g': mapped(group('dev')) }, { grants: order });
+      expect(r.desired.owners[0]?.principals).toEqual([{ principal: group('dev') }]);
+      expect(r.decisions.map((d) => d.policyKey)).not.toContain(
+        'code-ownership.owner-insufficient-access',
+      );
+    }
+  });
+
+  it('[FAC-COD] teams differing only in case: a member of either one is covered', () => {
+    const teams: Teams = {
+      teams: [
+        { slug: 't', name: 't', members: [{ principal: identity('Z') }] },
+        { slug: 'T', name: 'T', members: [{ principal: identity('A') }] },
+      ],
+    };
+    const r = run(reviewers('1'), table, aclTeam, [], teams);
+    expect(r.desired.owners[0]?.principals).toEqual([{ principal: identity('A') }]);
+    expect(r.warnings).toEqual([]);
+  });
+
   it('[FAC-COD] a group owner matches its own grant ignoring case; duplicates differing in case are listed once', () => {
     const source: CodeOwnership = {
       owners: [
@@ -501,12 +558,16 @@ describe('code-ownership facet', () => {
     expect(r.desired.owners[0]?.principals).toEqual([{ principal: identity('A') }]);
   });
 
-  it('[FAC-006] any resolution table and teams document translates without throwing, deterministically and independent of order', () => {
+  it('[FAC-006] any resolution table and teams document translates deterministically, independent of order, and drops an owner only when no grant covers it', () => {
     const ids = ['a', 'x', 'q'];
     const principals = [...ids.map(identity), group('a'), group('b'), group('x')];
     const roles = ['read', 'triage', 'write', 'maintain', 'admin'] as const;
     const next = prng(777);
     const pick = <T>(items: readonly T[]): T[] => items.filter(() => next(2) === 0);
+    const ownerRoles = new Set(['write', 'maintain', 'admin']);
+    const same = (p: PrincipalRef, q: PrincipalRef) =>
+      p.kind === q.kind &&
+      (p.kind === 'group' ? p.id.toLowerCase() === q.id.toLowerCase() : p.id === q.id);
     const membersOf = (memberIds: readonly string[]) =>
       memberIds.map((id) => ({ principal: identity(id) }));
     for (let i = 0; i < 300; i++) {
@@ -538,6 +599,16 @@ describe('code-ownership facet', () => {
         teamsSource = {
           teams: [{ slug: sourceSlug, name: sourceSlug, members: membersOf(sourceMembers) }],
         };
+        // Many-to-one: a second source team mapped to the same target team.
+        if (variant === 2 && next(2) === 0) {
+          const otherMembers = pick(['a', 'x', 'q']);
+          tbl['group:Src_C'] = mapped(group('b'));
+          teamsSource.teams.push({
+            slug: 'Src_C',
+            name: 'Src_C',
+            members: membersOf(otherMembers),
+          });
+        }
       }
       const entries = principals.map((principal) => ({ principal }));
       const source: CodeOwnership = { owners: [{ pattern: '*', principals: entries }] };
@@ -552,6 +623,24 @@ describe('code-ownership facet', () => {
       const b = run(shuffled, tbl, acl, [], teams, teamsSource);
       expect(b.desired).toEqual(a.desired);
       expect(b.decisions).toEqual(a.decisions);
+      // Oracle: an owner dropped for access has no owner-level grant of its own and is not a
+      // desired member of any team holding one.
+      const ownerGrants = acl.grants.filter((g) => ownerRoles.has(g.role));
+      for (const d of a.decisions) {
+        if (d.policyKey !== 'code-ownership.owner-insufficient-access') continue;
+        const resolution = tbl[/principal=(.+)\]$/.exec(d.path)?.[1] ?? ''];
+        expect(resolution?.status).toBe('mapped');
+        if (resolution?.status !== 'mapped') continue;
+        const target = resolution.principal;
+        expect(ownerGrants.some((g) => same(g.principal, target))).toBe(false);
+        if (target.kind !== 'identity') continue;
+        for (const g of ownerGrants) {
+          for (const t of teams?.teams ?? []) {
+            if (!same(group(t.slug), g.principal)) continue;
+            expect(t.members.some((m) => same(m.principal, target))).toBe(false);
+          }
+        }
+      }
     }
   });
 });
