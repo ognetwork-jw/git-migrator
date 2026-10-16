@@ -15,6 +15,8 @@ FAKE_BITBUCKET_PORT=4010 FAKES_HOST=0.0.0.0 FAKE_GIT_BASE_URL=http://localhost:4
 
 The servers bind to `127.0.0.1` by default because `/__reset`, `/__config` and `/__state` have no auth. Set `FAKES_HOST=0.0.0.0` only inside the Compose `fakes` container (DEV-020). A server bound to `0.0.0.0` advertises `http://localhost:4030` in clone and LFS links, which other containers cannot reach: set `FAKE_GIT_PUBLIC_URL` to the address clients use (Compose: `http://fakes:4030`). `startFakes(...).close()` closes every server even when one of them fails, then rethrows the first failure.
 
+Environment of `pnpm start` (`startOptionsFromEnv` in `src/start.ts`): `FAKE_BITBUCKET_PORT`, `FAKE_GITHUB_PORT`, `FAKE_GIT_PORT`, `FAKE_GIT_ROOT`, `FAKES_HOST`, `FAKE_GIT_PUBLIC_URL` (the git server's advertised root: LFS links and both fakes' clone links) and `FAKE_GIT_BASE_URL` (the git server root for clone links only; the fake Bitbucket's links go under `{root}/source`, the fake GitHub's under `{root}/target`). `start:github` and `start:git` read the same names.
+
 Layout: `src/common/` (pagination, `q`/`sort`/`fields`), `src/bitbucket/` (state, serializers, app, rate limiter, fixtures), `src/github/` (the fake GitHub, below), `src/start.ts` (`startFakes` starts the git server and the fake Bitbucket, and the fake GitHub when `githubPort`/`github` is given; `src/main.ts` always does), `specs/` (saved OpenAPI documents). Programmatic use: `createFakeBitbucket(options)` returns `{ app, state, limiter, config, reset }`. `app` is a Hono app (use `app.request()` without a socket), `startFakes()` binds real ports (port `0` = ephemeral).
 
 ## Fake Bitbucket Cloud

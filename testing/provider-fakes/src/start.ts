@@ -190,3 +190,27 @@ export async function startFakes(options: StartOptions = {}): Promise<RunningFak
     },
   };
 }
+
+/** Strips trailing slashes from a base URL. */
+const trimSlash = (url: string) => url.replace(/\/+$/, '');
+
+/**
+ * Options of `src/main.ts` from its environment: `FAKE_BITBUCKET_PORT`, `FAKE_GITHUB_PORT` (default
+ * 4020, so the fake GitHub always starts), `FAKE_GIT_PORT`, `FAKE_GIT_ROOT`, `FAKES_HOST`,
+ * `FAKE_GIT_PUBLIC_URL` (the git server's advertised root, used for LFS and both fakes' clone links)
+ * and `FAKE_GIT_BASE_URL` (the git server root for the clone links only: Bitbucket's under `/source`,
+ * GitHub's under `/target`; it overrides `FAKE_GIT_PUBLIC_URL` for them).
+ */
+export function startOptionsFromEnv(env: NodeJS.ProcessEnv): StartOptions {
+  const base = env.FAKE_GIT_BASE_URL ? trimSlash(env.FAKE_GIT_BASE_URL) : undefined;
+  return {
+    bitbucketPort: env.FAKE_BITBUCKET_PORT ? Number(env.FAKE_BITBUCKET_PORT) : undefined,
+    githubPort: env.FAKE_GITHUB_PORT ? Number(env.FAKE_GITHUB_PORT) : DEFAULT_PORTS.github,
+    gitPort: env.FAKE_GIT_PORT ? Number(env.FAKE_GIT_PORT) : undefined,
+    gitRootDir: env.FAKE_GIT_ROOT,
+    hostname: env.FAKES_HOST,
+    bitbucket: base ? { gitBaseUrl: `${base}/source` } : {},
+    github: base ? { gitBaseUrl: `${base}/target` } : {},
+    git: env.FAKE_GIT_PUBLIC_URL ? { publicUrl: env.FAKE_GIT_PUBLIC_URL } : {},
+  };
+}
