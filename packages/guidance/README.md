@@ -48,8 +48,12 @@ renderGuidance('secrets.set-value', {
 Placeholders are `{name}` or `{name:context}`. Contexts: `markdown` (default, for prose), `shell` (POSIX
 single-quoting, for copy snippets) and `raw` (for URLs in copy snippets). Parameter kinds: `text`
 (non-blank, up to 1024 characters, no control characters), `url` (absolute http or https, no
-credentials), `integer` (non-negative safe integer) and `list` (1 to 500 text items, joined in prose,
-one copy line per item in a snippet).
+credentials), `integer` (non-negative safe integer), `list` (1 to 500 text items, joined in prose,
+one copy line per item in a snippet), `flag` (a boolean; only `true` counts as supplied, so it is
+mostly used with `steps[].when` / `unless`) and `entries` (1 to 500 `{kind, name}` items, prose only:
+each item renders through the message `entry.<param>.<kind>` with its name as `{entryName}`, joined
+with `; `; a kind not in the parameter's `entryKinds`, or an invalid name, makes the whole value
+invalid).
 
 ## Adding guidance for a code
 

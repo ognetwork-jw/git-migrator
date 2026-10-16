@@ -93,7 +93,7 @@
 | [0122](0122-policy-decisions.md) | Access policy decisions: roles, hash and body denial, field-level narrowing | accepted (spec updated) |
 | [0123](0123-migrations-tests-and-entrypoint.md) | Raw-SQL indexes, database tests in the unit tier, migrate entrypoint location | accepted (no spec change needed) |
 | [0130](0130-fixture-world-structure.md) | Fixture world structure, async fixtures and expectation derivation | accepted (no spec change needed) |
-| [0135](0135-headless-secrets-in-devenv-ci.md) | Headless secretspec route for the devenv CI job (env provider, test profile) | accepted (spec updated) |
+| [0135](0135-headless-secrets-in-devenv-ci.md) | Headless secretspec route for the devenv CI job (file provider over testing/fixtures, test profile) | accepted (spec updated) |
 | [0136](0136-devenv-ci-cli-and-lock.md) | devenv CI pins the CLI to the v2.4.0 tag and uses the devenv cache; devenv.lock not committed yet | accepted (no spec change needed) |
 | [0137](0137-devenv-test-readiness.md) | devenv test waits on readiness probes; Postgres probed over the socket; CREATEDB for the app role | accepted (spec updated) |
 | [0140](0140-facet-context-plain-json.md) | The facet translate context must be plain JSON | accepted (no spec change needed) |

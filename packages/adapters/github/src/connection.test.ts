@@ -62,6 +62,17 @@ describe('inventory', () => {
     expect(await h.conn.inventory.getRepository(h.repo('missing'))).toBeNull();
   });
 
+  it('[LIF-031] maps the repository creation time to RepositoryRecord.createdAt', async () => {
+    const h = await setup();
+    const rec = h.fake.state.addRepository('acme', { name: 'app' });
+    rec.createdAt = Date.parse('2026-10-01T10:00:00Z');
+    const found = await h.conn.inventory.getRepository(h.repo('app'));
+    expect(found?.createdAt).toEqual(new Date('2026-10-01T10:00:00Z'));
+    expect((await h.conn.inventory.findRepository(h.org, 'app'))?.createdAt).toEqual(
+      new Date('2026-10-01T10:00:00Z'),
+    );
+  });
+
   it('[JOB-030] lists members then outside collaborators as identities with public data', async () => {
     const h = await setup();
     const s = h.fake.state;

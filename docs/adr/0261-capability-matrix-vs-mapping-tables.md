@@ -14,6 +14,7 @@ T-058 requires the computed matrix to match the mapping tables in docs/spec/05-f
 - Every row the 05 tables mark lossy for the pair is declared `constrained` on the target-side canonical field it affects, whether or not the loss depends on the data. This is why `/description` (350 characters), `minApprovals` (above 6) and `deletionExempt` sit beside always-lossy rows.
 - Rows decided only at read time stay dynamic, through `FacetRead.capabilities` (`/forking` for an organization that forbids private forks) or `FacetRead.unreadable` (merge-settings `/allowed` and `/deleteBranchOnMerge`, FAC-MRG-002).
 - `translated` is never produced statically.
+- Two data-dependent losses are decided in translate, not in the static matrix: what a pipelines file loses (05 marks the translation partly unsupported, depending on the file), and environment names that collide by case (`environments.name-collision`). So the `pipelines` cell shows `exact` and the `environments` cell does not reflect name collisions; the per-repository Analysis reports both.
 - Paths such as `/rules/pattern`, `/owners`, `/variables/name`, `/hooks/events` and `/secrets/value` are matrix markers for a whole concern, not schema paths. `/secrets/value` in particular is not in the canonical schema; it exists so the matrix can show that the source never returns secret values. Tests pin the source-side markers.
 
 ## Declarations

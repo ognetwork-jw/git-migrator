@@ -22,7 +22,7 @@ Earlier rounds found: one bind mount shared `node_modules` between host and cont
 
    Correction (T-097d): this item originally also set `FAKE_GIT_BASE_URL=http://fakes:4030/source`. The fake GitHub appends `/target` to that variable, so its clone_url became `…/source/target/…` (the wrong side). The variable is no longer set in `compose.yaml`; `FAKE_GIT_PUBLIC_URL` alone yields both sides.
 
-   Port 4020 (fake GitHub) is published by the `fakes` service but has no listener until T-042 lands, so connections to it are refused until then.
+   Port 4020 (fake GitHub) is published by the `fakes` service. When this ADR was written it had no listener (T-042 had not landed); the fake GitHub now listens on it.
 9. `postgres` uses `postgres:16` (digest pinned, ADR-0067), a named volume and a `pg_isready` healthcheck.
 
 ## Verification (sandbox, review round 2)

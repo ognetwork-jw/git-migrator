@@ -22,8 +22,12 @@ Findings from the devenv v2.4.0 source and a local reproduction (devenv 2.4.0 fr
 3. `postgres-password` stays a one-shot process with `restart.on = "never"` and no probe. devenv does not wait on it (finding 2), so it neither blocks nor counts as ready.
 4. `enterTest` no longer polls `pg_isready` and the web port (the probes cover both). It keeps one bounded wait (150 s) for what no probe covers: `git_migrator` logs in over TCP with its scram password (`PGPASSWORD` from `secretspec run`, never in argv) and `rolcreatedb` is true. It then makes one `curl` check of the web placeholder before the checks.
 5. The checks run as `pnpm lint`, `pnpm typecheck` and `pnpm test`, one after another, as `ci.yml` does. The first CI run with working readiness probes (job 113367802463) ran them as one `pnpm turbo run lint typecheck test` graph; on the hosted runner that overloaded the CPU, and two timing-budget tests in `packages/observability` (DEP-050) missed their budgets (1099 ms against 1000 ms, and a 6 s timeout). Running the three in sequence matches the load the main CI job puts on the same runner type.
-5. CREATEDB. `initialDatabases` creates the role without `CREATEDB`, and T-010's tests (ADR-0123, `GM_TEST_DATABASE_URL`, default role `git_migrator`) create throw-away databases. `set-postgres-password` now runs `ALTER ROLE git_migrator WITH LOGIN CREATEDB PASSWORD ...`. The `enterTest` wait in item 4 proves it.
-6. The `Run devenv test` workflow step has `timeout-minutes: 30`, so a hang fails that step instead of waiting for the job limit.
+6. CREATEDB. `initialDatabases` creates the role without `CREATEDB`, and T-010's tests (ADR-0123, `GM_TEST_DATABASE_URL`, default role `git_migrator`) create throw-away databases. `set-postgres-password` now runs `ALTER ROLE git_migrator WITH LOGIN CREATEDB PASSWORD ...`. The `enterTest` wait in item 4 proves it.
+7. The `Run devenv test` workflow step has `timeout-minutes: 30`, so a hang fails that step instead of waiting for the job limit.
+
+## Spec departure
+
+When this ADR was written, the DEV-010 bullet read only "`enterTest` runs `pnpm turbo run lint typecheck test`". This ADR departed from it in three ways: the checks run as three sequential commands instead of one turbo graph (item 5), processes declare readiness probes that `devenv test` waits on (items 1 and 2), and `enterTest` first waits for the `git_migrator` login and CREATEDB (items 4 and 6). The orchestrator has since folded the decision into DEV-010 in spec 12 when T-093 merged, so no departure remains.
 
 ## Alternatives
 
@@ -33,8 +37,8 @@ Findings from the devenv v2.4.0 source and a local reproduction (devenv 2.4.0 fr
 - Turn `postgres-password` into a task or `enterShell` step: rejected. It needs the final server, which only exists after the process starts.
 - Keep `enterTest` polling instead of probes: rejected. The hang happens before `enterTest`.
 
-## Unverified
+## Evidence
 
-- A full green `devenv test` run on a GitHub runner; the local reproduction used the nixpkgs channel instead of `devenv-nixpkgs/rolling` and no devenv cache.
+- Green `devenv` workflow run 37794779300 (branch `task/T-093-devenv-ci`, 2026-10-08) ran `devenv test` on a GitHub runner with these probes and the sequential checks. Before it, the only check was a local reproduction that used the nixpkgs channel instead of `devenv-nixpkgs/rolling` and no devenv cache.
 
 Affected requirement IDs: DEV-001, DEV-010, DEP-060, ADR-0123 (database tests).
