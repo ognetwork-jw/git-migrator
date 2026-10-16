@@ -2,13 +2,15 @@ import {
   type AdapterContext,
   AdapterError,
   type EndpointConnection,
+  type EndpointRuntime,
   type GitClient,
   type ProviderHttpEnvironment,
+  type QuotaGate,
   type QuotaPool,
 } from '@git-migrator/adapter-sdk';
 import type { Config } from '@git-migrator/config';
-import { createGitQuota, type GitQuota } from '@git-migrator/git';
-import { bucketKey } from '@git-migrator/quota';
+import { createGitQuota, GIT_UNITS, type GitQuota } from '@git-migrator/git';
+import { type QuotaService, selectCredential } from '@git-migrator/quota';
 import type { ProviderRegistry } from '@git-migrator/registry';
 
 type Env = Readonly<Record<string, string | undefined>>;
@@ -26,11 +28,51 @@ export interface ConnectOptions {
 export interface EndpointConnector {
   connect(endpointId: string, options: ConnectOptions): Promise<EndpointConnection>;
   /**
-   * Pre-acquires units in the `git` bucket of the credential `connect` selects for the Endpoint
-   * (JOB-041, JOB-043), for git commands the jobs run themselves (a mirror clone). A denial throws
-   * `rate_limited` with `retryAt`. Absent in test connectors: git commands then run unmetered.
+   * Pre-acquires units in the `git` bucket the adapter declared for the connection's credential
+   * (`GitAccess.quota`, JOB-041, JOB-043), for git commands the jobs run themselves (a mirror
+   * clone, the `git-refs` ls-remote of an Analysis). A denial throws `rate_limited` with
+   * `retryAt`. A connection whose adapter declares no git bucket belongs to a provider that does
+   * not meter git over HTTPS (ADR-0380): its quota grants every request.
    */
-  gitQuota?(endpointId: string, options: Pick<ConnectOptions, 'pool'>): GitQuota;
+  gitQuota(
+    connection: Pick<EndpointConnection, 'git'>,
+    options: Pick<ConnectOptions, 'pool'>,
+  ): GitQuota;
+}
+
+/** The quota of git commands that nothing meters (ADR-0380). */
+export const unmeteredGitQuota: GitQuota = { acquire: async () => undefined };
+
+/** A `GitQuota` over the bucket a connection declared, or `unmeteredGitQuota` when it declared none. */
+export function gitQuotaOf(
+  gate: Pick<QuotaGate, 'acquire'>,
+  connection: Pick<EndpointConnection, 'git'>,
+  pool: QuotaPool,
+  now?: () => Date,
+): GitQuota {
+  const spec = connection.git.quota;
+  if (!spec) return unmeteredGitQuota;
+  return createGitQuota({
+    gate,
+    bucketKey: spec.key,
+    limit: spec.limit,
+    windowSeconds: spec.windowSeconds,
+    pool,
+    ...(now ? { now } : {}),
+  });
+}
+
+/**
+ * Wraps a `GitClient` so every ls-remote first pre-acquires its unit in `quota` (JOB-041). The inner
+ * client must not meter again.
+ */
+export function meteredGitClient(inner: GitClient, quota: GitQuota): GitClient {
+  return {
+    async lsRemote(request) {
+      await quota.acquire(GIT_UNITS.lsRemote);
+      return inner.lsRemote(request);
+    },
+  };
 }
 
 export interface EndpointConnectorOptions {
@@ -41,6 +83,11 @@ export interface EndpointConnectorOptions {
   /** Quota and lease gates, raw capture, telemetry and logger (`createProviderEnvironment`). */
   readonly environment: ProviderHttpEnvironment;
   readonly git: GitClient;
+  /**
+   * Free capacity of quota buckets (`QuotaService`), for JOB-042 credential selection. Without it
+   * the first valid credential is used.
+   */
+  readonly capacity?: Pick<QuotaService, 'freeCapacity'>;
 }
 
 /** Keys of a strict Zod object schema, or `undefined` when the schema is not an object. */
@@ -86,8 +133,8 @@ function credentialsFrom(raw: string): unknown[] {
 }
 
 export function createEndpointConnector(options: EndpointConnectorOptions): EndpointConnector {
-  /** The Endpoint's entry, its adapter and the credential JOB-042 selects (the first valid one today). */
-  const select = (endpointId: string) => {
+  /** The Endpoint's entry, its adapter and the credential JOB-042 selects for `pool`. */
+  const select = async (endpointId: string, pool: QuotaPool) => {
     const entry = options.config.endpoints.find((e) => e.id === endpointId);
     if (!entry) {
       throw new AdapterError({
@@ -117,51 +164,45 @@ export function createEndpointConnector(options: EndpointConnectorOptions): Endp
       });
     }
     const credentials = candidates.filter((c) => adapter.credentialSchema.safeParse(c).success);
-    // JOB-042 picks the credential with the most free capacity; that needs each adapter's
-    // bucket classifier, which the host cannot see yet (ADR-0280), so the first valid one is used.
-    const credential = credentials[0];
-    if (credential === undefined) {
+    if (credentials.length === 0) {
       throw new AdapterError({
         code: 'invalid',
         provider: entry.provider,
         message: `Secret ${entry.credentialsSecret} holds no valid credential for Endpoint ${endpointId}`,
       });
     }
-    const accountId = (credential as { accountId?: unknown } | null)?.accountId;
-    const accountKey = typeof accountId === 'string' && accountId !== '' ? accountId : entry.id;
-    return { entry, adapter, credential, accountKey };
+    const config = adapterConfigFor(entry, options.config, adapter.configSchema);
+    const runtimeOf = (credential: unknown): EndpointRuntime => {
+      const accountId = (credential as { accountId?: unknown } | null)?.accountId;
+      const accountKey = typeof accountId === 'string' && accountId !== '' ? accountId : entry.id;
+      return { id: entry.id, baseUrl: entry.baseUrl, config, credential, accountKey };
+    };
+    const runtimes = credentials.map(runtimeOf);
+    const first = runtimes[0] as EndpointRuntime;
+    // JOB-042: the credential whose buckets have the most free capacity for the pool. Without the
+    // adapter's buckets or a capacity source, or with one credential, the first valid one is used.
+    if (runtimes.length === 1 || !adapter.credentialBuckets || !options.capacity) {
+      return { adapter, runtime: first };
+    }
+    const bucketsOf = adapter.credentialBuckets.bind(adapter);
+    const chosen = await selectCredential(
+      options.capacity,
+      runtimes.map((runtime) => ({ credential: runtime, buckets: bucketsOf(runtime) })),
+      pool,
+    );
+    return { adapter, runtime: chosen?.credential ?? first };
   };
   return {
     async connect(endpointId, { pool, signal }) {
-      const { entry, adapter, credential, accountKey } = select(endpointId);
+      const { adapter, runtime } = await select(endpointId, pool);
       const context: AdapterContext = { ...options.environment, git: options.git, pool, signal };
-      return adapter.connect(
-        {
-          id: entry.id,
-          baseUrl: entry.baseUrl,
-          config: adapterConfigFor(entry, options.config, adapter.configSchema),
-          credential,
-          accountKey,
-        },
-        context,
-      );
+      return adapter.connect(runtime, context);
     },
-    gitQuota(endpointId, { pool }) {
-      const { entry, accountKey } = select(endpointId);
-      const overrides = entry.quota.overrides as Readonly<Record<string, number>> | undefined;
-      return createGitQuota({
-        gate: options.environment.quota,
-        bucketKey: bucketKey(endpointId, accountKey, 'git'),
-        limit: overrides?.git ?? GIT_BUCKET_LIMIT,
-        windowSeconds: 3600,
-        pool,
-      });
+    gitQuota(connection, { pool }) {
+      return gitQuotaOf(options.environment.quota, connection, pool);
     },
   };
 }
-
-/** JOB-043: the `git` bucket allows 60,000 requests an hour unless `quota.overrides.git` says otherwise. */
-const GIT_BUCKET_LIMIT = 60_000;
 
 /**
  * The `GitClient` for jobs that never touch git transport (inventory). It refuses every call, so a

@@ -5,10 +5,12 @@
 import { readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import type {
-  EndpointConnection,
-  IdentityRecord,
-  RepositoryRecord,
+import {
+  AdapterError,
+  type EndpointConnection,
+  type IdentityRecord,
+  type NamespaceRecord,
+  type RepositoryRecord,
 } from '@git-migrator/adapter-sdk';
 import { type Config, resolveConfig } from '@git-migrator/config';
 import { hashConfig, syncConfig } from '@git-migrator/db';
@@ -65,11 +67,16 @@ interface Tweaks {
   emptyRepositories?: boolean;
   /** Every namespace page names the same next cursor. */
   loopNamespaces?: boolean;
+  /** Every namespace page names a next cursor never seen before. */
+  endlessNamespaces?: boolean;
+  mapNamespace?: (record: NamespaceRecord) => NamespaceRecord;
 }
 let tweaks: Tweaks = {};
+let freshCursors = 0;
 
 function tweaked(real: EndpointConnector): EndpointConnector {
   return {
+    gitQuota: (connection, options) => real.gitQuota(connection, options),
     async connect(endpointId, options) {
       if (tweaks.connectError) throw tweaks.connectError;
       const connection = await real.connect(endpointId, options);
@@ -77,9 +84,10 @@ function tweaked(real: EndpointConnector): EndpointConnector {
         ...connection.inventory,
         async listNamespaces(cursor) {
           if (tweaks.emptyNamespaces) return { items: [] };
-          const page = await connection.inventory.listNamespaces(
-            tweaks.loopNamespaces ? undefined : cursor,
-          );
+          const repeat = tweaks.loopNamespaces || tweaks.endlessNamespaces;
+          const page = await connection.inventory.listNamespaces(repeat ? undefined : cursor);
+          if (tweaks.endlessNamespaces) return { ...page, nextCursor: `fresh-${++freshCursors}` };
+          if (tweaks.mapNamespace) return { ...page, items: page.items.map(tweaks.mapNamespace) };
           return tweaks.loopNamespaces ? { ...page, nextCursor: 'same' } : page;
         },
         async listRepositories(ns, cursor) {
@@ -673,14 +681,64 @@ describe('inventory against the fixture world', () => {
     expect(live).toMatchObject({ repositories: WORLD_REPOSITORIES.length });
   }, 120_000);
 
+  it('[JOB-044] the handler delays its job until retryAt on a quota denial, and gives it back on shutdown', async () => {
+    const handler = inventoryHandlers(deps)['inventory.endpoint'];
+    const retryAt = new Date(Date.now() + 90_000);
+    const moves: string[] = [];
+    const job = {
+      moveToDelayed: async (at: number, token: string) => {
+        moves.push(`delayed ${at} ${token}`);
+      },
+      moveToWait: async (token: string) => {
+        moves.push(`wait ${token}`);
+      },
+    };
+    tweaks = {
+      connectError: new AdapterError({
+        code: 'rate_limited',
+        provider: 'test',
+        message: 'Quota limit',
+        retryAt,
+      }),
+    };
+    try {
+      await expect(
+        handler?.({ endpointId: SOURCE }, {
+          shutdown: shutdown.signal,
+          log,
+          job,
+          token: 't',
+        } as never),
+      ).rejects.toMatchObject({ name: 'DelayedError' });
+    } finally {
+      tweaks = {};
+    }
+    const aborted = new AbortController();
+    aborted.abort();
+    await expect(
+      handler?.({ endpointId: SOURCE }, {
+        shutdown: aborted.signal,
+        log,
+        job,
+        token: 't',
+      } as never),
+    ).rejects.toMatchObject({ name: 'WaitingError' });
+    expect(moves).toEqual([`delayed ${retryAt.getTime()} t`, 'wait t']);
+  }, 120_000);
+
   it('[FAC-DKY-003] keeps one row per (endpointId, providerId) and the right presence across hide and restore', async () => {
     const before = await t.db.privileged.repository.findMany({ where: { endpointId: SOURCE } });
     tweaks = { hideRepositories: new Set(['pipelines-simple']) };
     try {
-      await run(SOURCE);
+      expect((await run(SOURCE)).missing).toBe(1);
     } finally {
       tweaks = {};
     }
+    const hidden = await t.db.privileged.repository.findMany({ where: { endpointId: SOURCE } });
+    expect(hidden).toHaveLength(before.length);
+    expect(hidden.filter((r) => r.presence === 'missing').map((r) => r.slug)).toEqual([
+      'pipelines-simple',
+    ]);
     await run(SOURCE);
     const after = await t.db.privileged.repository.findMany({ where: { endpointId: SOURCE } });
     expect(after).toHaveLength(before.length);
@@ -769,7 +827,38 @@ describe('inventory against the fixture world', () => {
     expect(
       await t.db.privileged.identityMapping.findUniqueOrThrow({ where: { id: alice?.id ?? '' } }),
     ).toMatchObject({ status: 'confirmed', method: 'manual' });
-    expect(result.mappingsChanged).toBeGreaterThanOrEqual(0);
+    // The raced row was the only one the pass would have rewritten, and the guarded write lost.
+    expect(result.mappingsChanged).toBe(0);
+  }, 120_000);
+
+  it('[AUTH-050] keeps an operator group decision made while the pass is running', async () => {
+    const db = t.db.privileged;
+    const platform = await db.groupMapping.findFirstOrThrow({
+      where: { routeId: 'r-manual', sourceGroup: { slug: 'platform-team' } },
+    });
+    // Back to undecided: the next pass would suggest the target team with the same slug again.
+    await db.groupMapping.update({
+      where: { id: platform.id },
+      data: { status: 'unmapped', targetGroupId: null },
+    });
+    const racing: InventoryDeps = {
+      ...deps,
+      hooks: {
+        beforeMappingWrite: async (id) => {
+          if (id !== platform.id) return;
+          await db.groupMapping.update({ where: { id }, data: { status: 'excluded' } });
+        },
+      },
+    };
+    const result = await runInventory(racing, SOURCE, { shutdown: shutdown.signal });
+    expect(await db.groupMapping.findUniqueOrThrow({ where: { id: platform.id } })).toMatchObject({
+      status: 'excluded',
+      targetGroupId: null,
+    });
+    expect(result.mappingsChanged).toBe(0);
+    // Restore for the following tests.
+    await db.groupMapping.update({ where: { id: platform.id }, data: { status: 'unmapped' } });
+    await run(SOURCE);
   }, 120_000);
 
   it('[AUTH-050] never auto-confirms one target for two sources', async () => {
@@ -819,6 +908,20 @@ describe('inventory against the fixture world', () => {
     } finally {
       tweaks = {};
     }
+  });
+
+  it('[JOB-030] stops a listing that keeps issuing fresh cursors after the page cap', async () => {
+    tweaks = { endlessNamespaces: true };
+    freshCursors = 0;
+    try {
+      await expect(
+        runInventory({ ...deps, maxListingPages: 5 }, SOURCE, { shutdown: shutdown.signal }),
+      ).rejects.toThrow('did not end within 5 pages');
+    } finally {
+      tweaks = {};
+    }
+    expect(freshCursors).toBe(5);
+    expect(await t.db.privileged.repository.count({ where: { presence: 'missing' } })).toBe(0);
   });
 
   it('[JOB-030] destroys the connection when the advisory lock cannot be released', async () => {
@@ -877,6 +980,73 @@ describe('inventory against the fixture world', () => {
       (await t.db.privileged.route.findUniqueOrThrow({ where: { id: 'r-auto' } }))
         .targetNamespaceId,
     ).not.toBeNull();
+  }, 120_000);
+
+  it('[JOB-030] resolves the target namespace again when the provider replaces it under the same slug', async () => {
+    const before = (await t.db.privileged.route.findUniqueOrThrow({ where: { id: 'r-auto' } }))
+      .targetNamespaceId;
+    expect(before).not.toBeNull();
+    tweaks = {
+      mapNamespace: (r) => (r.slug === 'acme' ? { ...r, providerId: `${r.providerId}-new` } : r),
+    };
+    try {
+      await run(TARGET);
+    } finally {
+      tweaks = {};
+    }
+    const replaced = await t.db.privileged.route.findUniqueOrThrow({
+      where: { id: 'r-auto' },
+      include: { targetNamespace: true },
+    });
+    expect(replaced.targetNamespaceId).not.toBe(before);
+    expect(replaced.targetNamespace?.providerId).toMatch(/-new$/);
+    // The original comes back: the Route follows it again.
+    await run(TARGET);
+    expect(
+      (await t.db.privileged.route.findUniqueOrThrow({ where: { id: 'r-auto' } }))
+        .targetNamespaceId,
+    ).toBe(before);
+  }, 120_000);
+
+  it('[JOB-060][UI-020] publishes inventory.progress after every pass and migration.updated when Migrations were created', async () => {
+    const published: Array<{ type: string; ids: Record<string, string> }> = [];
+    const pool = t.db.pool;
+    const appPool = new Proxy(pool, {
+      get(target, key) {
+        if (key === 'query') {
+          return (text: string, values?: unknown[]) => {
+            if (typeof text === 'string' && text.includes('pg_notify') && values) {
+              published.push(JSON.parse(String(values[1])));
+            }
+            return target.query(text, values);
+          };
+        }
+        const value = Reflect.get(target, key, target);
+        return typeof value === 'function' ? value.bind(target) : value;
+      },
+    });
+    const observed: InventoryDeps = { ...deps, appPool };
+    await run(SOURCE);
+    // A quiet pass: nothing created, but the Repository lists and Endpoint counts refetch.
+    await runInventory(observed, SOURCE, { shutdown: shutdown.signal });
+    expect(published).toEqual([
+      expect.objectContaining({ type: 'inventory.progress', ids: { endpoint: SOURCE } }),
+    ]);
+    // A pass that creates repository Migrations also reaches the Migration lists (the dashboard).
+    published.length = 0;
+    await t.db.privileged.migration.deleteMany({
+      where: {
+        routeId: 'r-manual',
+        scope: 'repository',
+        sourceRepository: { slug: 'pipelines-simple' },
+      },
+    });
+    const result = await runInventory(observed, SOURCE, { shutdown: shutdown.signal });
+    expect(result.createdMigrations).toBe(1);
+    expect(published.map((e) => e.type)).toContain('inventory.progress');
+    expect(published).toContainEqual(
+      expect.objectContaining({ type: 'migration.updated', ids: {} }),
+    );
   }, 120_000);
 
   it('[JOB-030] skips an Endpoint that is retired or unknown, and one that another pass is running', async () => {

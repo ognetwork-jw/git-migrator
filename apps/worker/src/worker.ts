@@ -254,9 +254,11 @@ export async function startWorker(options: StartWorkerOptions): Promise<WorkerHa
       env,
       environment: providerEnvironment,
       git: noGitClient,
+      // JOB-042: among an Endpoint's credentials, the one with the most free capacity.
+      capacity: quota,
     });
-    // ls-remote for the `git-refs` read. Its one unit per Analysis in the git bucket is not
-    // pre-acquired yet (ADR-0310): the host cannot name an adapter's git bucket.
+    // ls-remote for the `git-refs` read. The Analysis and the Parity Check pre-acquire its unit in
+    // the git bucket the adapter declared for the connection (JOB-041).
     const git = createAnalysisGitClient({ scratchDir: scratchRoot(env), logger: log });
     const analysisDeps: AnalysisDeps = {
       db: db.privileged,
@@ -275,7 +277,11 @@ export async function startWorker(options: StartWorkerOptions): Promise<WorkerHa
       registry,
       git,
       log,
-      lfs: createMirrorLfsSource({ scratchRoot: scratchRoot(env), log }),
+      lfs: createMirrorLfsSource({
+        scratchRoot: scratchRoot(env),
+        log,
+        unknownSizeBytes: config.sizeClass.largeThresholdBytes,
+      }),
       // LIF-060 step 1: a drift check reads the full source only when the schedule asks for it.
       driftReadsSource: config.schedules.driftReadsSource,
     };
@@ -325,6 +331,8 @@ export async function startWorker(options: StartWorkerOptions): Promise<WorkerHa
         // AUTH-060 step 5: acceptance is detected at inventory; approved batches are resumed.
         scheduleInvitation: (step, delayMs) =>
           jobs.enqueueInvitationStep(step, { delayMs }).then(() => undefined),
+        // LIF-062: accepted or expired invitations queue a Parity Check.
+        enqueueParity: (migrationId) => jobs.enqueueParity(migrationId),
       }),
       ...analysisHandlers(analysisDeps),
       ...runHandlers({
@@ -340,7 +348,7 @@ export async function startWorker(options: StartWorkerOptions): Promise<WorkerHa
         metrics: recorders,
       }),
       ...feederHandlers({ db: db.privileged, runtime: jobs, quota, log }),
-      ...parityHandlers(parityDeps),
+      ...parityHandlers(parityDeps, jobs),
       // LIF-065: the daily sweep enqueues a drift check per verified Migration.
       ...driftHandlers({
         db: db.privileged,
@@ -354,6 +362,7 @@ export async function startWorker(options: StartWorkerOptions): Promise<WorkerHa
         connector,
         schedule: (step, delayMs) =>
           jobs.enqueueInvitationStep(step, { delayMs }).then(() => undefined),
+        enqueueParity: (migrationId) => jobs.enqueueParity(migrationId),
         log,
       }),
       ...(options.handlers ?? {}),

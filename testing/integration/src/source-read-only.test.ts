@@ -300,6 +300,7 @@ routes:
   // adapter's own are the real provider's, so the connection is told the world's. Source emails
   // are enriched as in the analysis test (AUTH-050 step 1).
   const connector: EndpointConnector = {
+    gitQuota: (connection, options) => real.gitQuota(connection, options),
     async connect(endpointId, options) {
       const connection = await real.connect(endpointId, options);
       if (endpointId === TARGET) {

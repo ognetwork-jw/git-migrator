@@ -64,7 +64,10 @@ export {
   createEndpointConnector,
   type EndpointConnector,
   type EndpointConnectorOptions,
+  gitQuotaOf,
+  meteredGitClient,
   noGitClient,
+  unmeteredGitQuota,
 } from './inventory/connector.ts';
 export {
   type InventoryDeps,
@@ -83,6 +86,7 @@ export {
   type CorrelateDeps,
   type CorrelateResult,
   correlateInvitations,
+  type EnqueueParity,
   INVITATION_UNRESOLVED_AFTER_MS,
   type InvitationDeps,
   InvitationInterruptedError,

@@ -303,7 +303,11 @@ describe('[LIF-061] the Migration becomes verified', () => {
 
   it('[LIF-062] the parity.migration job runs the check for its Migration', async () => {
     const w = await seedParityWorld(db(), 'migrated');
-    const handler = parityHandlers(parityDeps(db(), t.db.pool, equalSim()))['parity.migration'];
+    const handler = parityHandlers(parityDeps(db(), t.db.pool, equalSim()), {
+      enqueueParity: async () => {
+        throw new Error('not superseded: nothing to queue');
+      },
+    })['parity.migration'];
     if (!handler) throw new Error('no handler');
     const out = (await handler({ migrationId: w.migrationId }, {
       shutdown: never.signal,

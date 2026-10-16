@@ -52,7 +52,7 @@ import {
 import { collectPrincipals, groupResolver, identityResolver } from '../analysis/context.ts';
 import { type SourceLockView, sourceLockView } from '../analysis/framework-resources.ts';
 import { databaseNow } from '../db-clock.ts';
-import type { EndpointConnector } from '../inventory/connector.ts';
+import { type EndpointConnector, meteredGitClient } from '../inventory/connector.ts';
 import { isRateLimited } from '../run/errors.ts';
 import { loadPlacement, placementOutside, placementUnknown } from '../run/placement.ts';
 import { applyContainment, checkLfsObjects } from './git.ts';
@@ -76,8 +76,8 @@ export interface LfsObjectSource {
     readonly signal: AbortSignal;
     /** Repository size, for the JOB-015 disk precheck. */
     readonly sizeBytes: bigint | null;
-    /** The `git` bucket of the source credential (JOB-041); absent in tests. */
-    readonly quota?: GitQuota | undefined;
+    /** The `git` bucket of the source credential (JOB-041, `EndpointConnector.gitQuota`). */
+    readonly quota: GitQuota;
     /** The Run's mirror from `git.prepare`, when the check runs inside a Run. */
     readonly mirrorDir?: string | undefined;
   }): Promise<readonly { readonly oid: string; readonly size: number }[]>;
@@ -393,9 +393,16 @@ export async function computeParity(
     deps.connector.connect(route.sourceEndpointId, { pool: options.pool, signal }),
     deps.connector.connect(route.targetEndpointId, { pool: options.pool, signal }),
   ]);
+  // JOB-041: each ls-remote of a driver pre-acquires its unit in the git bucket of the connection.
+  const gitOf = new Map(
+    [sourceConn, targetConn].map((conn) => [
+      conn,
+      meteredGitClient(deps.git, deps.connector.gitQuota(conn, { pool: options.pool })),
+    ]),
+  );
   const driverContext = (conn: EndpointConnection) => ({
     http: conn.http,
-    git: deps.git,
+    git: gitOf.get(conn) ?? deps.git,
     logger: log as never,
     pool: options.pool,
     signal,
@@ -825,7 +832,7 @@ async function gitDiffs(
       migrationId: input.migration.id,
       signal: options.shutdown,
       sizeBytes: input.sourceRepository?.sizeBytes ?? null,
-      quota: deps.connector.gitQuota?.(input.sourceEndpointId, { pool: options.pool }),
+      quota: deps.connector.gitQuota(input.sourceConn, { pool: options.pool }),
       mirrorDir: options.mirrorDir,
     });
     const lfs = await checkLfsObjects({

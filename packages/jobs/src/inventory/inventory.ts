@@ -4,6 +4,7 @@ import {
   type EndpointConnection,
   type GroupRecord,
   type IdentityRecord,
+  isAdapterError,
   type NamespaceRecord,
   type Page,
   type RepositoryRecord,
@@ -22,11 +23,16 @@ import type { Logger } from '@git-migrator/observability';
 import type { ProviderRegistry } from '@git-migrator/registry';
 import type pg from 'pg';
 import { databaseNow } from '../db-clock.ts';
-import { correlateInvitations, type ScheduleInvitationStep } from '../invitations/index.ts';
-import type { JobHandlers } from '../runtime.ts';
+import {
+  correlateInvitations,
+  type EnqueueParity,
+  type ScheduleInvitationStep,
+} from '../invitations/index.ts';
+import { delayJob, giveBackJob, type JobHandlers } from '../runtime.ts';
 import type { EndpointConnector } from './connector.ts';
 import {
   demoteDuplicateConfirmations,
+  indexGroupTargets,
   indexTargets,
   type MappingFields,
   matchGroup,
@@ -39,8 +45,17 @@ import {
 /** Sources matched between two yields to the event loop. */
 const YIELD_EVERY = 500;
 
+/** What an event id may look like (JOB-060). */
+const EVENT_ID = /^[A-Za-z0-9_-]{1,64}$/;
+
 /** Rows per `createMany` statement. */
 const CHUNK = 500;
+
+/**
+ * Pages one listing may take. A provider that keeps issuing fresh cursors must not grow the pass
+ * without bound; at 100 items a page this is a million records.
+ */
+export const MAX_LISTING_PAGES = 10_000;
 
 export interface InventoryDeps {
   /** The privileged client: inventory is server code behind a job (DOM-005). */
@@ -53,8 +68,12 @@ export interface InventoryDeps {
   readonly log: Logger;
   /** Wakes the send step of approved Invitation Batches after a pass over their target (AUTH-060). */
   readonly scheduleInvitation?: ScheduleInvitationStep;
+  /** LIF-062: a Parity Check after the pass accepted or expired invitations of a Route. */
+  readonly enqueueParity?: EnqueueParity;
   /** Test seam. */
   readonly now?: () => Date;
+  /** Test seam: pages one listing may take (`MAX_LISTING_PAGES`). */
+  readonly maxListingPages?: number;
   /** Test seam: runs between a read and the guarded write that follows it. */
   readonly hooks?: {
     readonly beforeTransitionWrite?: (migrationId: string) => Promise<void>;
@@ -122,12 +141,21 @@ const sameTime = (a: Date | null | undefined, b: Date | null | undefined): boole
 async function collect<T>(
   list: (cursor?: string) => Promise<Page<T>>,
   checkpoint: () => void,
+  maxPages: number,
 ): Promise<T[]> {
   const items: T[] = [];
   const seen = new Set<string>();
   let cursor: string | undefined;
+  let pages = 0;
   do {
     checkpoint();
+    if (pages++ >= maxPages) {
+      throw new AdapterError({
+        code: 'invalid',
+        provider: 'inventory',
+        message: `A listing did not end within ${maxPages} pages`,
+      });
+    }
     const page = await list(cursor);
     items.push(...page.items);
     cursor = page.nextCursor;
@@ -162,6 +190,7 @@ export async function runInventory(
   const checkpoint = (): void => {
     if (options.shutdown.aborted) throw new InventoryInterruptedError();
   };
+  const maxPages = deps.maxListingPages ?? MAX_LISTING_PAGES;
 
   const endpoint = await db.endpoint.findUnique({ where: { id: endpointId } });
   if (endpoint?.status !== 'active') {
@@ -226,6 +255,7 @@ export async function runInventory(
     const namespaceRecords = await collect(
       (c) => connection.inventory.listNamespaces(c),
       checkpoint,
+      maxPages,
     );
     const namespaceIds = await upsertNamespaces(namespaceRecords);
     await resolveTargetNamespaces(routes, namespaceRecords, namespaceIds);
@@ -252,14 +282,19 @@ export async function runInventory(
       ? 0
       : await markMissing(new Set(repositoryRecords.map((r) => r.providerId)));
     createdMigrations += await ensureRepositoryMigrations(routes);
-    if (!suspicious) await reconcileMissing();
+    const transitioned = suspicious ? 0 : await reconcileMissing();
 
     const identityRecords = await collect(
       (c) => connection.inventory.listIdentities(c),
       checkpoint,
+      maxPages,
     );
     const identityIds = await upsertIdentities(identityRecords);
-    const groupRecords = await collect((c) => connection.inventory.listGroups(c), checkpoint);
+    const groupRecords = await collect(
+      (c) => connection.inventory.listGroups(c),
+      checkpoint,
+      maxPages,
+    );
     await upsertGroups(groupRecords, identityIds);
 
     checkpoint();
@@ -267,6 +302,30 @@ export async function runInventory(
     await correlateTargetInvitations(connection, routes);
 
     const staleMigrations = repositories.stale;
+    // JOB-060: the pass is over; lists of Repositories and Endpoint counts refetch, and Migration
+    // lists (the dashboard) do too when Migrations were created or changed status (UI-020). A
+    // stale mark has already published its own `migration.updated`.
+    // The pass has committed everything: a lost notification is logged, never a reason to rerun it.
+    try {
+      await publishEvent(deps.appPool, {
+        type: 'inventory.progress',
+        // An id the event format cannot carry still reaches `list:repositories`.
+        ids: EVENT_ID.test(endpointId) ? { endpoint: endpointId } : {},
+        at: now().toISOString(),
+      });
+      if (createdMigrations > 0 || transitioned > 0) {
+        await publishEvent(deps.appPool, {
+          type: 'migration.updated',
+          ids: {},
+          at: now().toISOString(),
+        });
+      }
+    } catch (error) {
+      log.warn(
+        { endpointId, errorClass: (error as Error | null)?.name },
+        'inventory live-update event not published',
+      );
+    }
     log.info(
       {
         endpointId,
@@ -313,6 +372,7 @@ export async function runInventory(
           log,
           now,
           ...(deps.scheduleInvitation ? { schedule: deps.scheduleInvitation } : {}),
+          ...(deps.enqueueParity ? { enqueueParity: deps.enqueueParity } : {}),
         },
         connection,
         routeRows,
@@ -405,7 +465,7 @@ export async function runInventory(
   /**
    * `Route.targetNamespaceId` is resolved from the target inventory: the top-level namespace whose
    * slug or key equals the Route's `targetNamespacePath`. It is resolved again when the stored id
-   * is no longer one of this Endpoint's namespaces, and an unresolved or ambiguous path is warned
+   * is not one of the namespaces this pass listed, and an unresolved or ambiguous path is warned
    * about, never guessed.
    */
   async function resolveTargetNamespaces(
@@ -413,7 +473,9 @@ export async function runInventory(
     records: readonly NamespaceRecord[],
     ids: ReadonlyMap<string, string>,
   ): Promise<void> {
-    const known = new Set(ids.values());
+    // Only namespaces listed in this pass count: one the provider replaced (a new provider id under
+    // the same slug) still has its old row, which must not keep the Route pointing at it.
+    const known = new Set(records.flatMap((r) => ids.get(r.providerId) ?? []));
     for (const route of routeRows) {
       if (route.targetEndpointId !== endpointId) continue;
       if (route.targetNamespaceId && known.has(route.targetNamespaceId)) continue;
@@ -445,7 +507,11 @@ export async function runInventory(
     const byProviderId = new Map<string, RepositoryRecord>();
     for (const ns of namespaces) {
       const ref = { providerId: ns.providerId, slug: ns.slug };
-      const items = await collect((c) => connection.inventory.listRepositories(ref, c), checkpoint);
+      const items = await collect(
+        (c) => connection.inventory.listRepositories(ref, c),
+        checkpoint,
+        maxPages,
+      );
       for (const item of items) byProviderId.set(item.providerId, item);
     }
     return [...byProviderId.values()];
@@ -634,7 +700,7 @@ export async function runInventory(
    * Migration that is `running` when its source disappears keeps running (the event is deferred,
    * ADR-0058), and the next pass sends the event again once the Run has finished (ADR-0280).
    */
-  async function reconcileMissing(): Promise<void> {
+  async function reconcileMissing(): Promise<number> {
     const migrations = await db.migration.findMany({
       where: {
         scope: 'repository',
@@ -654,6 +720,7 @@ export async function runInventory(
         sourceRepository: { select: { presence: true } },
       },
     });
+    let transitioned = 0;
     for (const m of migrations) {
       checkpoint();
       const state: LifecycleState = {
@@ -699,7 +766,9 @@ export async function runInventory(
           'migration changed meanwhile; retry next pass',
         );
       }
+      transitioned += written.count;
     }
+    return transitioned;
   }
 
   async function upsertIdentities(
@@ -942,11 +1011,14 @@ export async function runInventory(
     // What the Analysis's group resolver makes of a mapping: no row and `unmapped` are both a team
     // that is missing, `suggested` is a team that still needs an operator (ADR-0310).
     const resolves = (status: string | undefined) => (status === 'suggested' ? 'S' : 'M');
-    for (const source of sources) {
+    const index = indexGroupTargets(targets);
+    for (const [i, source] of sources.entries()) {
       checkpoint();
+      // A big directory must not hold the event loop (BullMQ lock renewal, health endpoint).
+      if (i > 0 && i % YIELD_EVERY === 0) await yieldToEventLoop();
       const existing = bySource.get(source.id);
       if (existing && !REMATCHABLE_STATUSES.has(existing.status)) continue;
-      const next = matchGroup(source.slug, targets);
+      const next = matchGroup(source.slug, index);
       if (!existing) {
         toCreate.push({ sourceGroupId: source.id, plannedSlug: source.slug, ...next });
         changed++;
@@ -975,10 +1047,28 @@ export async function runInventory(
   }
 }
 
-/** The `inventory.endpoint` handler (JOB-030). Register it with the other handlers of the process. */
+/**
+ * The `inventory.endpoint` handler (JOB-030). Register it with the other handlers of the process.
+ * A quota denial delays the job until `retryAt` (JOB-044) and a shutdown gives it back (DEP-030),
+ * neither spending an attempt; the next run is a complete pass again.
+ */
 export function inventoryHandlers(deps: InventoryDeps): JobHandlers {
   return {
-    'inventory.endpoint': ({ endpointId }, ctx) =>
-      runInventory(deps, endpointId, { shutdown: ctx.shutdown, log: ctx.log }),
+    'inventory.endpoint': async ({ endpointId }, ctx) => {
+      try {
+        return await runInventory(deps, endpointId, { shutdown: ctx.shutdown, log: ctx.log });
+      } catch (error) {
+        if (error instanceof InventoryInterruptedError) return giveBackJob(ctx, error);
+        if (
+          isAdapterError(error) &&
+          error.code === 'rate_limited' &&
+          error.retryAt instanceof Date &&
+          ctx.token !== undefined
+        ) {
+          return delayJob(ctx, error.retryAt, error);
+        }
+        throw error;
+      }
+    },
   };
 }

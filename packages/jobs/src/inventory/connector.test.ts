@@ -1,8 +1,19 @@
-import type { AdapterContext, EndpointRuntime, ProviderAdapter } from '@git-migrator/adapter-sdk';
+import type {
+  AdapterContext,
+  EndpointConnection,
+  EndpointRuntime,
+  ProviderAdapter,
+} from '@git-migrator/adapter-sdk';
 import { type Config, resolveConfig } from '@git-migrator/config';
 import { describe, expect, it } from 'vitest';
 import { z } from 'zod';
-import { adapterConfigFor, createEndpointConnector, noGitClient } from './connector.ts';
+import {
+  adapterConfigFor,
+  createEndpointConnector,
+  meteredGitClient,
+  noGitClient,
+  unmeteredGitQuota,
+} from './connector.ts';
 
 const config: Config = resolveConfig({
   text: `
@@ -119,19 +130,59 @@ describe('git quota of an Endpoint (JOB-041, JOB-043)', () => {
       git: noGitClient,
     });
 
-  it('[JOB-041] acquires the units in the git bucket of the selected credential, in the given pool', async () => {
+  const declared = {
+    git: { quota: { key: 'src:acct_1:git', limit: 1234, windowSeconds: 600 } },
+  } as unknown as EndpointConnection;
+
+  it('[JOB-041] acquires the units in the git bucket the connection declared, in the given pool', async () => {
     const g = gate(true);
-    await connector(g).gitQuota?.('src', { pool: 'background' }).acquire(3);
+    await connector(g).gitQuota(declared, { pool: 'background' }).acquire(3);
     expect(g.calls).toEqual([
-      [[{ key: 'src:acct-1:git', limit: 60_000, windowSeconds: 3600, units: 3 }], 'background'],
+      [[{ key: 'src:acct_1:git', limit: 1234, windowSeconds: 600, units: 3 }], 'background'],
     ]);
   });
 
   it('[JOB-041] a denied grant is rate_limited with retryAt', async () => {
     const g = gate(false);
     await expect(
-      connector(g).gitQuota?.('src', { pool: 'interactive' }).acquire(3),
+      connector(g).gitQuota(declared, { pool: 'interactive' }).acquire(3),
     ).rejects.toMatchObject({ code: 'rate_limited' });
+  });
+
+  it('[JOB-041] grants every git command of a connection that declares no git bucket', async () => {
+    const g = gate(false);
+    const quota = connector(g).gitQuota({ git: {} } as unknown as EndpointConnection, {
+      pool: 'background',
+    });
+    expect(quota).toBe(unmeteredGitQuota);
+    await quota.acquire(3);
+    expect(g.calls).toEqual([]);
+  });
+
+  it('[JOB-041] a metered git client pre-acquires one unit before each ls-remote and stops on a denial', async () => {
+    const order: string[] = [];
+    const inner = {
+      lsRemote: async () => {
+        order.push('ls-remote');
+        return { refs: [] };
+      },
+    };
+    let deny = false;
+    const quota = {
+      acquire: async (units: number) => {
+        order.push(`acquire ${units}`);
+        if (deny) throw new Error('rate limited');
+      },
+    };
+    const git = meteredGitClient(inner, quota);
+    const request = {
+      url: 'https://git.example/x.git',
+      credential: { username: 'u', password: 'p' },
+    };
+    await git.lsRemote(request);
+    deny = true;
+    await expect(git.lsRemote(request)).rejects.toThrow('rate limited');
+    expect(order).toEqual(['acquire 1', 'ls-remote', 'acquire 1']);
   });
 });
 
@@ -155,6 +206,54 @@ describe('endpoint connector', () => {
       accountKey: 'acct-1',
     });
     expect(seen.ctx).toMatchObject({ pool: 'background', signal });
+  });
+
+  it('[JOB-042] picks the credential whose buckets have the most free capacity for the pool', async () => {
+    const seen: Seen = {};
+    const asked: Array<[string, string]> = [];
+    const free: Record<string, number> = { 'src:acct-1:core': 5, 'src:acct-2:core': 40 };
+    const adapter: ProviderAdapter = {
+      ...fakeAdapter(seen),
+      credentialBuckets: (runtime) => [
+        { key: `${runtime.id}:${runtime.accountKey}:core`, limit: 100, windowSeconds: 3600 },
+      ],
+    };
+    const capacity = {
+      freeCapacity: async (spec: { key: string }, pool: string) => {
+        asked.push([spec.key, pool]);
+        return { free: free[spec.key] ?? 0, blockedUntil: null } as never;
+      },
+    };
+    const make = (withCapacity: boolean) =>
+      createEndpointConnector({
+        config,
+        registry: { adapter: () => adapter },
+        env: {
+          BITBUCKET_CREDENTIALS: JSON.stringify([
+            { accountId: 'acct-1', token: 'abc-1' },
+            { accountId: 'acct-2', token: 'abc-2' },
+          ]),
+        },
+        environment,
+        git: noGitClient,
+        ...(withCapacity ? { capacity } : {}),
+      });
+    await make(true).connect('src', { pool: 'interactive', signal });
+    expect(seen.runtime).toMatchObject({
+      credential: { accountId: 'acct-2' },
+      accountKey: 'acct-2',
+    });
+    expect(asked).toEqual([
+      ['src:acct-1:core', 'interactive'],
+      ['src:acct-2:core', 'interactive'],
+    ]);
+    // The fuller account frees up: the next job takes the other one.
+    free['src:acct-2:core'] = 1;
+    await make(true).connect('src', { pool: 'background', signal });
+    expect(seen.runtime?.accountKey).toBe('acct-1');
+    // Without a capacity source the first valid credential is used.
+    await make(false).connect('src', { pool: 'background', signal });
+    expect(seen.runtime?.accountKey).toBe('acct-1');
   });
 
   it('[JOB-042] uses the Endpoint id as the account key for a credential without an account', async () => {

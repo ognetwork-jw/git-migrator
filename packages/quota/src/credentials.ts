@@ -16,7 +16,7 @@ export interface CredentialCandidate<T> {
  * The caller then uses the chosen credential for the whole job.
  */
 export async function selectCredential<T>(
-  quota: QuotaService,
+  quota: Pick<QuotaService, 'freeCapacity'>,
   candidates: readonly CredentialCandidate<T>[],
   pool: QuotaPool,
 ): Promise<{ credential: T; free: number } | undefined> {

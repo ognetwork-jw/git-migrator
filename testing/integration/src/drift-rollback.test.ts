@@ -333,6 +333,7 @@ routes:
   // adapter's own are the real provider's, so the connection is told the world's. Source emails
   // are enriched as in the analysis test (AUTH-050 step 1).
   const inner: EndpointConnector = {
+    gitQuota: (connection, options) => real.gitQuota(connection, options),
     async connect(endpointId, options) {
       const connection = await real.connect(endpointId, options);
       if (endpointId === TARGET || endpointId === TARGET_B) {
@@ -690,7 +691,13 @@ const api = (path: string, init: { method?: string; body?: unknown } = {}) =>
 
 /** The `parity.migration` jobs the API enqueued, run as the worker would (LIF-062). */
 async function drainParity(): Promise<void> {
-  const handler = parityHandlers(parityDeps)['parity.migration'] as unknown as (
+  const handler = parityHandlers(parityDeps, {
+    // A superseded check queues a fresh one, as the worker's runtime would.
+    enqueueParity: (migrationId, options) => {
+      parityQueue.push({ migrationId, drift: options?.drift === true });
+      return Promise.resolve({} as never);
+    },
+  })['parity.migration'] as unknown as (
     payload: { migrationId: string; drift?: true },
     ctx: unknown,
   ) => Promise<unknown>;

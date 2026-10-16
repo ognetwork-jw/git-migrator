@@ -2,6 +2,7 @@ import type { Config } from '@git-migrator/config';
 import type { Logger } from '@git-migrator/observability';
 import {
   createPostgresBackend,
+  DelayedError,
   type Job,
   type JobsOptions,
   Queue,
@@ -54,6 +55,41 @@ export interface JobContext {
    * may reach its check later).
    */
   readonly shutdown: AbortSignal;
+  /**
+   * The lock token of the job, which `job.moveToDelayed` needs (JOB-044). Use `delayJob`. Absent
+   * only when a test calls a handler directly.
+   */
+  readonly token?: string | undefined;
+}
+
+/**
+ * JOB-044: moves the running job to the delayed set until `until` and stops the handler, without
+ * sleeping and without spending an attempt. Throws `DelayedError`, which BullMQ expects; without
+ * a token (a handler called directly) it throws `error` instead, so the caller's own retry applies.
+ */
+export async function delayJob(
+  context: Pick<JobContext, 'job' | 'token'>,
+  until: Date,
+  error?: unknown,
+): Promise<never> {
+  if (context.token === undefined) {
+    throw error ?? new Error('The job cannot be delayed without its token');
+  }
+  await context.job.moveToDelayed(Math.max(until.getTime(), Date.now()), context.token);
+  throw new DelayedError();
+}
+
+/**
+ * Gives the running job back to the waiting list without spending an attempt (a shutdown, DEP-030).
+ * Throws `WaitingError`, which BullMQ expects; without a token it throws `error`.
+ */
+export async function giveBackJob(
+  context: Pick<JobContext, 'job' | 'token'>,
+  error: unknown,
+): Promise<never> {
+  if (context.token === undefined) throw error;
+  await context.job.moveToWait(context.token);
+  throw new WaitingError();
 }
 
 export type JobHandler<N extends JobName> = (
@@ -337,7 +373,7 @@ export class JobRuntime {
       throw error;
     }
     const log = this.#log.child({ component: 'jobs', queue, job: name, jobId: job.id });
-    return handler(payload, { job, queue, log, shutdown: this.#shutdown.signal });
+    return handler(payload, { job, queue, log, shutdown: this.#shutdown.signal, token });
   }
 
   /**

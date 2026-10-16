@@ -164,7 +164,7 @@ describe('reported use is a floor, never a replacement (ADR-0180)', () => {
     expect(await grantMany(rolling, 1, 'interactive')).toBe(0);
   });
 
-  it('[JOB-045] requests in flight at report time are counted when the adapter passes observedSince', async () => {
+  it('[JOB-045] requests acquired at or after the reporting request are added to the reported use when the adapter passes observedSince', async () => {
     const key = newKey('core');
     const acquiredAt = clock;
     await grantMany(key, 10, 'interactive', 30, 60);
@@ -369,6 +369,41 @@ describe('round 3 hardening', () => {
       resetAt: at(600),
     });
     expect((await quota.snapshot()).find((b) => b.bucketKey === key)?.remaining).toBe(50);
+  });
+
+  it('[JOB-045] after a clamped far-future reset, same-window reports that are more conservative still apply', async () => {
+    const key = newKey('core');
+    await quota.recordFeedback({
+      bucketKey: key,
+      limit: 100,
+      windowSeconds: 3600,
+      remaining: 90,
+      resetAt: new Date('2100-01-01T00:00:00Z'),
+    });
+    // The provider's real window ends in 10 minutes: its reports name an earlier reset than the
+    // clamped one, but a smaller remaining and a near-limit flag must not be dropped.
+    await quota.recordFeedback({
+      bucketKey: key,
+      limit: 100,
+      windowSeconds: 3600,
+      remaining: 4,
+      resetAt: at(600),
+      nearLimit: true,
+    });
+    const stored = (await quota.snapshot()).find((b) => b.bucketKey === key);
+    expect(stored?.remaining).toBe(4);
+    // The near-limit clamp shuts the background pool; the floor of 96 leaves interactive nothing.
+    expect(await grantMany(key, 5, 'background')).toBe(0);
+    expect(await grantMany(key, 5, 'interactive')).toBe(0);
+    // A less conservative report from that window still changes nothing.
+    await quota.recordFeedback({
+      bucketKey: key,
+      limit: 100,
+      windowSeconds: 3600,
+      remaining: 80,
+      resetAt: at(600),
+    });
+    expect((await quota.snapshot()).find((b) => b.bucketKey === key)?.remaining).toBe(4);
   });
 
   it('[JOB-045] a report without remaining keeps the live floor of its window', async () => {

@@ -16,6 +16,9 @@ export type InvitationStep = JobPayloads['invitations.batch'];
 /** Enqueues a step of an invitation batch after `delayMs` (the 24 h wait of AUTH-060 step 4). */
 export type ScheduleInvitationStep = (step: InvitationStep, delayMs: number) => Promise<void>;
 
+/** Queues a Parity Check of a Migration (`JobRuntime.enqueueParity`, LIF-062). */
+export type EnqueueParity = (migrationId: string) => Promise<unknown>;
+
 export interface InvitationDeps {
   /** The privileged client: the job is server code behind a queue (DOM-005). */
   readonly db: Db;
@@ -23,6 +26,8 @@ export interface InvitationDeps {
   readonly appPool: pg.Pool;
   readonly connector: EndpointConnector;
   readonly schedule: ScheduleInvitationStep;
+  /** LIF-062: a Parity Check after Invitation status changes, of the Route's endpoint Migration. */
+  readonly enqueueParity: EnqueueParity;
   readonly log: Logger;
   /** Test seam: the clock for `sentAt` and expiry. Defaults to the system clock. */
   readonly now?: () => Date;
@@ -141,6 +146,7 @@ export async function publishInvitationUpdated(
   deps: InvitationDeps,
   batchId: string,
   staleMigrations = false,
+  statusChanged = true,
 ): Promise<void> {
   const at = (deps.now ?? (() => new Date()))().toISOString();
   await publishEvent(deps.appPool, {
@@ -150,6 +156,40 @@ export async function publishInvitationUpdated(
   });
   if (staleMigrations) {
     await publishEvent(deps.appPool, { type: 'migration.updated', ids: {}, at });
+  }
+  if (statusChanged) {
+    const batch = await deps.db.invitationBatch.findUnique({
+      where: { id: batchId },
+      select: { routeId: true },
+    });
+    if (batch) await enqueueRouteParity(deps, [batch.routeId]);
+  }
+}
+
+/**
+ * LIF-062: after Invitation status changes, a Parity Check of the endpoint Migration of each Route
+ * (the `members` Facet is where invitations show). A failed enqueue is logged and never undoes the
+ * change; the waiting slot per Migration absorbs repeats.
+ */
+export async function enqueueRouteParity(
+  deps: { readonly db: Db; readonly log: Logger; readonly enqueueParity?: EnqueueParity },
+  routeIds: Iterable<string>,
+): Promise<void> {
+  const ids = [...new Set(routeIds)];
+  if (!deps.enqueueParity || ids.length === 0) return;
+  const migrations = await deps.db.migration.findMany({
+    where: { routeId: { in: ids }, scope: 'endpoint' },
+    select: { id: true },
+  });
+  for (const m of migrations) {
+    try {
+      await deps.enqueueParity(m.id);
+    } catch (error) {
+      deps.log.warn(
+        { migrationId: m.id, errorClass: (error as Error | null)?.name },
+        'parity check after an invitation change was not queued',
+      );
+    }
   }
 }
 

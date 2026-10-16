@@ -6,6 +6,7 @@ import { runInvitationRevoke, runSeatPreview } from './steps.ts';
 export { type CorrelateDeps, type CorrelateResult, correlateInvitations } from './correlate.ts';
 export { InvitationInterruptedError, runInvitationSend, type SendResult } from './send.ts';
 export {
+  type EnqueueParity,
   INVITATION_UNRESOLVED_AFTER_MS,
   type InvitationDeps,
   type InvitationStep,

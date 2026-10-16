@@ -426,4 +426,11 @@ export interface ProviderAdapter {
   readonly configSchema: ZodType<unknown>;
   readonly credentialSchema: ZodType<unknown>;
   connect(endpoint: EndpointRuntime, ctx: AdapterContext): Promise<EndpointConnection>;
+  /**
+   * The quota buckets a job draws from when it uses `endpoint.credential` (JOB-042): the host
+   * picks, among an Endpoint's credentials, the one whose buckets have the most free capacity.
+   * Pure (no I/O); the keys are the ones the connection's classifier uses. An adapter whose
+   * Endpoints hold one credential need not implement it: the first valid credential is used.
+   */
+  credentialBuckets?(endpoint: EndpointRuntime): readonly BucketSpec[];
 }

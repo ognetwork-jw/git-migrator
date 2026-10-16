@@ -81,7 +81,8 @@ export async function runSeatPreview(
     };
     await tx.invitationBatch.update({ where: { id: batchId }, data: { seatPreview: next } });
   });
-  await publishInvitationUpdated(deps, batchId);
+  // The seat preview changes no Invitation status: no Parity Check.
+  await publishInvitationUpdated(deps, batchId, false, false);
   return { read: info !== undefined };
 }
 

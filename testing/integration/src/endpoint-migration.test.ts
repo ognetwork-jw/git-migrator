@@ -256,6 +256,7 @@ routes:
     git: noGitClient,
   });
   const connector: EndpointConnector = {
+    gitQuota: (connection, options) => real.gitQuota(connection, options),
     async connect(endpointId, options) {
       const connection = await real.connect(endpointId, options);
       if (endpointId === TARGET) {

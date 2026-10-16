@@ -78,8 +78,10 @@ export interface QuotaFeedback {
   readonly resetAt?: Date;
   /**
    * When the request whose response carried this report was acquired. Events at or after it are
-   * added to the reported use, so requests in flight at report time are not forgotten. Adapters
-   * MUST pass it. Defaults to now, which can under-count requests in flight.
+   * added to the reported use, because the provider's count cannot include requests acquired
+   * after the reporting one. Requests acquired before it and still in flight when the provider
+   * counted can be under-counted, by at most the number in flight on the bucket. Adapters MUST
+   * pass it. Defaults to now, which can under-count every request in flight.
    */
   readonly observedSince?: Date;
   /** The provider's window is fixed, not rolling: after `resetAt` only newer events count. */
@@ -286,7 +288,9 @@ export class QuotaService {
    * Applies provider feedback (JOB-043, JOB-045). Reported use is a floor under the local sliding
    * count, never a replacement for it. `nearLimit` clamps only the background pool, until the
    * window advances, and never touches the interactive count. A report whose `resetAt` is older
-   * than the stored one is ignored.
+   * than the stored one never replaces the stored window, but a smaller `remaining` and
+   * `nearLimit` from it still apply: feedback that makes the service more conservative is never
+   * dropped, also after a far-future reset was clamped.
    */
   async recordFeedback(feedback: QuotaFeedback): Promise<void> {
     assertKey(feedback.bucketKey);
@@ -304,11 +308,48 @@ export class QuotaService {
       const latestReset = addSeconds(now, feedback.windowSeconds + RESET_SLACK_SECONDS);
       let resetAt = feedback.resetAt ?? addSeconds(now, feedback.windowSeconds);
       if (resetAt > latestReset) resetAt = latestReset;
-      if (state?.reset_at && resetAt < state.reset_at) return;
-      let remaining = feedback.remaining ?? null;
       // A future observation point would hide every earlier event from the floor: at most now.
       let observedSince = feedback.observedSince ?? now;
       if (observedSince > now) observedSince = now;
+      if (state?.reset_at && resetAt < state.reset_at) {
+        // An older window, or a correct report after a clamped far-future reset: it never replaces
+        // the stored window, but whatever makes the service more conservative still applies
+        // (a smaller `remaining`, `nearLimit`), so a clamp cannot hide them (ADR-0180).
+        const smaller =
+          feedback.remaining !== undefined &&
+          (state.remaining == null || feedback.remaining < state.remaining);
+        if (smaller) {
+          await client.query(
+            'UPDATE app.quota_state SET remaining = $2, updated_at = $3 WHERE bucket_key = $1',
+            [feedback.bucketKey, feedback.remaining, now],
+          );
+        }
+        if (smaller || feedback.nearLimit) {
+          const clampUntil = feedback.nearLimit
+            ? laterOf(resetAt, companion?.blocked_until ?? resetAt)
+            : (companion?.blocked_until ?? null);
+          await client.query(
+            `INSERT INTO app.quota_state
+               (bucket_key, limit_per_window, window_seconds, reset_at, blocked_until, updated_at)
+             VALUES ($1, $2, $3, $4, $5, $6)
+             ON CONFLICT (bucket_key) DO UPDATE SET
+               reset_at = EXCLUDED.reset_at,
+               blocked_until = EXCLUDED.blocked_until,
+               updated_at = EXCLUDED.updated_at`,
+            [
+              `${feedback.bucketKey}${FEEDBACK_SUFFIX}`,
+              feedback.fixedWindow ? 1 : 0,
+              feedback.windowSeconds,
+              // The observation point of the report that supplied the smaller remaining.
+              smaller ? observedSince : (companion?.reset_at ?? observedSince),
+              clampUntil,
+              now,
+            ],
+          );
+        }
+        return;
+      }
+      let remaining = feedback.remaining ?? null;
       const sameWindow = state?.reset_at?.getTime() === resetAt.getTime();
       // A report without `remaining` must not erase a live floor: keep it for that window.
       const storedLive = state?.reset_at != null && state.reset_at > now && state.remaining != null;

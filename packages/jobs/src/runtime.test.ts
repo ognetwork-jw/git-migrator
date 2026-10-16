@@ -22,7 +22,7 @@ import { InvalidPayloadError } from './payloads.ts';
 import { QUEUE_NAMES, queuesForRole } from './queues.ts';
 import { MAX_REAPER_RESUMES, RUN_ABANDONED, reapRuns } from './reaper.ts';
 import { handOffRun, keepRunLease } from './run-leases.ts';
-import { type JobHandlers, JobRuntime } from './runtime.ts';
+import { delayJob, type JobHandlers, JobRuntime } from './runtime.ts';
 import { seedBasics } from './world.fixture.ts';
 
 // Tracing is process-global: register the provider before any BullMQ telemetry object exists.
@@ -118,6 +118,31 @@ describe('job runtime on the PostgreSQL backend', () => {
     await until(() => done);
     await until(
       async () => (await runtime.queue('maintenance').getJobCounts('delayed')).delayed === 2,
+    );
+  }, 60_000);
+
+  it('[JOB-044] a handler delays its own job with the job token: no attempt spent, run again later', async () => {
+    const runtime = makeRuntime(6);
+    await runtime.waitUntilReady();
+    await drainAll(runtime);
+    const calls: Array<{ attemptsMade: number; token: boolean }> = [];
+    let done = false;
+    await runtime.startWorkers('standard', config, {
+      'maintenance.prune': async (_payload, context) => {
+        calls.push({ attemptsMade: context.job.attemptsMade, token: context.token !== undefined });
+        if (calls.length === 1) await delayJob(context, new Date(Date.now() + 300));
+        done = true;
+      },
+    });
+    const job = await runtime.enqueue('maintenance', 'maintenance.prune', {});
+    await until(() => done);
+    expect(calls).toEqual([
+      { attemptsMade: 0, token: true },
+      { attemptsMade: 0, token: true },
+    ]);
+    await until(
+      async () =>
+        (await runtime.queue('maintenance').getJobState(job.id as string)) === 'completed',
     );
   }, 60_000);
 
