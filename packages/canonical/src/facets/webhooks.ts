@@ -38,14 +38,35 @@ export const webhookUrlSchema = nonEmpty.superRefine((v, ctx) => {
   if (problem !== undefined) ctx.addIssue({ code: 'custom', message: `url ${problem}` });
 });
 
+/** `%xx` escapes: an unreserved character is decoded, any other escape gets upper-case hex. */
+function normalizeEscapes(text: string): string {
+  return text.replace(/%([0-9A-Fa-f]{2})/g, (_, hex: string) => {
+    const c = String.fromCharCode(Number.parseInt(hex, 16));
+    return /^[A-Za-z0-9._~-]$/.test(c) ? c : `%${hex.toUpperCase()}`;
+  });
+}
+
 /**
- * The collection key of a hook: `<origin>#<first 16 hex of sha256(new URL(url).href)>`. The key
+ * The collection key of a hook: `<origin>#<first 16 hex of sha256(normalized URL)>`. The key
  * identifies the hook in field paths without exposing the path or query of the URL, which often
- * carry the credential. Hooks with the same normalized URL share a key. Throws on an invalid URL.
+ * carry the credential. Hooks with the same normalized URL share a key. The normalized URL is the
+ * WHATWG form (lower-case scheme and host, default port removed, dot segments resolved) without
+ * the fragment (never sent to the receiver) or an empty `?`, with escapes of unreserved characters
+ * decoded and other escapes in upper-case hex (RFC 3986 section 6.2.2). Not normalized: a trailing
+ * `.` in the host, the order of query parameters, and `+` against `%20`, which receivers may read
+ * differently. Throws an `Error` that carries neither the URL nor a cause on an invalid URL.
  */
 export function webhookKey(url: string): string {
-  const u = new URL(url);
-  return `${u.origin}#${sha256Hex(u.href).slice(0, 16)}`;
+  let u: URL;
+  try {
+    u = new URL(url);
+  } catch {
+    // The parser's TypeError carries the raw URL (`input`), which may hold the credential.
+    throw new Error('webhookKey: not a valid URL');
+  }
+  u.hash = '';
+  if (u.search === '') u.search = '';
+  return `${u.origin}#${sha256Hex(normalizeEscapes(u.href)).slice(0, 16)}`;
 }
 
 /** `<origin>/…`: safe to log, diff or show. Returns `<invalid url>` for anything unparsable. */
