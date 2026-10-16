@@ -4,6 +4,7 @@ import {
   type EndpointConnection,
   type GroupRecord,
   type IdentityRecord,
+  isAdapterError,
   type NamespaceRecord,
   type Page,
   type RepositoryRecord,
@@ -27,7 +28,7 @@ import {
   type EnqueueParity,
   type ScheduleInvitationStep,
 } from '../invitations/index.ts';
-import type { JobHandlers } from '../runtime.ts';
+import { delayJob, giveBackJob, type JobHandlers } from '../runtime.ts';
 import type { EndpointConnector } from './connector.ts';
 import {
   demoteDuplicateConfirmations,
@@ -1046,10 +1047,28 @@ export async function runInventory(
   }
 }
 
-/** The `inventory.endpoint` handler (JOB-030). Register it with the other handlers of the process. */
+/**
+ * The `inventory.endpoint` handler (JOB-030). Register it with the other handlers of the process.
+ * A quota denial delays the job until `retryAt` (JOB-044) and a shutdown gives it back (DEP-030),
+ * neither spending an attempt; the next run is a complete pass again.
+ */
 export function inventoryHandlers(deps: InventoryDeps): JobHandlers {
   return {
-    'inventory.endpoint': ({ endpointId }, ctx) =>
-      runInventory(deps, endpointId, { shutdown: ctx.shutdown, log: ctx.log }),
+    'inventory.endpoint': async ({ endpointId }, ctx) => {
+      try {
+        return await runInventory(deps, endpointId, { shutdown: ctx.shutdown, log: ctx.log });
+      } catch (error) {
+        if (error instanceof InventoryInterruptedError) return giveBackJob(ctx, error);
+        if (
+          isAdapterError(error) &&
+          error.code === 'rate_limited' &&
+          error.retryAt instanceof Date &&
+          ctx.token !== undefined
+        ) {
+          return delayJob(ctx, error.retryAt, error);
+        }
+        throw error;
+      }
+    },
   };
 }

@@ -5,11 +5,12 @@
 import { readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import type {
-  EndpointConnection,
-  IdentityRecord,
-  NamespaceRecord,
-  RepositoryRecord,
+import {
+  AdapterError,
+  type EndpointConnection,
+  type IdentityRecord,
+  type NamespaceRecord,
+  type RepositoryRecord,
 } from '@git-migrator/adapter-sdk';
 import { type Config, resolveConfig } from '@git-migrator/config';
 import { hashConfig, syncConfig } from '@git-migrator/db';
@@ -678,6 +679,51 @@ describe('inventory against the fixture world', () => {
       log,
     } as never);
     expect(live).toMatchObject({ repositories: WORLD_REPOSITORIES.length });
+  }, 120_000);
+
+  it('[JOB-044] the handler delays its job until retryAt on a quota denial, and gives it back on shutdown', async () => {
+    const handler = inventoryHandlers(deps)['inventory.endpoint'];
+    const retryAt = new Date(Date.now() + 90_000);
+    const moves: string[] = [];
+    const job = {
+      moveToDelayed: async (at: number, token: string) => {
+        moves.push(`delayed ${at} ${token}`);
+      },
+      moveToWait: async (token: string) => {
+        moves.push(`wait ${token}`);
+      },
+    };
+    tweaks = {
+      connectError: new AdapterError({
+        code: 'rate_limited',
+        provider: 'test',
+        message: 'Quota limit',
+        retryAt,
+      }),
+    };
+    try {
+      await expect(
+        handler?.({ endpointId: SOURCE }, {
+          shutdown: shutdown.signal,
+          log,
+          job,
+          token: 't',
+        } as never),
+      ).rejects.toMatchObject({ name: 'DelayedError' });
+    } finally {
+      tweaks = {};
+    }
+    const aborted = new AbortController();
+    aborted.abort();
+    await expect(
+      handler?.({ endpointId: SOURCE }, {
+        shutdown: aborted.signal,
+        log,
+        job,
+        token: 't',
+      } as never),
+    ).rejects.toMatchObject({ name: 'WaitingError' });
+    expect(moves).toEqual([`delayed ${retryAt.getTime()} t`, 'wait t']);
   }, 120_000);
 
   it('[FAC-DKY-003] keeps one row per (endpointId, providerId) and the right presence across hide and restore', async () => {
