@@ -73,6 +73,19 @@ export interface ProviderSpan {
 }
 
 /**
+ * The `status` label of a provider request: the HTTP status code as text, or, when no response
+ * arrived, why: `error`, `network_error`, `authorize_error`, `concurrency` or `denied_<reason>`.
+ * The observability recorder's label type names the same values.
+ */
+export type ProviderRequestStatus =
+  | `${number}`
+  | 'error'
+  | 'network_error'
+  | 'authorize_error'
+  | 'concurrency'
+  | `denied_${string}`;
+
+/**
  * Telemetry sink (ADP-060). The wiring maps it onto the OpenTelemetry tracer and the
  * `gm_provider_requests_total` / `gm_provider_request_duration_seconds` recorders from
  * `packages/observability`, which `adapter-sdk` may not import (ARC-012).
@@ -80,7 +93,7 @@ export interface ProviderSpan {
 export interface ProviderTelemetry {
   startSpan?(name: string, attributes: Record<string, string | number | boolean>): ProviderSpan;
   recordRequest(
-    labels: { provider: string; endpoint: string; bucket: string; status: string },
+    labels: { provider: string; endpoint: string; bucket: string; status: ProviderRequestStatus },
     durationSeconds: number,
   ): void;
 }
@@ -169,6 +182,12 @@ export interface ProviderHttpClientOptions extends ProviderHttpEnvironment {
   readonly endpointId: string;
   readonly baseUrl: string;
   readonly classify: Classifier;
+  /**
+   * Obtains the request's credentials. It runs on every attempt and every redirect hop, before the
+   * lease and the quota acquire, so adapters MUST make it cheap: cached, and single-flight per
+   * credential (concurrent calls share one refresh). A network failure (an allowlisted system
+   * error code, or `fetch failed`) is `transient` and retried; any other error is `unauthorized`.
+   */
   readonly authorize: () => Promise<RequestCredentials>;
   readonly interpret?: Interpreter;
   /** Provider-specific token shapes (for example key prefixes) to scrub from captures, errors and logs. */
@@ -277,13 +296,35 @@ function parseBody(text: string, contentType: string | null): unknown {
   return text;
 }
 
-const SYSTEM_ERROR_CODE = /^E[A-Z0-9_]+$/;
+/**
+ * System error codes of a real network failure. Any other code (`ERR_INVALID_ARG_TYPE`, `ENOENT`,
+ * `EACCES`) is a bug or a configuration problem in `authorize`, so it is not retried.
+ */
+const NETWORK_ERROR_CODES: ReadonlySet<string> = new Set([
+  'ECONNRESET',
+  'ECONNREFUSED',
+  'ECONNABORTED',
+  'ETIMEDOUT',
+  'EAI_AGAIN',
+  'ENOTFOUND',
+  'EPIPE',
+  'ENETUNREACH',
+  'ENETDOWN',
+  'EHOSTUNREACH',
+  'EHOSTDOWN',
+]);
+/** undici's network error codes (`UND_ERR_SOCKET`, `UND_ERR_CONNECT_TIMEOUT`, ...). */
+const UNDICI_ERROR_CODE = /^UND_ERR_[A-Z_]{1,64}$/;
 
-/** A real network failure: a system error code (ECONNRESET), or undici's `fetch failed`. */
+/** A real network failure: an allowlisted system error code (ECONNRESET), or undici's `fetch failed`. */
 function isNetworkError(error: unknown): boolean {
   const codeOf = (value: unknown): unknown => (value as { code?: unknown } | null)?.code;
-  const isCode = (value: unknown) =>
-    typeof codeOf(value) === 'string' && SYSTEM_ERROR_CODE.test(codeOf(value) as string);
+  const isCode = (value: unknown) => {
+    const code = codeOf(value);
+    return (
+      typeof code === 'string' && (NETWORK_ERROR_CODES.has(code) || UNDICI_ERROR_CODE.test(code))
+    );
+  };
   if (isCode(error)) return true;
   const cause = (error as { cause?: unknown } | null)?.cause;
   if (isCode(cause)) return true;
@@ -478,7 +519,7 @@ export class ProviderHttpClient {
       bucket: bucketLabel,
       method,
     });
-    let status = 'error';
+    let status: ProviderRequestStatus = 'error';
     let secrets: readonly string[] = [];
     let leaseId: bigint | undefined;
     let spanEnded = false;
@@ -570,7 +611,7 @@ export class ProviderHttpClient {
         status = 'network_error';
         throw this.#error('transient', method, url, 'Network error', { cause: error, secrets });
       }
-      status = String(response.status);
+      status = `${response.status}`;
       if (response.status >= 300 && response.status < 400 && response.headers.has('location')) {
         const next = new URL(response.headers.get('location') as string, url);
         this.#assertInBase(next);
@@ -622,7 +663,7 @@ export class ProviderHttpClient {
           : undefined;
       const limited = await this.#limitSignal(cls, response, interpretation);
       if (limited !== undefined) {
-        status = String(response.status);
+        status = `${response.status}`;
         throw this.#error('rate_limited', method, url, `Rate limited (${response.status})`, {
           status: response.status,
           retryAfterMs: limited.retryAfterMs,
@@ -741,7 +782,10 @@ export class ProviderHttpClient {
     try {
       const contentType = response.headers.get('content-type') ?? '';
       let stripped: unknown;
-      if (typeof body === 'string') {
+      if (typeof body === 'string' && body.length > MAX_CAPTURE_TEXT) {
+        // Too big to keep whole: only the marker is stored, so nothing is scrubbed.
+        stripped = { truncated: true, bytes: body.length };
+      } else if (typeof body === 'string') {
         stripped = /x-www-form-urlencoded/i.test(contentType)
           ? stripForm(body, scrub)
           : stripText(body, scrub);

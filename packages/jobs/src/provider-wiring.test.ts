@@ -73,7 +73,7 @@ describe('provider wiring', () => {
       provider: 'p',
       endpoint: 'repos.get',
       bucket: 'repository-data',
-      status: '200',
+      status: '200' as const,
     };
     telemetry.recordRequest(labels, 0.25);
 

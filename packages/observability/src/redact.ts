@@ -558,8 +558,10 @@ function valueAt(text: string, keyIndex: number, start: number): ValueSpan {
     const following = valueOnFollowingLines(text, keyIndex, YAML_BLOCK_INDICATOR.lastIndex, true);
     if (following) return { ...following, start };
   }
-  const blockTail = (lineEnd: number) =>
-    BLOCK_INDICATOR_TAIL.test(text.slice(Math.max(start, lineEnd - 16), lineEnd));
+  // The space before the value counts, so a value that is only an indicator and a comment longer
+  // than the bounded indicator pattern accepts (`password: | #…`) still opens the block.
+  const blockTail = (from: number, lineEnd: number) =>
+    BLOCK_INDICATOR_TAIL.test(text.slice(Math.max(from - 1, lineEnd - 16), lineEnd));
   const yamlSpaced = text.charAt(start - 1) === ' ' || text.charAt(start - 1) === '\t';
   if (yamlSpaced && (text.charAt(start) === '!' || text.charAt(start) === '&')) {
     // YAML node properties (`!tag`, `&anchor`, up to eight, each bounded) are skipped, and what
@@ -580,7 +582,13 @@ function valueAt(text: string, keyIndex: number, start: number): ValueSpan {
       const following = valueOnFollowingLines(text, keyIndex, YAML_BLOCK_INDICATOR.lastIndex, true);
       if (following) return { ...following, start };
     }
-    return { end: lineEnd(text, at), open: '', close: '' };
+    const end = lineEnd(text, at);
+    if (blockTail(at, withoutComment(text, at, end))) {
+      // A block indicator after the properties whatever its comment's length: fail safe.
+      const following = valueOnFollowingLines(text, keyIndex, end, true);
+      if (following) return { ...following, start };
+    }
+    return { end, open: '', close: '' };
   }
   UNQUOTED_BODY.lastIndex = start;
   const end = start + (UNQUOTED_BODY.exec(text)?.[0].length ?? 0);
@@ -589,7 +597,7 @@ function valueAt(text: string, keyIndex: number, start: number): ValueSpan {
     if (end === start || text.charAt(start) === '#') {
       const following = valueOnFollowingLines(text, keyIndex, end, false);
       if (following) return text.charAt(start) === '#' ? { ...following, start } : following;
-    } else if (blockTail(withoutComment(text, start, end))) {
+    } else if (blockTail(start, withoutComment(text, start, end))) {
       // A block indicator after anything (tags or anchors of any length): fail safe.
       const following = valueOnFollowingLines(text, keyIndex, end, true);
       if (following) return { ...following, start };

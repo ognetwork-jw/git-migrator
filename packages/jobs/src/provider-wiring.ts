@@ -53,13 +53,10 @@ export function createProviderTelemetry(
         },
       };
     },
+    // The client labels the status with a code like "200", or a word when no response arrived;
+    // both label types name the same values (ADP-060).
     recordRequest: (labels, durationSeconds) =>
-      // The client labels the status with a code like "200", or "error" for no response; the
-      // recorder's label type is the numeric-string form (ADP-060).
-      recorders.recordProviderRequest(
-        labels as Parameters<MetricRecorders['recordProviderRequest']>[0],
-        durationSeconds,
-      ),
+      recorders.recordProviderRequest(labels, durationSeconds),
   };
 }
 
