@@ -8,6 +8,7 @@
  */
 import type { MutationRecord, RepositoryRef, SourceLock } from '@git-migrator/adapter-sdk';
 import { mutationsToUndo, type RunKind } from '@git-migrator/core';
+import { markAnalysesStale } from '@git-migrator/db';
 import {
   hasOpenLockIntent,
   identityOf,
@@ -279,6 +280,21 @@ const unrecoverableText = (n: number): string =>
     : '';
 
 /**
+ * The lock intents are settled: target-writing Runs may start again, and the Analysis is marked
+ * stale, because one made while an intent was open may have withheld `branch-rules` and
+ * `repository-settings` (`sourceLockView`), and a Run on it would skip their Steps (LIF-021).
+ */
+async function locksSettled(ctx: MigrationContext): Promise<void> {
+  await ctx.findings.clearBlockers([SOURCE_LOCK_UNSETTLED]);
+  await ctx.transaction(
+    async (tx) => {
+      await markAnalysesStale(tx, { ids: [ctx.migration.id] });
+    },
+    { migration: true },
+  );
+}
+
+/**
  * Settles the lock intents left open (the worker died between the adapter's write and its
  * records, or a write could not be confirmed). With a baseline, what appeared since is recorded as
  * undoable (`recordAppeared`) and the Step fails for a check when it recorded anything. Without a
@@ -299,7 +315,7 @@ async function settleOpenLocks(
   if (!lock.inspect || baseline === undefined || open.some((i) => i.baseline === undefined)) {
     // Do not claim anything that cannot be told from the customer's own state.
     for (const intent of open) await settleIntent(ctx, intent, 'applied');
-    await ctx.findings.clearBlockers([SOURCE_LOCK_UNSETTLED]);
+    await locksSettled(ctx);
     if (!failWhenRecorded) return;
     throw new StepFailure(
       'source-read-only.needs-manual-check',
@@ -316,7 +332,7 @@ async function settleOpenLocks(
   for (const intent of open)
     await settleIntent(ctx, intent, found === 0 ? 'not_applied' : 'applied');
   // Settled: the ledger names what can be named, so target-writing Runs may start again.
-  await ctx.findings.clearBlockers([SOURCE_LOCK_UNSETTLED]);
+  await locksSettled(ctx);
   // Undo's read-back reports what is left; a lock attempt stops for a check.
   if (failWhenRecorded && (recorded > 0 || unrecoverable > 0)) {
     throw new StepFailure(
