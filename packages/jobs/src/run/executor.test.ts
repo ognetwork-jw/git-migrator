@@ -13,7 +13,7 @@ import {
   transient,
   until,
 } from './harness.fixture.ts';
-import { RunStepRegistry } from './types.ts';
+import { RunLeaseLostError, RunStepRegistry } from './types.ts';
 
 // Built at run time so that no credential-shaped literal sits in the repository (gitleaks).
 const PASSWORD = ['hunter', '2secret'].join('');
@@ -435,6 +435,33 @@ describe('[LIF-046] resume, hand-off and the lease fence', () => {
     expect(await h.steps(runId)).toEqual(before);
     expect((await h.run(runId)).status).toBe('succeeded');
     expect((await h.migration(world.migrationId)).status).toBe('migrated');
+  });
+
+  it('[LIF-046] assertLease share-locks the Run while the lease is held and throws once it is lost', async () => {
+    const h = harness();
+    const seen: string[] = [];
+    h.registry.register('migrate', {
+      steps: () => [
+        step('target.ensure-repository', async (ctx) => {
+          await h.db.$transaction((tx) => ctx.assertLease(tx));
+          seen.push('held');
+          // The reaper hands the Run to another job behind this worker's back.
+          await t.db.pool.query("UPDATE app.run SET lease_owner = 'thief' WHERE id = $1", [
+            ctx.run.id,
+          ]);
+          await h.db
+            .$transaction((tx) => ctx.assertLease(tx))
+            .catch((error: unknown) => {
+              seen.push(error instanceof RunLeaseLostError ? 'lost' : String(error));
+            });
+          return { status: 'succeeded' };
+        }),
+      ],
+    });
+    const { runId } = await h.queuedRun();
+    expect(await h.execute(runId)).toEqual({ outcome: 'lost' });
+    expect(seen).toEqual(['held', 'lost']);
+    expect((await h.run(runId)).leaseOwner).toBe('thief');
   });
 
   it('[LIF-046] two workers racing for one queued Run: exactly one runs it', async () => {
