@@ -15,6 +15,11 @@ export interface GuidanceStep {
   readonly when?: ParamName;
   /** Include the step only when this parameter is not supplied. */
   readonly unless?: ParamName;
+  /**
+   * Include the step only when this `entries` parameter has an entry of one of these kinds. A
+   * missing or invalid value cannot say which kinds are present, so the step is then included.
+   */
+  readonly whenEntry?: { readonly param: ParamName; readonly kinds: readonly string[] };
 }
 
 /** Structured guidance for one Finding code. `title`, `summary` and `verification` are message keys. */

@@ -86,6 +86,7 @@ describe('guidance message catalog (UI-040)', () => {
         for (const p of placeholdersIn(step.copy ?? '')) used.add(p.name);
         if (step.when !== undefined) used.add(step.when);
         if (step.unless !== undefined) used.add(step.unless);
+        if (step.whenEntry !== undefined) used.add(step.whenEntry.param);
       }
     }
     expect(PARAM_NAMES.filter((name) => !used.has(name))).toEqual([]);

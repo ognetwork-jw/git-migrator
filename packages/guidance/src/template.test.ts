@@ -161,6 +161,11 @@ describe('guidance templating', () => {
     expect(isSupplied(0)).toBe(true);
     expect(isSupplied(['a'])).toBe(true);
   });
+
+  it('[UI-040] a flag counts as supplied only when it is true', () => {
+    expect(isSupplied(true)).toBe(true);
+    expect(isSupplied(false)).toBe(false);
+  });
 });
 
 describe('guidance value hardening (UI-040, ADR-0092)', () => {
@@ -193,12 +198,23 @@ describe('guidance value hardening (UI-040, ADR-0092)', () => {
       'a\\_www&#46;evil.test',
     );
     expect(renderTemplate('{repository}', { repository: 'ftp://h' }).text).toBe('ftp&#58;//h');
-    expect(neutraliseAutolinks('XHTTP://A and WWW.B')).toBe('XHTTP&#58;//A and www&#46;B');
+    expect(neutraliseAutolinks('XHTTP://A and WWW.B and Www.C')).toBe(
+      'XHTTP&#58;//A and WWW&#46;B and Www&#46;C',
+    );
     // Every URI scheme, not only web schemes.
     expect(neutraliseAutolinks('ssh://host/x')).toBe('ssh&#58;//host/x');
     expect(neutraliseAutolinks('git://host/repo')).toBe('git&#58;//host/repo');
     expect(neutraliseAutolinks('file:///etc/passwd')).toBe('file&#58;///etc/passwd');
     expect(neutraliseAutolinks('my-app+v2.1://x')).toBe('my-app+v2.1&#58;//x');
+  });
+
+  it('[UI-040] neutralises autolinks in linear time on long runs of scheme characters', () => {
+    // A quadratic scheme match took about 10 s on 100 KB; a linear one takes milliseconds.
+    const long = 'a'.repeat(200_000);
+    const started = performance.now();
+    expect(neutraliseAutolinks(`${long}x`)).toBe(`${long}x`);
+    expect(neutraliseAutolinks(`${long}://h`)).toBe(`${long}&#58;//h`);
+    expect(performance.now() - started).toBeLessThan(2000);
   });
 
   it('[UI-040] raw URLs have single quotes percent-encoded so they cannot end a shell word', () => {
@@ -216,6 +232,17 @@ describe('guidance value hardening (UI-040, ADR-0092)', () => {
     const result = renderTemplate('echo {keyName:shell}', { keyName: 'a\u0000b' });
     expect(result.text).toBe('echo ‹keyName›');
     expect(result.problems).toEqual([{ param: 'keyName', reason: 'invalid' }]);
+  });
+
+  it('[UI-040] a NUL byte in a prose or list value is invalid too', () => {
+    expect(renderTemplate('{repository}', { repository: 'a\u0000b' })).toEqual({
+      text: '‹repository›',
+      problems: [{ param: 'repository', reason: 'invalid' }],
+    });
+    expect(renderTemplate('{names}', { names: ['ok', 'a\u0000b'] })).toEqual({
+      text: '‹names›',
+      problems: [{ param: 'names', reason: 'invalid' }],
+    });
   });
 
   it('[UI-040] shell context refuses leading dashes in every list item', () => {

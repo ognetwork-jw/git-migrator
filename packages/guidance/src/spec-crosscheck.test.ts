@@ -269,6 +269,12 @@ describe('finding code list matches the facets spec (FAC-002)', () => {
     }
   });
 
+  it('[LIF-031] [FAC-002] every LIF-031 exemption is still named in the lifecycle spec', () => {
+    const specNames = new Set(lif031Names());
+    const stale = Object.keys(LIF031_EXEMPT).filter((name) => !specNames.has(name));
+    expect(stale).toEqual([]);
+  });
+
   it('[LIF-031] [FAC-002] information-only LIF-031 names have no guidance entry', () => {
     for (const [name, reason] of Object.entries(LIF031_EXEMPT)) {
       expect(reason.length, name).toBeGreaterThan(0);

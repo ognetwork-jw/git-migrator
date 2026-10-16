@@ -33,8 +33,9 @@
   "finding.branch-rules.unknown-kind.step.1": "Recreate the restriction by hand in GitHub if you still need it.",
   "finding.branch-rules.unknown-kind.summary": "These restriction kinds have no GitHub equivalent and were not translated: {kinds}.",
   "finding.branch-rules.unknown-kind.title": "Some branch restrictions are not migrated",
-  "finding.change-requests.open.step.1": "Merge or decline each Change Request on the source, then re-run the analysis. The preflight checks again before every Run.",
-  "finding.change-requests.open.summary": "{count} open Change Request(s) on the source must be merged or declined before the migration can run: {ids}.",
+  "finding.change-requests.open.step.1": "The open Change Requests on the source: {ids}.",
+  "finding.change-requests.open.step.2": "Merge or decline each Change Request on the source, then re-run the analysis. The preflight checks again before every Run.",
+  "finding.change-requests.open.summary": "{count} open Change Request(s) on the source must be merged or declined before the migration can run.",
   "finding.change-requests.open.title": "Close open Change Requests on the source",
   "finding.code-ownership.review-and-merge.step.1": "Review the owner list and merge the Change Request.",
   "finding.code-ownership.review-and-merge.summary": "The CODEOWNERS file is in a Change Request on branch {branch}. The owners are the default reviewers from the source.",
@@ -108,6 +109,7 @@
   "finding.org-webhooks.recreate-manually.step.1": "In the organization's webhook settings on GitHub, add a webhook with this payload URL:",
   "finding.org-webhooks.recreate-manually.step.2": "Set the content type to application/json and select these events: {events}.",
   "finding.org-webhooks.recreate-manually.step.3": "The source webhook had a secret, which cannot be read. Generate a new secret outside git-migrator and set it on the GitHub webhook and on the service that receives its deliveries.",
+  "finding.org-webhooks.recreate-manually.step.4": "None of the source webhook's events has a GitHub equivalent. Set the content type to application/json and select the events the receiving service needs.",
   "finding.org-webhooks.recreate-manually.summary": "The organization webhook for {targetUrlDisplay} is not on this Route's allowlist, so it was not created automatically.",
   "finding.org-webhooks.recreate-manually.title": "Create the organization webhook on the target",
   "finding.org-webhooks.set-secret.step.1": "Generate a new secret outside git-migrator. Set it on the GitHub organization webhook and on the service that receives its deliveries.",
@@ -134,6 +136,7 @@
   "finding.repository-settings.left-in-place.step.1": "Groups (teams on the target): if the Group is still the migration's, delete it by hand in the organization's team settings, then roll back again. A Group that a repository migration of the route still grants access to is kept until that migration is rolled back. A Group that was renamed, has child Groups, or that someone else made under the same name is left on purpose.",
   "finding.repository-settings.left-in-place.step.2": "Branch rules: set the rule for the pattern by hand in the repository's branch protection settings. The rollback cannot revert a rule that was replaced or made again, so it keeps reporting it; contact an administrator to settle it.",
   "finding.repository-settings.left-in-place.step.3": "Repositories created by an earlier run: delete the repository by hand on the target, then roll back again. If it has to stay, contact an administrator: the rollback reports it until it is gone.",
+  "finding.repository-settings.left-in-place.step.4": "Only the first changes are listed: {omitted} more change(s) are not listed here. Settle the listed ones, then roll back again to see the rest.",
   "finding.repository-settings.left-in-place.summary": "The rollback left these changes as they are, because it can no longer prove they are the migration's own: {details}.",
   "finding.repository-settings.left-in-place.title": "The rollback left some changes in place",
   "finding.repository-settings.org-forking-disabled.step.1": "In the organization's settings, allow forking of private repositories, then re-run the migration task.",
@@ -186,6 +189,7 @@
   "finding.webhooks.recreate-manually.step.1": "In the repository's webhook settings on GitHub, add a webhook with this payload URL:",
   "finding.webhooks.recreate-manually.step.2": "Set the content type to application/json and select these events: {events}.",
   "finding.webhooks.recreate-manually.step.3": "The source webhook had a secret, which cannot be read. Generate a new secret outside git-migrator and set it on the GitHub webhook and on the service that receives its deliveries.",
+  "finding.webhooks.recreate-manually.step.4": "None of the source webhook's events has a GitHub equivalent. Set the content type to application/json and select the events the receiving service needs.",
   "finding.webhooks.recreate-manually.summary": "The webhook for {targetUrlDisplay} is not on this Route's allowlist, so it was not created automatically.",
   "finding.webhooks.recreate-manually.title": "Create the webhook on the target",
   "finding.webhooks.set-secret.step.1": "Generate a new secret outside git-migrator. Set it on the GitHub webhook and on the service that receives its deliveries.",
@@ -213,5 +217,5 @@
   "verification.secrets": "Parity completes this task once every listed secret name exists on the target.",
   "verification.status-checks": "Parity completes this task once the branch rule lists the required status checks.",
   "verification.team-membership": "Parity completes this task once the team has the expected members.",
-  "verification.webhook-secret": "Parity completes this task once the target webhook has a secret and is active."
+  "verification.webhook-secret": "Parity completes this task once the target webhook has a secret and, if it was active on the source, is active."
 }

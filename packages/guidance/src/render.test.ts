@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { FINDING_CODES } from './codes.ts';
 import { GUIDANCE } from './entries.ts';
 import enMessages from './messages/en.json' with { type: 'json' };
+import { PARAMS } from './params.ts';
 import {
   displayTargetUrl,
   GUIDANCE_MESSAGES_EN,
@@ -47,6 +48,72 @@ describe('guidance rendering', () => {
       details: [{ kind: 'group-renamed', name: '' }],
     });
     expect(bad.problems).toContainEqual({ param: 'details', reason: 'invalid' });
+  });
+
+  it('[LIF-077] left-in-place guidance shows only the steps for the kinds that were left', () => {
+    const steps = (details: unknown): string[] =>
+      renderGuidance('repository-settings.left-in-place', {
+        details: details as never,
+      }).steps.map((s) => s.text);
+    const [groups, rules, repositories] = steps([
+      { kind: 'group-renamed', name: 'g' },
+      { kind: 'branch-rule-exists', name: 'main' },
+      { kind: 'repository-earlier', name: 'r' },
+    ]);
+    expect(groups).toMatch(/^Groups/);
+    expect(rules).toMatch(/^Branch rules/);
+    expect(repositories).toMatch(/^Repositories/);
+    expect(steps([{ kind: 'repository-earlier', name: 'r' }])).toEqual([repositories]);
+    expect(steps([{ kind: 'branch-rule-replaced', name: 'main' }])).toEqual([rules]);
+    expect(
+      steps([
+        { kind: 'group-in-use', name: 'g' },
+        { kind: 'group-membership-in-use', name: 'h' },
+      ]),
+    ).toEqual([groups]);
+    // A missing or invalid list cannot say which kinds were left, so every step is shown.
+    expect(steps(undefined)).toHaveLength(3);
+    expect(steps([{ kind: 'made-up', name: 'x' }])).toHaveLength(3);
+  });
+
+  it('[LIF-077] every entry kind a step selects is declared, and every declared kind has a step', () => {
+    for (const [code, entry] of Object.entries(GUIDANCE)) {
+      const selected = new Map<string, Set<string>>();
+      for (const step of entry.steps) {
+        if (step.whenEntry === undefined) continue;
+        const declared: readonly string[] =
+          (PARAMS[step.whenEntry.param] as { entryKinds?: readonly string[] }).entryKinds ?? [];
+        const kinds = selected.get(step.whenEntry.param) ?? new Set<string>();
+        for (const kind of step.whenEntry.kinds) {
+          expect(declared, `${code}: ${kind}`).toContain(kind);
+          kinds.add(kind);
+        }
+        selected.set(step.whenEntry.param, kinds);
+      }
+      for (const [param, kinds] of selected) {
+        const declared: readonly string[] =
+          (PARAMS[param as keyof typeof PARAMS] as { entryKinds?: readonly string[] }).entryKinds ??
+          [];
+        expect([...kinds].sort(), `${code}: ${param}`).toEqual([...declared].sort());
+      }
+    }
+  });
+
+  it('[UI-040] documentation links are absolute https URLs without credentials, and render on their step', () => {
+    const links = Object.values(GUIDANCE).flatMap((entry) =>
+      entry.steps.flatMap((step) => (step.link === undefined ? [] : [step.link])),
+    );
+    expect(links.length).toBeGreaterThan(0);
+    for (const link of links) {
+      const url = new URL(link);
+      expect(url.protocol, link).toBe('https:');
+      expect(url.username + url.password, link).toBe('');
+      expect(url.href, link).toBe(link);
+    }
+    const rendered = renderGuidance('change-requests.open', { count: 1, ids: ['1: Fix'] });
+    expect(rendered.steps[1]?.link).toBe(
+      'https://support.atlassian.com/bitbucket-cloud/docs/merge-a-pull-request/',
+    );
   });
 
   it('[UI-040] carries severity and verifiable from the source list', () => {
@@ -284,6 +351,33 @@ describe('display and copy of webhook URLs (UI-040, ADR-0092)', () => {
       expect(withSecret).toHaveLength(3);
       expect(JSON.stringify(without)).not.toContain('secret step');
       expect(withSecret[2]?.text).toMatch(/new secret/);
+    }
+  });
+
+  it('[FAC-WEB-002] recreate-manually with no supported events asks the operator to choose them, never shows a marker', () => {
+    for (const code of ['webhooks.recreate-manually', 'org-webhooks.recreate-manually']) {
+      const rendered = renderGuidance(code, {
+        targetUrl: 'https://hooks.example.test/h',
+        events: [],
+      });
+      expect(rendered.problems, code).toEqual([]);
+      expect(JSON.stringify(rendered), code).not.toContain('‹');
+      expect(rendered.steps, code).toHaveLength(2);
+      expect(rendered.steps[1]?.text, code).toMatch(/has a GitHub equivalent/);
+      const withEvents = renderGuidance(code, {
+        targetUrl: 'https://hooks.example.test/h',
+        events: ['push'],
+      });
+      expect(withEvents.steps[1]?.text, code).toMatch(/select these events: push/);
+    }
+  });
+
+  it('[FAC-WEB-003] set-secret verification asks for an active hook only when the source hook was active', () => {
+    for (const code of ['webhooks.set-secret', 'org-webhooks.set-secret']) {
+      const verification = renderGuidance(code, { activateAfterSecret: false }).verification ?? '';
+      expect(verification, code).toMatch(/has a secret/);
+      expect(verification, code).not.toMatch(/has a secret and is active\./);
+      expect(verification, code).toMatch(/if it was active on the source/);
     }
   });
 

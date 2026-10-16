@@ -123,10 +123,28 @@ export const GUIDANCE: Readonly<Record<FindingCode, Guidance>> = {
     step('repository-settings.deletion-forbidden', 2),
   ]),
 
+  // One step per kind of change left, shown only when such a change was left (ADR-0465).
   'repository-settings.left-in-place': plain('repository-settings.left-in-place', [
-    step('repository-settings.left-in-place', 1),
-    step('repository-settings.left-in-place', 2),
-    step('repository-settings.left-in-place', 3),
+    step('repository-settings.left-in-place', 1, {
+      whenEntry: {
+        param: 'details',
+        kinds: [
+          'group-unproven',
+          'group-renamed',
+          'group-has-children',
+          'group-changed',
+          'group-in-use',
+          'group-membership-in-use',
+        ],
+      },
+    }),
+    step('repository-settings.left-in-place', 2, {
+      whenEntry: { param: 'details', kinds: ['branch-rule-replaced', 'branch-rule-exists'] },
+    }),
+    step('repository-settings.left-in-place', 3, {
+      whenEntry: { param: 'details', kinds: ['repository-earlier'] },
+    }),
+    step('repository-settings.left-in-place', 4, { when: 'omitted' }),
   ]),
   'repository-settings.deletion-unproven': plain('repository-settings.deletion-unproven', [
     step('repository-settings.deletion-unproven', 1),
@@ -194,7 +212,9 @@ export const GUIDANCE: Readonly<Record<FindingCode, Guidance>> = {
     [
       // Shell context: the URL may carry ; | & $( ) ` or a quote, so it is always single-quoted.
       step('webhooks.recreate-manually', 1, { copy: '{targetUrl:shell}' }),
-      step('webhooks.recreate-manually', 2),
+      step('webhooks.recreate-manually', 2, { when: 'events' }),
+      // Every source event was dropped (FAC-WEB-002): there is no event list to select.
+      step('webhooks.recreate-manually', 4, { unless: 'events' }),
       step('webhooks.recreate-manually', 3, { when: 'hasSecret' }),
     ],
     VERIFICATION.hook,
@@ -271,7 +291,9 @@ export const GUIDANCE: Readonly<Record<FindingCode, Guidance>> = {
     [
       // Shell context: the URL may carry ; | & $( ) ` or a quote, so it is always single-quoted.
       step('org-webhooks.recreate-manually', 1, { copy: '{targetUrl:shell}' }),
-      step('org-webhooks.recreate-manually', 2),
+      step('org-webhooks.recreate-manually', 2, { when: 'events' }),
+      // Every source event was dropped (FAC-WEB-002): there is no event list to select.
+      step('org-webhooks.recreate-manually', 4, { unless: 'events' }),
       step('org-webhooks.recreate-manually', 3, { when: 'hasSecret' }),
     ],
     VERIFICATION.hook,
@@ -319,7 +341,15 @@ export const GUIDANCE: Readonly<Record<FindingCode, Guidance>> = {
   ),
 
   // change-requests
-  'change-requests.open': plain('change-requests.open', [step('change-requests.open', 1)]),
+  // The list is a step of its own: entries blank after cleaning are dropped, so it can be empty
+  // while `count` is not (ADR-0155).
+  'change-requests.open': plain('change-requests.open', [
+    step('change-requests.open', 1, { when: 'ids' }),
+    // Checked to answer 200 on 2026-10-16 (ADR-0094 follow-up).
+    step('change-requests.open', 2, {
+      link: 'https://support.atlassian.com/bitbucket-cloud/docs/merge-a-pull-request/',
+    }),
+  ]),
 
   // extras
   'extras.wiki-not-migrated': plain('extras.wiki-not-migrated', [

@@ -1,9 +1,15 @@
 import {
+  changeRequestLabel,
   changeRequestsDefinition,
   extrasDefinition,
   translateChangeRequests,
 } from '@git-migrator/facets';
-import { assertGuidanceCoverage, type ParamValues, renderGuidance } from '@git-migrator/guidance';
+import {
+  assertGuidanceCoverage,
+  hasForbiddenCharacter,
+  type ParamValues,
+  renderGuidance,
+} from '@git-migrator/guidance';
 import { describe, expect, it } from 'vitest';
 
 const URL_BASE = 'https://source.example.test/acme/app/pull-requests';
@@ -41,12 +47,51 @@ describe('change-requests titles render through guidance without problems (FAC-C
   it.each(hostile)('[FAC-CRQ] %s in a title', (_name, title) => {
     const rendered = renderOpen([{ id: '1', title, url: `${URL_BASE}/1` }]);
     expect(rendered.problems).toEqual([]);
-    expect(rendered.summary).not.toContain('‹');
+    expect(JSON.stringify(rendered)).not.toContain('‹');
   });
 
   it.each(hostile)('[FAC-CRQ] %s in an id', (_name, id) => {
     const rendered = renderOpen([{ id, title: 'Plain', url: `${URL_BASE}/1` }]);
     expect(rendered.problems).toEqual([]);
+  });
+
+  it('[FAC-CRQ] every code point: the facet cleans exactly what the guidance validator refuses, plus whitespace', () => {
+    // ADR-0155: the two sets are kept in sync, so a drift in either direction fails here.
+    let forbidden = 0;
+    for (let cp = 0; cp <= 0x10ffff; cp++) {
+      if (cp >= 0xd800 && cp <= 0xdfff) continue; // lone surrogates become U+FFFD (below)
+      const ch = String.fromCodePoint(cp);
+      const label = changeRequestLabel({ id: '1', title: `a${ch}b`, url: `${URL_BASE}/1` });
+      if (hasForbiddenCharacter(label)) throw new Error(`U+${cp.toString(16)} reaches guidance`);
+      if (hasForbiddenCharacter(ch)) {
+        forbidden++;
+        if (label !== '1: a b') throw new Error(`U+${cp.toString(16)} is not cleaned`);
+      } else if (!/\s/u.test(ch) && label !== `1: a${ch}b`) {
+        throw new Error(`U+${cp.toString(16)} is cleaned but guidance accepts it`);
+      }
+    }
+    // C0 (32), DEL and C1 (33), U+2028/2029 (2), U+202A-202E (5), U+2066-2069 (4).
+    expect(forbidden).toBe(76);
+    expect(changeRequestLabel({ id: '1', title: 'a\uD800b', url: `${URL_BASE}/1` })).toBe(
+      '1: a\uFFFDb',
+    );
+  });
+
+  it('[FAC-CRQ] the longest possible labels, with astral characters in id and title, render', () => {
+    const astral = '\u{1F600}'.repeat(5000);
+    const rendered = renderOpen([
+      { id: astral, title: astral, url: `${URL_BASE}/1` },
+      { id: '', title: astral, url: `${URL_BASE}/${astral}` },
+    ]);
+    expect(rendered.problems).toEqual([]);
+    expect(JSON.stringify(rendered)).not.toContain('‹');
+  });
+
+  it('[FAC-CRQ] a list where every entry is blank still renders, with the count and no marker', () => {
+    const rendered = renderOpen([{ id: ' ', title: ' ', url: ' ' }]);
+    expect(rendered.problems).toEqual([]);
+    expect(JSON.stringify(rendered)).not.toContain('‹');
+    expect(rendered.summary).toContain('1 open Change Request(s)');
   });
 
   it('[FAC-CRQ] a blank id and a blank title still render, using the URL', () => {
@@ -65,7 +110,7 @@ describe('change-requests list cap and counts render through guidance (FAC-CRQ)'
     const rendered = renderOpen(open);
     expect(rendered.problems).toEqual([]);
     expect(rendered.summary).toContain('600');
-    expect(rendered.summary).not.toContain('‹');
+    expect(JSON.stringify(rendered)).not.toContain('‹');
   });
 
   it('[FAC-CRQ] count exceeds the listed entries when blank entries are dropped', () => {

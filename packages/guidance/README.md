@@ -5,8 +5,8 @@ parameters (UI-040). Pure data and templating: no I/O. Provider names appear onl
 which may quote the provider UI (GLO-002).
 
 Status: complete for T-014. Facets add their codes to `src/codes.ts` and their guidance is already
-in this package. Declared internal dependencies (ARC-012, checked by `pnpm lint`): `@git-migrator/core`,
-`@git-migrator/canonical`. Neither is imported yet.
+in this package. Declared internal dependency (ARC-012, checked by `pnpm lint`): `@git-migrator/canonical`,
+for `redactWebhookUrl`.
 
 ## Layout
 
@@ -40,7 +40,9 @@ renderGuidance('secrets.set-value', {
 
 - `severity` is `blocker`, `pre`, `post` or `warning` (the spec's B, pre, post and W). `verifiable` is the spec's `(v)`.
 - `steps[].copy` is a copy-ready snippet. It is omitted when a parameter it needs is missing or invalid, and the problem is listed in `problems`.
-- `steps[].when` and `steps[].unless` select a step by whether a parameter is supplied.
+- `steps[].when` and `steps[].unless` select a step by whether a parameter is supplied. `steps[].whenEntry`
+  selects it by whether an `entries` parameter has an entry of one of the given kinds (a missing or
+  invalid value shows the step).
 - Missing or invalid parameters render as `‹name›`. Nothing renders as `undefined`, `null` or `NaN`.
 
 ## Templates
@@ -94,8 +96,10 @@ the spec (`docs/spec/05-facets.md`), in both directions (ADR-0091). The generic 
 
 ## Open items
 
-- No external documentation links yet. The agent proxy could not reach the vendor documentation, so no
-  link was verified (ADR-0094). The `link` field is supported.
+- Documentation links: only links checked to answer 200 are added (ADR-0094). The source-side Change
+  Request guidance links to the vendor's merge page. The target vendor's documentation was still
+  refused by the agent proxy, so the secrets, deploy key, webhook, CODEOWNERS and large-file links
+  remain a follow-up.
 - Webhook URLs are shown with canonical's `redactWebhookUrl` (T-015). Only http(s) URLs are displayed; the
   rest show the `‹targetUrlDisplay›` marker (ADR-0092).
 - `target.owned-by-other-migration` (LIF-031, from T-013) is now named in the lifecycle spec, so it is no

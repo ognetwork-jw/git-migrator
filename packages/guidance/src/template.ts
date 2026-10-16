@@ -53,9 +53,10 @@ export function missingMarker(name: string): string {
 /**
  * Characters that never belong in a guidance value: C0 and C1 controls, DEL, the Unicode line and
  * paragraph separators, and bidirectional embedding, override and isolate controls (which can make
- * a copied command read differently from how it runs).
+ * a copied command read differently from how it runs). Exported so callers that clean values for
+ * guidance (ADR-0155) can be checked against exactly this set.
  */
-function hasForbiddenCharacter(text: string): boolean {
+export function hasForbiddenCharacter(text: string): boolean {
   for (const char of text) {
     const code = char.codePointAt(0) ?? 0;
     if (code < 0x20 || (code >= 0x7f && code <= 0x9f)) return true;
@@ -178,9 +179,9 @@ export function escapeMarkdown(text: string): string {
 export function neutraliseAutolinks(text: string): string {
   // No word boundary: a scheme or host glued to a preceding word character is still neutralised.
   // Any URI scheme (RFC 3986 form), not only web schemes: ssh://, git://, file:///, and so on.
-  return text
-    .replace(/([A-Za-z][A-Za-z0-9+.-]*):\/\//g, '$1&#58;//')
-    .replace(/www\./gi, 'www&#46;');
+  // The match is anchored on "://" with a one-character lookbehind, so it stays linear on long runs
+  // of scheme characters; it may also neutralise a "://" after a digit, which renders the same.
+  return text.replace(/(?<=[A-Za-z0-9+.-]):\/\//g, '&#58;//').replace(/(www)\./gi, '$1&#46;');
 }
 
 /** POSIX shell word: plain words stay bare, anything else is single-quoted. Leading "-" is refused earlier. */
