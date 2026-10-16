@@ -14,9 +14,11 @@ import {
   type Environments,
   type MergeSettings,
   type MergeStrategy,
+  mergeWebhooksByKey,
   type PrincipalEntry,
   type PrincipalRef,
   type RepositorySettings,
+  type Webhook,
   webhookKey,
 } from '@git-migrator/canonical';
 import { formatFieldPath, itemSeg, sha256Hex } from '@git-migrator/core';
@@ -499,40 +501,19 @@ export function mapWebhookRows(
 }
 
 /**
- * Hooks whose normalized URL is the same become one (ADR-0088): events are united, `active` and
- * `hasSecret` hold if any hook has them, `verifyTls` only if all do. Mirrors the facet helper,
- * which adapters may not import (ADR-0223). The smallest raw URL stands for the group.
+ * Hooks whose normalized URL is the same become one (ADR-0088), through the shared
+ * `mergeWebhooksByKey`; each group is reported as `webhooks.duplicate-url` with a redacted URL.
  */
 export function mergeHooks(raw: readonly RawHook[]): {
-  hooks: Array<RawHook & { key: string }>;
+  hooks: Webhook[];
   warnings: AdapterWarning[];
 } {
-  const groups = new Map<string, RawHook[]>();
-  for (const h of raw) {
-    const key = webhookKey(h.url);
-    groups.set(key, [...(groups.get(key) ?? []), h]);
-  }
-  const hooks: Array<RawHook & { key: string }> = [];
-  const warnings: AdapterWarning[] = [];
-  for (const [key, list] of groups) {
-    const url = list.map((h) => h.url).sort()[0] as string;
-    hooks.push({
-      key,
-      url,
-      events: [...new Set(list.flatMap((h) => h.events))].sort(),
-      active: list.some((h) => h.active),
-      hasSecret: list.some((h) => h.hasSecret),
-      verifyTls: list.every((h) => h.verifyTls),
-    });
-    if (list.length > 1) {
-      warnings.push({
-        code: 'webhooks.duplicate-url',
-        paths: [formatFieldPath([itemSeg('hooks', 'key', key)])],
-        params: { targetUrlDisplay: `${new URL(url).origin}/…`, count: list.length },
-      });
-    }
-  }
-  hooks.sort((a, b) => (a.key < b.key ? -1 : a.key > b.key ? 1 : 0));
+  const { hooks, duplicates } = mergeWebhooksByKey(raw);
+  const warnings: AdapterWarning[] = duplicates.map(({ key, count, targetUrlDisplay }) => ({
+    code: 'webhooks.duplicate-url',
+    paths: [formatFieldPath([itemSeg('hooks', 'key', key)])],
+    params: { targetUrlDisplay, count },
+  }));
   return { hooks, warnings };
 }
 

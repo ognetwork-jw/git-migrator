@@ -6,6 +6,8 @@
  */
 import {
   type CanonicalEvent,
+  mergeWebhooksByKey,
+  type RawWebhook,
   redactWebhookUrl,
   type Webhook,
   type Webhooks,
@@ -199,7 +201,7 @@ export function translateWebhooks(
 
 // -- duplicate URLs (ADR-0088) -------------------------------------------------------------------
 
-export type RawWebhook = Omit<Webhook, 'key'>;
+export type { RawWebhook } from '@git-migrator/canonical';
 
 export interface DuplicateUrlGroup {
   readonly key: string;
@@ -207,54 +209,29 @@ export interface DuplicateUrlGroup {
 }
 
 /**
- * For readers: providers allow several hooks with one URL, a canonical document does not
- * (ADR-0088). Merges hooks whose normalized URL is the same into one (events are united, `active`
- * and `hasSecret` hold if any hook has them, `verifyTls` holds only if all do) and reports each
- * group as a `webhooks.duplicate-url` warning. Throws `Error('invalid webhook url')` (without the URL) on an invalid URL.
+ * For readers: `mergeWebhooksByKey` (in `@git-migrator/canonical`, so adapters share it), with
+ * each group of hooks that share a URL reported as a `webhooks.duplicate-url` warning (ADR-0088).
+ * Throws `Error('invalid webhook url')` (without the URL) on an invalid URL.
  */
 export function mergeDuplicateWebhooks(raw: readonly RawWebhook[]): {
   hooks: Webhook[];
   duplicates: DuplicateUrlGroup[];
   warnings: Finding[];
 } {
-  const groups = new Map<string, RawWebhook[]>();
-  for (const h of raw) {
-    let key: string;
-    try {
-      key = webhookKey(h.url);
-    } catch {
-      // Not the TypeError itself: its `input` property holds the raw URL.
-      throw new Error('invalid webhook url');
-    }
-    groups.set(key, [...(groups.get(key) ?? []), h]);
-  }
-  const hooks: Webhook[] = [];
-  const duplicates: DuplicateUrlGroup[] = [];
-  const warnings: Finding[] = [];
-  for (const [key, list] of groups) {
-    // Order-independent: the smallest raw URL stands for the group.
-    const url = list.map((h) => h.url).sort((x, y) => (x < y ? -1 : x > y ? 1 : 0))[0] as string;
-    hooks.push({
-      key,
-      url,
-      events: sortedEvents(list.flatMap((h) => h.events)),
-      active: list.some((h) => h.active),
-      hasSecret: list.some((h) => h.hasSecret),
-      verifyTls: list.every((h) => h.verifyTls),
-    });
-    if (list.length > 1) {
-      duplicates.push({ key, count: list.length });
-      warnings.push({
-        code: DUPLICATE_URL,
-        paths: [hookPath(key)],
-        params: { targetUrlDisplay: redactWebhookUrl(url), count: list.length },
-      });
-    }
+  let merged: ReturnType<typeof mergeWebhooksByKey<RawWebhook>>;
+  try {
+    merged = mergeWebhooksByKey(raw);
+  } catch {
+    throw new Error('invalid webhook url');
   }
   return {
-    hooks: hooks.sort((a, b) => (a.key < b.key ? -1 : a.key > b.key ? 1 : 0)),
-    duplicates,
-    warnings,
+    hooks: merged.hooks,
+    duplicates: merged.duplicates.map(({ key, count }) => ({ key, count })),
+    warnings: merged.duplicates.map(({ key, count, targetUrlDisplay }) => ({
+      code: DUPLICATE_URL,
+      paths: [hookPath(key)],
+      params: { targetUrlDisplay, count },
+    })),
   };
 }
 

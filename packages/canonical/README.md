@@ -45,6 +45,8 @@ const doc = normalizeDocument(r.data, getCanonicalFacet('branch-rules').document
 
 Conventions: `null` and `[]` differ (`restrictPushes: null` = unrestricted, `[]` = nobody). Lists of
 principals are `{ principal: { kind, id } }[]` (ADR-0085). Webhook URLs, deploy keys and variable names have extra rules (ADR-0088). Secret values are never part of a schema.
+Readers merge hooks that share a URL with `mergeWebhooksByKey` (`src/facets/webhooks.ts`) before
+building a `webhooks` or `org-webhooks` document, and report each group as `duplicate-url`.
 
 Branch rules are stored sorted by pattern, but the order a target writer creates them in matters:
 `branchRuleApplyOrder(rules)` gives that order, a topological sort that puts every rule before the

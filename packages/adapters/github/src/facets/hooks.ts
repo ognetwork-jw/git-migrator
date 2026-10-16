@@ -3,6 +3,7 @@ import type { FacetDriver, MutationRecord } from '@git-migrator/adapter-sdk';
 import {
   CANONICAL_EVENTS,
   type CanonicalEvent,
+  mergeWebhooksByKey,
   redactWebhookUrl,
   type Webhook,
   webhookKey,
@@ -17,7 +18,6 @@ import {
   mutation,
   orgTarget,
   repoTarget,
-  sortBy,
 } from './common.ts';
 
 /** Canonical event to the GitHub events that deliver it (FAC-WEB-001; GitHub's are coarser). */
@@ -71,45 +71,32 @@ function rawOf(h: Json): RawHook | undefined {
 }
 
 /**
- * Providers allow several hooks with one URL, a canonical document does not (ADR-0088). Merges them
- * as the facet package does (events united; `active` and `hasSecret` if any; `verifyTls` only if
- * all) and reports each group as `webhooks.duplicate-url` with a redacted URL.
+ * Providers allow several hooks with one URL, a canonical document does not (ADR-0088). A hook
+ * with an invalid URL is skipped with an `invalid-url` warning; the rest are merged by the shared
+ * `mergeWebhooksByKey`, and each group is reported as `duplicate-url` with a redacted URL.
  */
 export function mergeHooks(
   raw: readonly RawHook[],
   collector: Collector,
   prefix: string,
 ): { hooks: Webhook[]; groups: Map<string, RawHook[]> } {
-  const groups = new Map<string, RawHook[]>();
-  for (const h of raw) {
-    let key: string;
+  const valid = raw.filter((h) => {
     try {
-      key = webhookKey(h.url);
+      webhookKey(h.url);
+      return true;
     } catch {
       collector.warn(`${prefix}.invalid-url`, [], {});
-      continue;
+      return false;
     }
-    groups.set(key, [...(groups.get(key) ?? []), h]);
-  }
-  const hooks: Webhook[] = [];
-  for (const [key, list] of groups) {
-    const url = list.map((h) => h.url).sort()[0] as string;
-    hooks.push({
-      key,
-      url,
-      events: [...new Set(list.flatMap((h) => h.events))].sort() as CanonicalEvent[],
-      active: list.some((h) => h.active),
-      hasSecret: list.some((h) => h.hasSecret),
-      verifyTls: list.every((h) => h.verifyTls),
+  });
+  const { hooks, groups, duplicates } = mergeWebhooksByKey(valid);
+  for (const { key, count, targetUrlDisplay } of duplicates) {
+    collector.warn(`${prefix}.duplicate-url`, [itemPath('hooks', 'key', key)], {
+      targetUrlDisplay,
+      count,
     });
-    if (list.length > 1) {
-      collector.warn(`${prefix}.duplicate-url`, [itemPath('hooks', 'key', key)], {
-        targetUrlDisplay: redactWebhookUrl(url),
-        count: list.length,
-      });
-    }
   }
-  return { hooks: sortBy(hooks, (h) => h.key), groups };
+  return { hooks, groups };
 }
 
 async function readHooks(gh: Gh, base: string, collector: Collector, prefix: string) {

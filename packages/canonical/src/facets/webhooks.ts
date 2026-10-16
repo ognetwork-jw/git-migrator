@@ -122,3 +122,51 @@ export const webhooksFacet = declareFacet({
   collections: [{ path: '/hooks', key: 'key' }],
   sets: ['/hooks/events'],
 });
+
+/** A hook as a reader sees it, before its key is derived. */
+export type RawWebhook = Omit<Webhook, 'key'>;
+
+/** One key that several raw hooks share. `targetUrlDisplay` is redacted (`<origin>/…`). */
+export interface WebhookDuplicate {
+  readonly key: string;
+  readonly count: number;
+  readonly targetUrlDisplay: string;
+}
+
+const byCodeUnit = (a: string, b: string) => (a < b ? -1 : a > b ? 1 : 0);
+
+/**
+ * For readers: providers allow several hooks with one URL, a canonical document does not
+ * (ADR-0088). Merges the hooks whose `webhookKey` is the same into one: events are united,
+ * `active` and `hasSecret` hold if any hook has them, `verifyTls` only if all do, and the smallest
+ * raw URL stands for the group, so the result does not depend on the input order. `hooks` is
+ * sorted by key; `groups` keeps every raw hook of each key (in input order, first-seen keys first)
+ * and `duplicates` lists each key with more than one hook, for the caller's
+ * `webhooks.duplicate-url` warning. Throws `webhookKey`'s URL-free `Error` on an invalid URL.
+ */
+export function mergeWebhooksByKey<T extends RawWebhook>(
+  raw: readonly T[],
+): { hooks: Webhook[]; groups: Map<string, T[]>; duplicates: WebhookDuplicate[] } {
+  const groups = new Map<string, T[]>();
+  for (const h of raw) {
+    const key = webhookKey(h.url);
+    groups.set(key, [...(groups.get(key) ?? []), h]);
+  }
+  const hooks: Webhook[] = [];
+  const duplicates: WebhookDuplicate[] = [];
+  for (const [key, list] of groups) {
+    const url = list.map((h) => h.url).sort(byCodeUnit)[0] as string;
+    hooks.push({
+      key,
+      url,
+      events: [...new Set(list.flatMap((h) => h.events))].sort(byCodeUnit),
+      active: list.some((h) => h.active),
+      hasSecret: list.some((h) => h.hasSecret),
+      verifyTls: list.every((h) => h.verifyTls),
+    });
+    if (list.length > 1) {
+      duplicates.push({ key, count: list.length, targetUrlDisplay: redactWebhookUrl(url) });
+    }
+  }
+  return { hooks: hooks.sort((a, b) => byCodeUnit(a.key, b.key)), groups, duplicates };
+}

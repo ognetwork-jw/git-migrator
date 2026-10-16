@@ -25,6 +25,7 @@ import {
   getCanonicalFacet,
   type Members,
   type MergeSettings,
+  mergeWebhooksByKey,
   type OrgSecrets,
   type OrgVariables,
   type OrgWebhooks,
@@ -639,6 +640,43 @@ describe('parse-time validation', () => {
     );
     const wrong = { hooks: [{ ...hook, key: 'https://ci.example.com#0000000000000000' }] };
     bad('webhooks', wrong, 'key must equal webhookKey(url)');
+  });
+
+  it('[FAC-WEB-002] mergeWebhooksByKey merges hooks that share a key, whatever the input order', () => {
+    const a = {
+      id: 1,
+      url: 'https://ci.example.com/hook?token=S1',
+      events: ['push' as const],
+      active: false,
+      hasSecret: false,
+      verifyTls: true,
+    };
+    const b = {
+      id: 2,
+      url: 'HTTPS://CI.example.com:443/hook?token=S1#x',
+      events: ['cr.opened' as const, 'push' as const],
+      active: true,
+      hasSecret: true,
+      verifyTls: false,
+    };
+    const c = { ...a, id: 3, url: 'https://other.example.com/h' };
+    const merged = mergeWebhooksByKey([a, b, c]);
+    expect(mergeWebhooksByKey([c, b, a]).hooks).toEqual(merged.hooks);
+    const key = webhookKey(a.url);
+    expect(merged.hooks.find((h) => h.key === key)).toEqual({
+      key,
+      url: b.url,
+      events: ['cr.opened', 'push'],
+      active: true,
+      hasSecret: true,
+      verifyTls: false,
+    });
+    expect(merged.groups.get(key)?.map((h) => h.id)).toEqual([1, 2]);
+    expect(merged.duplicates).toEqual([
+      { key, count: 2, targetUrlDisplay: 'https://ci.example.com/…' },
+    ]);
+    expect(JSON.stringify(merged.duplicates)).not.toContain('S1');
+    expect(parseCanonical('webhooks', { hooks: merged.hooks }).success).toBe(true);
   });
 
   it('[FAC-WEB-003] webhookKey throws an error that does not carry the URL', () => {
