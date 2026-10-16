@@ -435,6 +435,11 @@ describe('ARC-012 dependency-rule check', () => {
       'const r = createRequire(import.meta.url); r(name);',
       `let r; r = createRequire(import.meta.url); r(\`\${a}\`);`,
       `await import(\`\${dir}/x\`);`,
+      'createRequire(import.meta.url)(name);',
+      `module.createRequire(import.meta.url)(\`\${name}\`);`,
+      "await import('@git-migrator/' + name);",
+      "await import(name + '.json');",
+      'const r = createRequire(import.meta.url); const r2 = r; r2(name);',
     ]) {
       const root = fixture({ 'packages/core': { src: `${src}\n` } });
       expect(
@@ -444,10 +449,32 @@ describe('ARC-012 dependency-rule check', () => {
     }
     const ok = fixture({
       'packages/core': {
-        src: `await import('node:fs');\nawait import(\`./locales/\${l}.json\`);\n`,
+        src: [
+          "await import('node:fs');",
+          `await import(\`./locales/\${l}.json\`);`,
+          "await import('./locales/' + l + '.json');",
+          "await import('./x' + '.json');",
+          'const compose = (f) => (x) => f(x); compose(f)(name);',
+          '',
+        ].join('\n'),
       },
     });
     expect(checkDependencies(ok)).toEqual([]);
+  });
+
+  it('[ARC-012] catches aliases of createRequire results and concatenated package names', () => {
+    for (const src of [
+      "const r = createRequire(import.meta.url); const r2 = r; r2('@git-migrator/db');",
+      "const r = createRequire(import.meta.url); let r2; r2 = r; const r3 = r2; r3('@git-migrator/db');",
+      "const r = createRequire(import.meta.url); r.resolve('@git-migrator/db');",
+      "await import('@git-migrator/' + 'db');",
+    ]) {
+      const root = fixture({ 'packages/core': { src: `${src}\n` }, 'packages/db': {} });
+      expect(
+        checkDependencies(root).map((v) => v.message),
+        src,
+      ).toEqual([expect.stringContaining('must not depend on @git-migrator/db')]);
+    }
   });
 
   it('[ARC-012] skips build output directories only at the workspace root', () => {

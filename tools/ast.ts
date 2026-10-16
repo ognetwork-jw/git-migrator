@@ -36,13 +36,25 @@ export function walk(node: unknown, visit: (n: Node) => void): void {
   }
 }
 
-/** String value of a string literal or of a template literal (static parts joined). */
+/**
+ * String value of a string literal, a template literal or a `+` concatenation that starts with
+ * one. When part of it is computed, `value` is the static prefix and `dynamic` is true.
+ */
 export function stringValue(
   node: Node | undefined,
 ): { value: string; dynamic: boolean } | undefined {
   if (!node) return undefined;
   if (node.type === 'Literal' && typeof node.value === 'string')
     return { value: node.value, dynamic: false };
+  if (node.type === 'BinaryExpression' && node.operator === '+') {
+    const left = stringValue(node.left);
+    if (!left) return undefined;
+    if (left.dynamic) return left;
+    const right = stringValue(node.right);
+    if (!right) return { value: left.value, dynamic: true };
+    return { value: left.value + right.value, dynamic: right.dynamic };
+  }
+  if (node.type === 'ParenthesizedExpression') return stringValue(node.expression);
   if (node.type === 'TemplateLiteral') {
     const quasis = node.quasis as { value: { cooked: string | null; raw: string } }[];
     const first = quasis[0]?.value;

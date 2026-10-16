@@ -263,19 +263,24 @@ const MODULE_CALL_NAMES = new Set([
   'requireMock',
 ]);
 
-const isMember = (n: Node | undefined, object: string, property: string): boolean =>
-  n?.type === 'MemberExpression' &&
-  n.object?.type === 'Identifier' &&
-  n.object.name === object &&
-  n.property?.name === property;
+/** `createRequire(…)` or `module.createRequire(…)`. */
+function isCreateRequireCall(n: Node | undefined): boolean {
+  if (n?.type !== 'CallExpression') return false;
+  const callee = n.callee as Node;
+  return (
+    (callee.type === 'Identifier' && callee.name === 'createRequire') ||
+    (callee.type === 'MemberExpression' && callee.property?.name === 'createRequire')
+  );
+}
 
 /**
  * Module specifiers found in code, via a real parser (comments and ordinary strings are ignored).
  * A string counts when it is in a module position: `import`/`export … from`, `import()`,
  * `import x = require()`, `import('x')` types, `require()`, `require.resolve()`,
  * `import.meta.resolve()`, `import.meta.glob()`, `vi.mock`-style calls, `createRequire(…)(…)` and
- * variables assigned from `createRequire`, `new URL('…', import.meta.url)`, and `/// <reference>`
- * directives. A syntax error makes `ok` false (fail closed).
+ * variables assigned from `createRequire` (and aliases of them), `new URL('…', import.meta.url)`,
+ * and `/// <reference>` directives. A `+` concatenation that starts with a string counts like a
+ * template literal (its static prefix). A syntax error makes `ok` false (fail closed).
  */
 export function findModuleReferences(
   source: string,
@@ -295,8 +300,10 @@ export function findModuleReferences(
     else add(node);
   };
 
-  // Variables holding a require function: `const r = createRequire(import.meta.url)`.
+  // Variables holding a require function: `const r = createRequire(import.meta.url)`, and aliases
+  // of those (`const r2 = r`, also chained), resolved to a fixed point.
   const requireFns = new Set<string>(['require']);
+  const assignments: { id: string; init: Node }[] = [];
   walkAst(program, (n) => {
     const target =
       n.type === 'VariableDeclarator'
@@ -304,15 +311,21 @@ export function findModuleReferences(
         : n.type === 'AssignmentExpression' && n.operator === '='
           ? { id: n.left as Node | undefined, init: n.right as Node | undefined }
           : undefined;
-    if (target?.id?.type !== 'Identifier') return;
-    const callee =
-      target.init?.type === 'CallExpression' ? (target.init.callee as Node) : undefined;
-    if (
-      (callee?.type === 'Identifier' && callee.name === 'createRequire') ||
-      (callee?.type === 'MemberExpression' && callee.property?.name === 'createRequire')
-    )
-      requireFns.add(target.id.name as string);
+    if (target?.id?.type === 'Identifier' && target.init)
+      assignments.push({ id: target.id.name as string, init: target.init });
   });
+  for (let grew = true; grew; ) {
+    grew = false;
+    for (const { id, init } of assignments) {
+      if (requireFns.has(id)) continue;
+      const holdsRequire =
+        isCreateRequireCall(init) || (init.type === 'Identifier' && requireFns.has(init.name));
+      if (holdsRequire) {
+        requireFns.add(id);
+        grew = true;
+      }
+    }
+  }
 
   walkAst(program, (n) => {
     switch (n.type) {
@@ -344,11 +357,17 @@ export function findModuleReferences(
         const callee = n.callee as Node;
         const first = n.arguments?.[0] as Node | undefined;
         const meta = callee.type === 'MemberExpression' && callee.object?.type === 'MetaProperty';
-        if (callee.type === 'Identifier' && requireFns.has(callee.name as string)) {
+        if (
+          (callee.type === 'Identifier' && requireFns.has(callee.name as string)) ||
+          isCreateRequireCall(callee)
+        ) {
           addDynamic(first);
         } else if (
           callee.type === 'CallExpression' ||
-          isMember(callee, 'require', 'resolve') ||
+          (callee.type === 'MemberExpression' &&
+            callee.object?.type === 'Identifier' &&
+            requireFns.has(callee.object.name) &&
+            callee.property?.name === 'resolve') ||
           (meta && callee.property?.name === 'resolve') ||
           (callee.type === 'MemberExpression' && MODULE_CALL_NAMES.has(callee.property?.name))
         )

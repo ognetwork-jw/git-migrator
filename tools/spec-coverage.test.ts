@@ -4,6 +4,7 @@ import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { configDefaults } from 'vitest/config';
 import {
   collectSpecIds,
   computeReport,
@@ -209,6 +210,19 @@ describe('spec:coverage', () => {
     write(root, 'packages/guidance/src/__fixtures__/z.test.ts', t(inFixtures));
     const report = computeReport(root);
     expect(report.uncovered.sort()).toEqual([never, inDist, inFixtures].sort());
+  });
+
+  it('[TST-002] a src/dist test counts because the unit project runs it too', () => {
+    // Vitest excludes only node_modules and .git by default (no `**/dist/**`), and the unit project
+    // adds no dist exclusion, so `src/dist/*.test.ts` runs. If that changes, so must the walk.
+    expect(configDefaults.exclude).toEqual(['**/node_modules/**', '**/.git/**']);
+    const root = mkdtempSync(join(tmpdir(), 'gm-spec-'));
+    cleanup.push(root);
+    const nested = id('LIF', 26);
+    write(root, 'docs/spec/a.md', nested);
+    write(root, 'packages/guidance/package.json', '{}');
+    write(root, 'packages/guidance/src/dist/a.test.ts', `it('[${nested}] t', () => {});\n`);
+    expect(computeReport(root).uncovered).toEqual([]);
   });
 
   it('[TST-002] strict mode fails closed on missing inputs; bare --root exits 2 in every mode', () => {
