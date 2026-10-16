@@ -76,16 +76,37 @@ function partialSchemaOf(parser: DocumentParser<unknown>): AnySchema | undefined
   return schema;
 }
 
-/** The first forbidden key or excessive depth in a JSON value, found iteratively. */
+/** A UTF-16 surrogate that is not part of a pair. */
+const LONE_SURROGATE = /[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?<![\uD800-\uDBFF])[\uDC00-\uDFFF]/;
+
+/** Text the document store cannot hold (jsonb refuses NUL and unpaired surrogates). */
+function unstorableText(text: string): string | undefined {
+  if (text.includes('\u0000')) return 'contains a NUL character';
+  if (LONE_SURROGATE.test(text)) return 'contains an unpaired surrogate';
+  return undefined;
+}
+
+/**
+ * The first forbidden key, excessive depth, or key or string the store cannot hold in a JSON
+ * value, found iteratively.
+ */
 function structuralIssue(value: unknown): OverlayIssue | undefined {
   const stack: { value: unknown; path: string; depth: number }[] = [{ value, path: '', depth: 0 }];
   while (stack.length > 0) {
     const item = stack.pop();
-    if (item === undefined || typeof item.value !== 'object' || item.value === null) continue;
+    if (item === undefined) continue;
+    if (typeof item.value === 'string') {
+      const problem = unstorableText(item.value);
+      if (problem !== undefined) return { path: item.path, message: `the value ${problem}` };
+      continue;
+    }
+    if (typeof item.value !== 'object' || item.value === null) continue;
     if (item.depth > OVERLAY_MAX_DEPTH) {
       return { path: item.path, message: `nesting deeper than ${OVERLAY_MAX_DEPTH} levels` };
     }
     for (const [key, child] of Object.entries(item.value)) {
+      const keyProblem = unstorableText(key);
+      if (keyProblem !== undefined) return { path: item.path, message: `a key ${keyProblem}` };
       const path = item.path === '' ? key : `${item.path}.${key}`;
       if (OVERLAY_FORBIDDEN_KEYS.includes(key)) {
         return { path, message: `the key "${key}" is not allowed` };

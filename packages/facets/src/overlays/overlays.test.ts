@@ -39,6 +39,21 @@ describe('[DOM-003] overlay document validation', () => {
     expect(validateOverlayDocument(webhooks, { prototype: 1 })[0]?.message).toMatch(/prototype/);
   });
 
+  it('[DOM-003] refuses NUL characters and lone surrogates in strings and keys', () => {
+    const bad = [
+      { hooks: [{ key: 'a\u0000b' }] },
+      { hooks: [{ key: 'a\uD800b' }] },
+      { hooks: [{ key: '\uDC00' }] },
+      { hooks: [{ 'k\u0000': 1 }] },
+      { '\uD83D': 1 },
+    ];
+    for (const doc of bad) {
+      const issues = validateOverlayDocument(webhooks, doc);
+      expect(issues[0]?.message, JSON.stringify(doc)).toMatch(/NUL|surrogate/);
+    }
+    expect(validateOverlayDocument(webhooks, { hooks: [{ key: 'emoji \u{1F600}' }] })).toEqual([]);
+  });
+
   it('[DOM-003] refuses a document over 64 KB and one nested too deeply', () => {
     const big = { hooks: [{ note: 'x'.repeat(OVERLAY_MAX_BYTES) }] };
     expect(validateOverlayDocument(webhooks, big)[0]?.message).toMatch(/larger than/);

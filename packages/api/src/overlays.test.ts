@@ -204,6 +204,25 @@ describe('[DOM-001] [DOM-003] [UI-032] overlay writes are validated against the 
     expect(({} as Record<string, unknown>).polluted).toBeUndefined();
   });
 
+  it('[DOM-003] refuses NUL and lone surrogates in strings and keys with 422, not a storage error', async () => {
+    const before = await t.db.privileged.overlay.count();
+    for (const raw of [
+      '{"hooks":[{"key":"a\\u0000b"}]}',
+      '{"hooks":[{"key":"a\\ud800b"}]}',
+      '{"hooks":[{"\\udc00":1}]}',
+      '{"a\\u0000":1}',
+    ]) {
+      const body = `{"routeId":"route-1","facetKey":"webhooks","data":${raw}}`;
+      const problem = await expectProblem(
+        await call('/overlays', { method: 'POST', role: 'admin', raw: body }),
+        422,
+        'validation_failed',
+      );
+      expect(problem.errors?.[0]?.message, raw).toMatch(/NUL|surrogate/);
+    }
+    expect(await t.db.privileged.overlay.count()).toBe(before);
+  });
+
   it('[DOM-003] refuses a document over 64 KB', async () => {
     const problem = await expectProblem(
       await create({ hooks: [{ url: `https://h.test/${'a'.repeat(70_000)}` }] }),
