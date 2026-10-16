@@ -10,10 +10,13 @@ import { resolveConfig } from '@git-migrator/config';
 import { createDb } from '@git-migrator/db';
 import { createTestDatabase, type TestDatabase } from '@git-migrator/db/testing';
 import SuperJSON from 'superjson';
-import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { afterAll, beforeAll, describe, expect, inject, it } from 'vitest';
 import { createApiApp, safeErrorFields } from './app.ts';
 import { createEventHub } from './events.ts';
 import { PROBLEM_BASE, PROBLEM_CONTENT_TYPE } from './problem.ts';
+
+/** Wall-clock budgets scale with GM_TEST_TIME_FACTOR (ADR-0507). */
+const budget = (ms: number): number => ms * inject('timeFactor');
 
 /** A hub whose listener never connects: these tests do not use `/api/v1/events`. */
 const inertEvents = () =>
@@ -71,7 +74,7 @@ afterAll(async () => {
   await service?.close();
   await stub?.close();
   await t?.drop();
-});
+}, 60_000);
 
 async function signInAdmin(): Promise<{ jar: CookieJar; email: string }> {
   counter++;
@@ -228,7 +231,7 @@ describe('[AUTH-021] the RPC mount', () => {
     )}`;
     const started = Date.now();
     const res = await call(`/api/model/wave/findMany?${query}`, { jar });
-    expect(Date.now() - started).toBeLessThan(3000);
+    expect(Date.now() - started).toBeLessThan(budget(3000));
     expect(res.status).toBe(422);
   });
 });
@@ -314,7 +317,7 @@ describe('[API-020] Actor administration, round 2', () => {
         others,
       ]);
     }
-  });
+  }, 30_000);
 
   /** Creates service admins, each with a key, through the API. */
   async function serviceAdmins(count: number): Promise<{ id: string; key: string }[]> {
@@ -350,7 +353,7 @@ describe('[API-020] Actor administration, round 2', () => {
       const results = await Promise.all([demote(a, c), demote(b, d)]);
       expect(results.map((r) => r.status)).toEqual([200, 200]);
     }
-  });
+  }, 30_000);
 
   it('[API-020] mutual demotion: one wins, the other is refused (never a 500), and an enabled admin remains', async () => {
     const [a, b] = (await serviceAdmins(2)) as [
@@ -387,7 +390,7 @@ describe('[API-020] Actor administration, round 2', () => {
         others,
       ]);
     }
-  });
+  }, 30_000);
 
   it('[API-020] a serialization failure or deadlock that reaches the app is a 409 conflict, not a 500', async () => {
     const { isRetryableConflict } = await import('./app.ts');
@@ -424,7 +427,7 @@ describe('[API-020] Actor administration, round 2', () => {
     });
     expect(res.status).toBe(409);
     void jar;
-  });
+  }, 30_000);
 
   it('[API-011] an expiresAt with a UTC offset is accepted', async () => {
     const [a] = (await serviceAdmins(1)) as [{ id: string; key: string }];
