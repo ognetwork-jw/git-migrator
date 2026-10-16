@@ -56,6 +56,10 @@ const CONFIG_KEYS = [
   'environmentProtection',
 ] as const;
 
+/** The answer to a request that started before a reset (ADR-0075): it must not touch the new world. */
+const staleBody = () =>
+  errorBody(new GhError(409, 'The fake was reset while this request was running'));
+
 function pickConfig(body: Record<string, unknown>): Partial<RuntimeConfig> {
   const out: Record<string, unknown> = {};
   for (const k of CONFIG_KEYS) if (k in body) out[k] = body[k];
@@ -94,18 +98,29 @@ export function createFakeGitHub(options: FakeGitHubOptions = {}): FakeGitHub {
 
   // A reset first stops admitting API requests (409), waits for the ones in flight to finish, then
   // wipes the git server and the state, so no request ever writes into the new world (ADR-0075).
+  // In-flight requests are counted per generation: a straggler the bounded drain gave up on belongs
+  // to an old generation and never delays a later reset; the generation guard turns it into a 409.
   let resetting = false;
-  let inflight = 0;
+  /** Set when a fixture builder failed: the world is half built until a reset succeeds. */
+  let incomplete = false;
+  const inflight = new Map<number, number>();
   let idle: (() => void) | undefined;
   let lastReset: Promise<void> = Promise.resolve();
   app.use('*', async (c, next) => {
     if (c.req.path === '/__reset') return next();
     if (resetting)
       return c.json(errorBody(new GhError(409, 'The fake is being reset, try again')), 409);
+    if (incomplete)
+      return c.json(
+        errorBody(new GhError(503, 'The last reset of the fake failed; reset it again')),
+        503,
+      );
     if (c.req.path.startsWith('/__')) return next(); // control plane: refused during a reset, not counted
-    inflight += 1;
+    const generation = state.generation;
+    inflight.set(generation, (inflight.get(generation) ?? 0) + 1);
     try {
       await next();
+      if (state.generation !== generation) c.res = c.json(staleBody(), 409);
       const method = c.req.method;
       const write =
         method === 'GET' || method === 'HEAD'
@@ -115,8 +130,10 @@ export function createFakeGitHub(options: FakeGitHubOptions = {}): FakeGitHub {
             : true;
       requestLog.push({ method, path: c.req.path, status: c.res.status, write });
     } finally {
-      inflight -= 1;
-      if (inflight === 0) idle?.();
+      const left = (inflight.get(generation) ?? 1) - 1;
+      if (left > 0) inflight.set(generation, left);
+      else inflight.delete(generation);
+      if (generation === state.generation && left <= 0) idle?.();
     }
   });
 
@@ -129,7 +146,7 @@ export function createFakeGitHub(options: FakeGitHubOptions = {}): FakeGitHub {
       );
     resetting = true;
     try {
-      if (inflight > 0) {
+      if ((inflight.get(state.generation) ?? 0) > 0) {
         // Bounded: a stalled request must not hang the reset (its late result becomes a 409).
         let timer: ReturnType<typeof setTimeout> | undefined;
         await Promise.race([
@@ -149,7 +166,9 @@ export function createFakeGitHub(options: FakeGitHubOptions = {}): FakeGitHub {
       limiter.clear();
       requestLog.length = 0;
       state.fixture = fixture || 'empty';
+      incomplete = true;
       await run(state);
+      incomplete = false;
     } finally {
       resetting = false;
       idle = undefined;
@@ -210,6 +229,7 @@ export function createFakeGitHub(options: FakeGitHubOptions = {}): FakeGitHub {
   // -- GraphQL --------------------------------------------------------------------------------------
 
   app.post('/graphql', async (c) => {
+    const generation = state.generation;
     const auth = authenticate(state, c.req.header('authorization'));
     if (auth.kind === 'none') throw new GhError(401, 'Requires authentication');
     if (auth.kind === 'jwt') throw new GhError(403, 'Resource not accessible by integration');
@@ -224,6 +244,7 @@ export function createFakeGitHub(options: FakeGitHubOptions = {}): FakeGitHub {
     } catch {
       throw new GhError(400, 'Problems parsing JSON');
     }
+    if (state.generation !== generation) return c.json(staleBody(), 409);
     if (typeof body.query !== 'string')
       throw new GhError(400, 'A query attribute must be specified and must be a string.');
     if (isMutation(body.query, body.operationName)) graphqlMutations.add(c.req.raw);
@@ -252,6 +273,7 @@ export function createFakeGitHub(options: FakeGitHubOptions = {}): FakeGitHub {
   // -- Git LFS batch API (existence check, provider doc) ---------------------------------------------
 
   app.post('/:owner/:name{[^/]+\\.git}/info/lfs/objects/batch', async (c) => {
+    const generation = state.generation;
     const auth: AuthCtx = authenticate(state, c.req.header('authorization'));
     const jsonLfs = (body: unknown, status = 200) => {
       c.header('content-type', 'application/vnd.git-lfs+json');
@@ -280,6 +302,7 @@ export function createFakeGitHub(options: FakeGitHubOptions = {}): FakeGitHub {
         operation?: string;
         objects?: { oid: string; size: number }[];
       } | null;
+      if (state.generation !== generation) return c.json(staleBody(), 409);
       if (
         !body ||
         (body.operation !== 'download' && body.operation !== 'upload') ||
@@ -336,6 +359,7 @@ export function createFakeGitHub(options: FakeGitHubOptions = {}): FakeGitHub {
   // Upload target for the `upload` action: authenticated like the batch call (installation auth,
   // repository restriction, Contents: write), the body must hash to the oid and match the announced size.
   app.put('/lfs-objects/:owner/:name/:oid', async (c) => {
+    const generation = state.generation;
     const auth = authenticate(state, c.req.header('authorization'));
     const repo = state.findRepo(c.req.param('owner') as string, c.req.param('name') as string);
     if (auth.kind !== 'installation') throw new GhError(401, 'Credentials needed');
@@ -344,6 +368,7 @@ export function createFakeGitHub(options: FakeGitHubOptions = {}): FakeGitHub {
       throw new GhError(403, 'Resource not accessible by integration');
     const oid = c.req.param('oid') as string;
     const body = Buffer.from(await c.req.arrayBuffer());
+    if (state.generation !== generation) return c.json(staleBody(), 409);
     if (createHash('sha256').update(body).digest('hex') !== oid)
       throw new GhError(422, 'The object content does not match its oid');
     const announced = c.req.query('size');

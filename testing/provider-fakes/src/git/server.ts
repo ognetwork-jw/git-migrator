@@ -47,7 +47,7 @@ export interface GitSideOptions {
   /**
    * With `refPolicyFlag` the pre-receive hook only calls `refPolicy` when the file
    * `{bare repo}/gm-policy-active` exists when the hook runs (faster pushes for repositories without
-   * rules). The provider fake keeps the file in step with its rules (`syncPolicyFlag`), so a rule
+   * rules). The provider fake keeps the file in step with its rules (`repositoryHooks.policyChanged`, `fake.syncPolicy`), so a rule
    * committed before the hook runs is always enforced. Pushes to `refs/pull/*` are denied by the hook
    * itself whenever `refPolicy` is set, flag or not.
    */

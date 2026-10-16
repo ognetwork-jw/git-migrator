@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import { createFakeGitHub } from './app.ts';
 import { jsonOf, world } from './harness.ts';
+import { createRule } from './rules.ts';
 import { DEFAULT_GITHUB_PORT, startFakeGitHub } from './start.ts';
 
 // These tests spawn git or servers; a loaded machine needs more than the 5 s default.
@@ -213,6 +214,77 @@ describe('startFakes', () => {
     const running = await startFakes({ bitbucketPort: 0, gitPort: 0 });
     try {
       expect(running.github).toBeUndefined();
+    } finally {
+      await running.close();
+    }
+  });
+});
+
+describe('startFakes with caller repository hooks', () => {
+  it('[TST-013] caller hooks run beside the git wiring; a REST create straddling a reset leaves no record, bare repository or policy flag', async () => {
+    const { startFakes } = await import('../start.ts');
+    const { existsSync } = await import('node:fs');
+    const { join } = await import('node:path');
+    const { POLICY_FLAG_FILE } = await import('../git/index.ts');
+    const calls: string[] = [];
+    let release: () => void = () => {};
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const running = await startFakes({
+      bitbucketPort: 0,
+      githubPort: 0,
+      gitPort: 0,
+      github: {
+        repositoryHooks: {
+          created: async (r) => {
+            calls.push(`created ${r.name}`);
+            if (r.name === 'late') await gate;
+          },
+          policyChanged: (r, active) => void calls.push(`policy ${r.name} ${active}`),
+          deleted: (r) => void calls.push(`deleted ${r.name}`),
+        },
+      },
+    });
+    try {
+      const gh = running.github;
+      const git = running.git;
+      if (!gh || !git) throw new Error('fakes not started');
+      const call = (method: string, path: string, body?: unknown) =>
+        fetch(`http://127.0.0.1:${gh.port}${path}`, {
+          method,
+          headers: { authorization: `Bearer ${gh.token()}`, 'content-type': 'application/json' },
+          body: body === undefined ? undefined : JSON.stringify(body),
+        });
+      // The wiring still creates the bare repository and keeps the policy flag.
+      expect(
+        (await call('POST', '/orgs/acme/repos', { name: 'app', auto_init: true })).status,
+      ).toBe(201);
+      const dir = git.repoDir('target', 'acme/app');
+      expect(existsSync(dir)).toBe(true);
+      const repo = gh.state.findRepo('acme', 'app');
+      if (!repo) throw new Error('repository missing');
+      createRule(gh.state, repo, 'main', {});
+      expect(existsSync(join(dir, POLICY_FLAG_FILE))).toBe(true);
+      // A create held in flight by the caller hook, then a reset: the real wiring cleans up after it.
+      const pending = call('POST', '/orgs/acme/repos', { name: 'late' });
+      while (!existsSync(git.repoDir('target', 'acme/late')))
+        await new Promise((r) => setTimeout(r, 5));
+      const reset = gh.reset();
+      await new Promise((r) => setTimeout(r, 20));
+      release();
+      expect((await pending).status).toBe(201);
+      await reset;
+      expect(gh.state.repos.size).toBe(0);
+      expect(existsSync(dir)).toBe(false);
+      expect(existsSync(git.repoDir('target', 'acme/late'))).toBe(false);
+      expect(calls).toEqual([
+        'created app',
+        'policy app true',
+        'created late',
+        'deleted app',
+        'deleted late',
+      ]);
     } finally {
       await running.close();
     }

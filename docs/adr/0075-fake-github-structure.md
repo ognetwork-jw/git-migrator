@@ -28,3 +28,7 @@ TST-011 lists what the fake GitHub implements but not how it is started, reset, 
 ## Consequences
 
 T-043 builds the GitHub side of the TST-012 world with `GitHubState` builders inside a `world` fixture and seeds the `target` side of the git server; it can switch `startFakes` to default-on when it adds the fixture to the e2e start script.
+
+## Correction (claude/followups-provider-fakes)
+
+The generation guard originally covered the REST routes only, so a GraphQL mutation or an LFS upload still running when the bounded drain gave up could write into the new world with the old world's token, and a straggler kept the in-flight count above zero so every later reset waited the full `resetDrainMs`. GraphQL and both LFS endpoints now check the generation after reading their body and answer `409`, and in-flight requests are counted per generation. A fixture builder that throws leaves the API and `/__state` at `503` until a reset succeeds (as the fake Bitbucket does, ADR-0130), and `startFakes` runs a caller's `repositoryHooks` after the git wiring's instead of replacing them.

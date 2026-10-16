@@ -101,6 +101,37 @@ function githubGitWiring(git: FakeGitServer): FakeGitHubOptions {
   };
 }
 
+type RepositoryHooks = NonNullable<FakeGitHubOptions['repositoryHooks']>;
+
+/**
+ * A caller's repository hooks run after the git wiring's, so passing some does not drop the bare
+ * repository management or the policy flag.
+ */
+function mergeHooks(
+  wiring: RepositoryHooks | undefined,
+  caller: RepositoryHooks | undefined,
+): RepositoryHooks | undefined {
+  if (!wiring || !caller) return caller ?? wiring;
+  return {
+    created: async (repo) => {
+      await wiring.created?.(repo);
+      await caller.created?.(repo);
+    },
+    renamed: async (repo, oldName) => {
+      await wiring.renamed?.(repo, oldName);
+      await caller.renamed?.(repo, oldName);
+    },
+    deleted: async (repo) => {
+      await wiring.deleted?.(repo);
+      await caller.deleted?.(repo);
+    },
+    policyChanged: (repo, active) => {
+      wiring.policyChanged?.(repo, active);
+      caller.policyChanged?.(repo, active);
+    },
+  };
+}
+
 /** Git server target side options that tie access and pushes to the fake GitHub's tokens and rules. */
 function githubGitServerSide(getState: () => GitHubState | undefined): GitSideOptions {
   return githubGitAccess(getState);
@@ -145,10 +176,12 @@ export async function startFakes(options: StartOptions = {}): Promise<RunningFak
     ...(git ? { gitBaseUrl: `${git.baseUrl}/source` } : {}),
     ...options.bitbucket,
   });
+  const wiring = git ? githubGitWiring(git) : {};
   const github = withGitHub
     ? createFakeGitHub({
-        ...(git ? githubGitWiring(git) : {}),
+        ...wiring,
         ...options.github,
+        repositoryHooks: mergeHooks(wiring.repositoryHooks, options.github?.repositoryHooks),
       })
     : undefined;
   githubState = github?.state;
