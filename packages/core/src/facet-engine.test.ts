@@ -1227,9 +1227,26 @@ describe('[FAC-005] review round 1 hardening', () => {
     expect(err(withFinding('/rules[name=a]', '/rules[name=a]'))).toBe('ok');
     expect(err(withFinding('/rules[name=a]/level', '/rules[name=a]'))).toBe('ok');
     expect(err(withFinding('/rules[name=a]', '/rules[name=a]/level'))).toBe('ok');
-    expect(err(withFinding('/rules[name=a]', ''))).toBe('ok');
+    expect(err(withFinding('/rules[name=a]', ''))).toBe('uncovered_decision');
     expect(err(withFinding('/rules[name=a]', '/rules[name=b]'))).toBe('uncovered_decision');
     expect(err(withFinding('/rules[name=a]', '/size'))).toBe('uncovered_decision');
+  });
+
+  it('[ADP-040] a root-path finding covers only a root decision', () => {
+    // Only an `unreadable` decision may sit on the root path.
+    const rooted = (path: string, fidelity: 'unsupported' | 'unreadable') => ({
+      translate: (s: Widget) => ({
+        ...emptyResult(s),
+        decisions: [{ path, fidelity, accepted: false as const }],
+        warnings: [{ code: 'widget.note', paths: [''], params: {} }],
+      }),
+    });
+    for (const fidelity of ['unsupported', 'unreadable'] as const) {
+      expect(() => run(rooted('/rules[name=a]', fidelity))).toThrow(
+        expect.objectContaining({ code: 'uncovered_decision' }),
+      );
+    }
+    expect(() => run(rooted('', 'unreadable'))).not.toThrow();
   });
 
   it('[LIF-063] masking credit does not depend on record order; ids are returned', () => {
