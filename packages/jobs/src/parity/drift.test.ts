@@ -255,9 +255,11 @@ describe('[LIF-065] the drift check as a job', () => {
       'deploy-keys': KEYS,
       'git-refs': REFS,
     });
-    const handler = parityHandlers(parityDeps(db(), t.db.pool, s, { driftReadsSource: false }))[
-      'parity.migration'
-    ] as unknown as (payload: unknown, ctx: unknown) => Promise<unknown>;
+    const handler = parityHandlers(parityDeps(db(), t.db.pool, s, { driftReadsSource: false }), {
+      enqueueParity: async () => {
+        throw new Error('not superseded: nothing to queue');
+      },
+    })['parity.migration'] as unknown as (payload: unknown, ctx: unknown) => Promise<unknown>;
     const ctx = { shutdown: never.signal, log: parityDeps(db(), t.db.pool, s).log };
     // From the Snapshots the source description is `edited`, so the target equals it: no drift.
     await handler({ migrationId: w.migrationId, drift: true }, ctx);

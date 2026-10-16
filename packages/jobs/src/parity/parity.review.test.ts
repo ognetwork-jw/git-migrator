@@ -19,7 +19,7 @@ import {
   silent,
   transientError,
 } from './parity.fixture.ts';
-import { runParity } from './run.ts';
+import { parityHandlers, runParity } from './run.ts';
 import { createVerifyStep } from './step.ts';
 
 vi.setConfig({ testTimeout: 30_000 });
@@ -74,6 +74,46 @@ describe('a stale check never overwrites a newer one (ADR-0396)', () => {
       status: 'drifted',
       statusBeforeDrift: 'verified',
     });
+  });
+
+  it('[LIF-062] a superseded check queues a fresh one, so a later-started check that lost the race is compared again', async () => {
+    const w = await seedParityWorld(db(), 'verified');
+    let release: () => void = () => undefined;
+    const gate = new Promise<void>((r) => {
+      release = r;
+    });
+    let enter: () => void = () => undefined;
+    const entered = new Promise<void>((r) => {
+      enter = r;
+    });
+    const sim = new Sim().differ('repository-settings', SETTINGS, {
+      ...SETTINGS,
+      description: 'x',
+    });
+    const different = sim.target.get('repository-settings') as () => unknown;
+    sim.target.set('repository-settings', async () => {
+      enter();
+      await gate;
+      return different();
+    });
+    const queued: Array<[string, unknown]> = [];
+    const handler = parityHandlers(parityDeps(db(), t.db.pool, sim), {
+      enqueueParity: async (id, opts) => {
+        queued.push([id, opts]);
+        return {} as never;
+      },
+    })['parity.migration'] as unknown as (payload: unknown, ctx: unknown) => Promise<unknown>;
+    const ctx = { shutdown: never.signal, log: silent };
+    const running = handler({ migrationId: w.migrationId }, ctx);
+    await entered;
+    // An earlier-started check commits first and moves the generation.
+    await db()
+      .$executeRaw`UPDATE app.migration SET parity_generation = parity_generation + 1 WHERE id = ${w.migrationId}`;
+    release();
+    expect(await running).toEqual({ skipped: 'superseded' });
+    // Its newer `different` is not lost: a fresh check is queued for the Migration.
+    expect(queued).toEqual([[w.migrationId, {}]]);
+    expect((await migration(w.migrationId)).status).toBe('verified');
   });
 
   it('[LIF-061] every stored check bumps the generation, and a stored result is never replaced by an older stamp', async () => {

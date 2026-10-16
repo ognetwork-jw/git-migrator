@@ -342,7 +342,7 @@ export async function startWorker(options: StartWorkerOptions): Promise<WorkerHa
         metrics: recorders,
       }),
       ...feederHandlers({ db: db.privileged, runtime: jobs, quota, log }),
-      ...parityHandlers(parityDeps),
+      ...parityHandlers(parityDeps, jobs),
       // LIF-065: the daily sweep enqueues a drift check per verified Migration.
       ...driftHandlers({
         db: db.privileged,

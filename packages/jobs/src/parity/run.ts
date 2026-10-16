@@ -5,7 +5,7 @@
  */
 import { publishEventIn } from '@git-migrator/db';
 import { lockMigration } from '../run/store.ts';
-import type { JobHandlers } from '../runtime.ts';
+import type { JobHandlers, JobRuntime } from '../runtime.ts';
 import { computeParity, type ParityDeps, type ParityOptions, type ParitySkip } from './compute.ts';
 import { storeParity } from './store.ts';
 import { applyParityVerdict, type VerdictApplied } from './verdict.ts';
@@ -92,15 +92,29 @@ export async function runParity(
   });
 }
 
-/** The `parity.migration` handler (JOB-050: endpoint Migrations on `schedules.endpointParity`). */
-export function parityHandlers(deps: ParityDeps): JobHandlers {
+/**
+ * The `parity.migration` handler (JOB-050: endpoint Migrations on `schedules.endpointParity`).
+ * A check that another one overtook while it was reading stores nothing (`superseded`), although
+ * it may have started later and read newer state; it queues a fresh check through `runtime`, so
+ * the newest state is always compared once more (ADR-0396).
+ */
+export function parityHandlers(
+  deps: ParityDeps,
+  runtime: Pick<JobRuntime, 'enqueueParity'>,
+): JobHandlers {
   return {
-    'parity.migration': async ({ migrationId, drift }, ctx) =>
-      runParity(deps, migrationId, {
+    'parity.migration': async ({ migrationId, drift }, ctx) => {
+      const result = await runParity(deps, migrationId, {
         shutdown: ctx.shutdown,
         pool: 'background',
         log: ctx.log,
         ...(drift ? { drift: { readsSource: deps.driftReadsSource ?? false } } : {}),
-      }),
+      });
+      if (result.skipped === 'superseded') {
+        // The running job still holds the deduplication id; `keepLastIfActive` queues this one.
+        await runtime.enqueueParity(migrationId, drift ? { drift: true } : {});
+      }
+      return result;
+    },
   };
 }
