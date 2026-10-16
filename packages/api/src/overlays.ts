@@ -149,6 +149,16 @@ function checkDocument(
   }
 }
 
+type Tx = Pick<Db, 'overlay' | '$queryRaw'>;
+
+/** Locks the Overlay row (`FOR UPDATE`) and reads it; 404 when it is gone, also after the wait. */
+async function lockedOverlay(tx: Tx, id: string): Promise<OverlayRow> {
+  await tx.$queryRaw`SELECT id FROM app.overlay WHERE id = ${id} FOR UPDATE`;
+  const row = await tx.overlay.findUnique({ where: { id } });
+  if (!row) throw new ProblemError('not_found');
+  return row;
+}
+
 export function createOverlays(deps: OverlayDeps) {
   const { privileged } = deps.db;
   const app = new OpenAPIHono<Env>({ defaultHook: deps.validationHook as never });
@@ -159,17 +169,16 @@ export function createOverlays(deps: OverlayDeps) {
       const body = c.req.valid('json');
       const registry = requireService(deps.services, 'registry');
       checkDocument(registry, body.facetKey, body.data, 'data');
-      const route = await privileged.route.findUnique({
-        where: { id: body.routeId },
-        select: { id: true },
-      });
-      if (!route) {
-        throw new ProblemError('validation_failed', {
-          errors: [{ path: 'routeId', message: 'unknown Route' }],
-        });
-      }
       const by = c.get('principal').actor.id;
       const row = await privileged.$transaction(async (tx) => {
+        // FOR SHARE: a concurrent Route delete waits for this insert, or this sees it gone.
+        const route = await tx.$queryRaw<{ id: string }[]>`
+          SELECT id FROM app.route WHERE id = ${body.routeId} FOR SHARE`;
+        if (route.length === 0) {
+          throw new ProblemError('validation_failed', {
+            errors: [{ path: 'routeId', message: 'unknown Route' }],
+          });
+        }
         const created = await tx.overlay.create({
           data: {
             routeId: body.routeId,
@@ -205,11 +214,11 @@ export function createOverlays(deps: OverlayDeps) {
         });
       }
       const registry = requireService(deps.services, 'registry');
-      const before = await privileged.overlay.findUnique({ where: { id } });
-      if (!before) throw new ProblemError('not_found');
-      if (body.data !== undefined) checkDocument(registry, before.facetKey, body.data, 'data');
       const by = c.get('principal').actor.id;
       const row = await privileged.$transaction(async (tx) => {
+        // Read under the row lock: the audited `from` is the value this update replaces.
+        const before = await lockedOverlay(tx, id);
+        if (body.data !== undefined) checkDocument(registry, before.facetKey, body.data, 'data');
         const updated = await tx.overlay.update({
           where: { id },
           data: {
@@ -241,8 +250,7 @@ export function createOverlays(deps: OverlayDeps) {
       const { id } = c.req.valid('param');
       const by = c.get('principal').actor.id;
       await privileged.$transaction(async (tx) => {
-        const before = await tx.overlay.findUnique({ where: { id } });
-        if (!before) throw new ProblemError('not_found');
+        const before = await lockedOverlay(tx, id);
         await tx.overlay.delete({ where: { id } });
         await tx.auditEvent.create({
           data: {
