@@ -47,6 +47,15 @@ function setup(options: FakeBitbucketOptions = {}) {
     gitRoot: '/srv/git/acme/auto-ok.git',
   });
   state.addBranch('acme', 'auto-ok', 'feature/x', { defaultMergeStrategy: 'squash' });
+  const mainHash = repo.branches[0]?.hash ?? '';
+  state.addTag('acme', 'auto-ok', { name: 'v1.0.1', hash: mainHash });
+  state.addTag('acme', 'auto-ok', {
+    name: 'v1.0.0',
+    hash: mainHash,
+    message: 'Release v1.0.0\n',
+    tagger: 'Fake Tagger <tagger@example.invalid>',
+    date: '2023-11-14T22:13:20+00:00',
+  });
   state.addBranchRestriction('acme', 'auto-ok', { kind: 'force', pattern: '*' });
   state.addBranchRestriction('acme', 'auto-ok', { kind: 'delete', pattern: 'release/*' });
   state.addBranchRestriction('acme', 'auto-ok', {
@@ -185,6 +194,16 @@ const ENDPOINTS: { name: string; url: string; template: string; noSchema?: boole
     template: '/repositories/{workspace}/{repo_slug}/effective-default-reviewers',
   },
   {
+    name: 'tags',
+    url: '/2.0/repositories/acme/auto-ok/refs/tags',
+    template: '/repositories/{workspace}/{repo_slug}/refs/tags',
+  },
+  {
+    name: 'one tag',
+    url: '/2.0/repositories/acme/auto-ok/refs/tags/v1.0.0',
+    template: '/repositories/{workspace}/{repo_slug}/refs/tags/{name}',
+  },
+  {
     name: 'main branch',
     url: '/2.0/repositories/acme/auto-ok/refs/branches/main',
     template: '/repositories/{workspace}/{repo_slug}/refs/branches/{name}',
@@ -256,6 +275,43 @@ const ENDPOINTS: { name: string; url: string; template: string; noSchema?: boole
     noSchema: true,
   },
 ];
+
+describe('[TST-010] tags and file metadata', () => {
+  it('[TST-010] refs/tags lists tags in git order with the peeled commit as target; annotated ones carry message, tagger and date', async () => {
+    const { fake, repo } = setup();
+    const { body } = await get(fake, '/2.0/repositories/acme/auto-ok/refs/tags');
+    expect(body.values.map((t: Loose) => t.name)).toEqual(['v1.0.0', 'v1.0.1']);
+    expect(body.values[0]).toMatchObject({
+      type: 'tag',
+      target: { type: 'commit', hash: repo.branches[0]?.hash },
+      message: 'Release v1.0.0\n',
+      tagger: { raw: 'Fake Tagger <tagger@example.invalid>' },
+    });
+    expect(body.values[1].message).toBeUndefined();
+    const filtered = await get(fake, '/2.0/repositories/acme/auto-ok/refs/tags?q=name="v1.0.1"');
+    expect(filtered.body.values.map((t: Loose) => t.name)).toEqual(['v1.0.1']);
+    expect((await get(fake, '/2.0/repositories/acme/auto-ok/refs/tags/nope')).res.status).toBe(404);
+  });
+
+  it('[TST-010] src with format=meta describes the file instead of returning it; a missing file stays 404', async () => {
+    const { fake, repo } = setup();
+    // The operation's 200 schema is the directory listing, so the body follows the documented
+    // `?format=meta` example (a `commit_file`) instead of a schema check.
+    const meta = await get(fake, '/2.0/repositories/acme/auto-ok/src/main/src/a.txt?format=meta');
+    expect(meta.body).toEqual({
+      type: 'commit_file',
+      path: 'src/a.txt',
+      commit: { type: 'commit', hash: repo.branches[0]?.hash },
+      attributes: [],
+      size: 1,
+    });
+    const raw = await get(fake, '/2.0/repositories/acme/auto-ok/src/main/src/a.txt');
+    expect(raw.body).toBe('a');
+    expect(
+      (await get(fake, '/2.0/repositories/acme/auto-ok/src/main/nope.yml?format=meta')).res.status,
+    ).toBe(404);
+  });
+});
 
 describe('[TST-010] responses conform to the saved Bitbucket OpenAPI document', () => {
   for (const ep of ENDPOINTS) {

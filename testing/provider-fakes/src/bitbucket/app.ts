@@ -790,6 +790,27 @@ export function createFakeBitbucket(options: FakeBitbucketOptions = {}): FakeBit
     return one(c, ser(c).branch(b));
   });
 
+  // `q` and `sort` are defined for this operation (natural `sort=name` ordering is not modelled).
+  api.get('/2.0/repositories/:ws/:slug/refs/tags', (c) => {
+    const { repo } = getRepo(c);
+    const s = ser(c);
+    return list(
+      c,
+      [...repo.tags]
+        .sort((a, b) => (a.name < b.name ? -1 : a.name > b.name ? 1 : 0))
+        .map((t) => s.tag(t)),
+      { filterable: true },
+    );
+  });
+
+  api.get('/2.0/repositories/:ws/:slug/refs/tags/:name', (c) => {
+    const { repo } = getRepo(c);
+    const name = c.req.param('name') ?? '';
+    const t = repo.tags.find((x) => x.name === name);
+    if (!t) throw notFound(`Tag '${name}' not found`);
+    return one(c, ser(c).tag(t));
+  });
+
   api.get('/2.0/repositories/:ws/:slug/hooks', (c) => {
     const { ws, repo } = getRepo(c);
     const s = ser(c);
@@ -901,6 +922,18 @@ export function createFakeBitbucket(options: FakeBitbucketOptions = {}): FakeBit
     const prefix = `/2.0/repositories/${ws.slug}/${repo.slug}/src/`;
     const raw = c.req.path.startsWith(prefix) ? c.req.path.slice(prefix.length) : '';
     const rest = raw.split('/').slice(1).map(decodeURIComponent).join('/').replace(/\/+$/, '');
+    if (rest !== '' && rest in repo.files && c.req.query('format') === 'meta') {
+      // `?format=meta`: the file's properties instead of its contents (`commit_file`).
+      const commit =
+        repo.branches.find((b) => b.name === ref || b.hash === ref) ?? repo.branches[0];
+      return one(c, {
+        type: 'commit_file',
+        path: rest,
+        commit: ser(c).commitRef(commit?.hash ?? ''),
+        attributes: [],
+        size: Buffer.byteLength(repo.files[rest] as string),
+      });
+    }
     if (rest !== '' && rest in repo.files) {
       return c.body(repo.files[rest] as string, 200, {
         'Content-Type': 'text/plain; charset=utf-8',

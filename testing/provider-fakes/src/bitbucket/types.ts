@@ -65,6 +65,16 @@ export interface FakeBranch {
   defaultMergeStrategy: MergeStrategy;
 }
 
+/** A tag (`refs/tags/{name}`). `hash` is the commit it points at (annotated tags peeled). */
+export interface FakeTag {
+  name: string;
+  hash: string;
+  /** Annotated tags only: message, tagger (`Name <email>`) and date. */
+  message?: string;
+  tagger?: string;
+  date?: string;
+}
+
 export interface FakeBranchRestriction {
   id: number;
   kind: BranchRestrictionKind;
@@ -166,6 +176,7 @@ export interface FakeRepository {
   /** In-memory file tree served by `src/{commit}/{path}`: path -> text content. */
   files: Record<string, string>;
   branches: FakeBranch[];
+  tags: FakeTag[];
   userPermissions: { accountId: string; permission: RepoPermission }[];
   groupPermissions: { slug: string; permission: RepoPermission }[];
   branchRestrictions: FakeBranchRestriction[];
