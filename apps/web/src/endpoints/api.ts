@@ -126,6 +126,10 @@ export interface FindingRow {
   readonly kind: FindingKind;
   readonly code: string;
   readonly fieldPaths: readonly string[];
+  /** The finding's guidance parameters (UI-040). */
+  readonly params?: unknown;
+  /** Secret guidance parameters; null for viewers (ADR-0503). */
+  readonly secretParams?: unknown;
 }
 
 export const findingsKey = (analysisId: string) => ['endpoints', 'findings', analysisId] as const;
@@ -135,7 +139,15 @@ export const fetchFindings = (analysisId: string) =>
   findMany<FindingRow>('planItem', {
     where: { analysisId },
     orderBy: [{ order: 'asc' }, { id: 'asc' }],
-    select: { id: true, facetKey: true, kind: true, code: true, fieldPaths: true },
+    select: {
+      id: true,
+      facetKey: true,
+      kind: true,
+      code: true,
+      fieldPaths: true,
+      params: true,
+      secretParams: true,
+    },
   });
 
 /** `GET /api/v1/migrations/{id}/diff` (API-020): source, desired and target side by side. */

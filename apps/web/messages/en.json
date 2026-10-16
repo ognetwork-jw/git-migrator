@@ -1082,11 +1082,6 @@
         "post_task": "Tasks after the Run",
         "warning": "Warnings"
       },
-      "finding": {
-        "code": "Code",
-        "facet": "Facet",
-        "paths": "Fields"
-      },
       "facet": {
         "source": "Source",
         "desired": "Desired",

@@ -1,12 +1,14 @@
 'use client';
 
 import { can } from '@git-migrator/auth/capabilities';
+import { joinSecretParams } from '@git-migrator/guidance';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Alert, Button, Card, Collapse, Empty, Space, Table, Tabs, Tag, Typography } from 'antd';
 import Link from 'next/link';
 import { useTranslations } from 'next-intl';
 import { useState } from 'react';
 import { formatDateTime } from '../format.ts';
+import { GuidanceView } from '../guidance/guidance-view.tsx';
 import { ErrorAlert } from '../mapping/shared.tsx';
 import { TypedNameDialog } from '../migration-detail/dialogs.tsx';
 import { PLACEMENT_UNKNOWN_BLOCKER } from '../migration-detail/rules.ts';
@@ -21,7 +23,6 @@ import {
   type EndpointRunKind,
   endpointMigrationKey,
   type FindingKind,
-  type FindingRow,
   fetchDiff,
   fetchEndpointMigration,
   fetchFindings,
@@ -115,29 +116,22 @@ function FindingsTab({ analysisId }: { readonly analysisId: string | null }) {
             <Typography.Title level={5} className="mt-0">
               {t(`kind.${kind}`)} ({ofKind.length})
             </Typography.Title>
-            <Table<FindingRow>
-              rowKey="id"
-              size="small"
-              loading={findings.isLoading}
-              dataSource={ofKind}
-              pagination={false}
-              scroll={{ x: 'max-content' }}
-              columns={[
-                {
-                  title: t('finding.code'),
-                  key: 'code',
-                  render: (_: unknown, row) => (
-                    <Tag color={KIND_COLOR[row.kind as Shown]}>{row.code}</Tag>
-                  ),
-                },
-                { title: t('finding.facet'), key: 'facet', dataIndex: 'facetKey' },
-                {
-                  title: t('finding.paths'),
-                  key: 'paths',
-                  render: (_: unknown, row) => row.fieldPaths.join(', '),
-                },
-              ]}
-            />
+            <ul className="m-0 flex list-none flex-col gap-4 p-0">
+              {ofKind.map((row) => (
+                <li key={row.id} className="rounded border p-3">
+                  <div className="mb-1 flex flex-wrap items-center gap-2">
+                    <Tag color={KIND_COLOR[row.kind as Shown]}>{row.facetKey}</Tag>
+                    <code className="font-mono text-xs">{row.code}</code>
+                  </div>
+                  {/* The reusable guidance of UI-040, as on the repository detail page. */}
+                  <GuidanceView
+                    code={row.code}
+                    params={joinSecretParams(row.params, row.secretParams)}
+                    fieldPaths={row.fieldPaths}
+                  />
+                </li>
+              ))}
+            </ul>
           </section>
         );
       })}

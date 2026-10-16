@@ -293,6 +293,13 @@ describe('[UI-026] endpoint migration', () => {
     expect(screen.getAllByText('Run anyway').length).toBe(2);
   });
 
+  it('[UI-026] [UI-040] each finding shows its guidance, as on the repository page', async () => {
+    renderWith(<EndpointMigrationView routeId="r1" />);
+    const post = await screen.findByRole('region', { name: 'Tasks after the Run' });
+    expect(await within(post).findByText('Approve invitations')).toBeTruthy();
+    expect(post.querySelector('[data-guidance="members.approve-invitations"]')).not.toBeNull();
+  });
+
   it('[UI-026] an operator analyzes, and starts a Run anyway when readiness needs attention', async () => {
     renderWith(<EndpointMigrationView routeId="r1" />);
     await screen.findByText('Route Source to Target (acme)');
