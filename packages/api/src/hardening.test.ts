@@ -395,7 +395,6 @@ describe('[API-020] Actor administration, round 2', () => {
     expect(isRetryableConflict({ code: '40P01' })).toBe(true);
     expect(isRetryableConflict(new Error('x', { cause: { dbErrorCode: '40001' } }))).toBe(true);
     expect(isRetryableConflict(new Error('x'))).toBe(false);
-    const { jar } = await signInAdmin();
     const boom = createApiApp({
       events: inertEvents(),
       db: {
@@ -423,7 +422,6 @@ describe('[API-020] Actor administration, round 2', () => {
       headers: { authorization: 'Bearer gm_abcdefgh_abcdefghijklmnopqrstuvwxyzABCDEF' },
     });
     expect(res.status).toBe(409);
-    void jar;
   });
 
   it('[API-011] an expiresAt with a UTC offset is accepted', async () => {
