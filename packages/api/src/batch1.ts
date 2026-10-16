@@ -37,10 +37,12 @@ export interface Batch1Deps {
 const BACKLOG_READ_LIMIT = 10_000;
 /** Calls per Analysis assumed for a Route that has no mean yet (JOB-020). */
 const DEFAULT_AVG_CALLS = 30;
-/** Waves the dashboard lists; a Route has a handful, so more is a data problem, flagged not paged. */
-const MAX_WAVES = 200;
-/** Most Migrations a naming preview plans at once (collisions need the whole Route). */
-const MAX_PREVIEW_MIGRATIONS = 20_000;
+/**
+ * `maxWaves`: Waves the dashboard lists; a Route has a handful, so more is a data problem, flagged
+ * not paged. `maxPreviewMigrations`: most Migrations a naming preview plans at once (collisions
+ * need the whole Route). Tests lower them.
+ */
+export const BATCH1_LIMITS = { maxWaves: 200, maxPreviewMigrations: 20_000 };
 /** Runs the dashboard lists (UI-020). */
 const RECENT_RUNS = 20;
 
@@ -556,7 +558,7 @@ export function createBatch1(deps: Batch1Deps) {
             where: { scope: 'repository' },
             _count: { _all: true },
           }),
-          privileged.wave.findMany({ orderBy: { name: 'asc' }, take: MAX_WAVES + 1 }),
+          privileged.wave.findMany({ orderBy: { name: 'asc' }, take: BATCH1_LIMITS.maxWaves + 1 }),
           privileged.migration.groupBy({
             by: ['waveId', 'status'],
             where: { scope: 'repository', waveId: { not: null } },
@@ -607,8 +609,8 @@ export function createBatch1(deps: Batch1Deps) {
                 : null,
             };
           }),
-          wavesTruncated: waves.length > MAX_WAVES,
-          waves: waves.slice(0, MAX_WAVES).map((w) => ({
+          wavesTruncated: waves.length > BATCH1_LIMITS.maxWaves,
+          waves: waves.slice(0, BATCH1_LIMITS.maxWaves).map((w) => ({
             id: w.id,
             name: w.name,
             targetDate: iso(w.targetDate),
@@ -854,12 +856,13 @@ export function createBatch1(deps: Batch1Deps) {
       const planned = await privileged.migration.count({
         where: { routeId: id, scope: 'repository', sourceRepository: { presence: 'present' } },
       });
-      if (planned > MAX_PREVIEW_MIGRATIONS) {
+      const cap = BATCH1_LIMITS.maxPreviewMigrations;
+      if (planned > cap) {
         throw new ProblemError('validation_failed', {
           errors: [
             {
               path: 'rule',
-              message: `the Route has ${planned} repositories; a preview plans at most ${MAX_PREVIEW_MIGRATIONS}`,
+              message: `the Route has ${planned} repositories; a preview plans at most ${cap}`,
             },
           ],
         });

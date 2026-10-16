@@ -4,6 +4,7 @@ import type { BucketSnapshot } from '@git-migrator/quota';
 import { createBuiltinRegistry } from '@git-migrator/registry';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { createApiApp } from './app.ts';
+import { BATCH1_LIMITS } from './batch1.ts';
 import { createEventHub } from './events.ts';
 import { PROBLEM_BASE, PROBLEM_CONTENT_TYPE } from './problem.ts';
 import type { ApiServices } from './services.ts';
@@ -673,6 +674,31 @@ describe('[API-020] [UI-020] GET /dashboard', () => {
     expect(body.recentRuns[0]).toMatchObject({ migrationId: seed.mApi, kind: 'migrate' });
     expect(body.recentRuns.length).toBeLessThanOrEqual(20);
   });
+
+  it('[UI-020] lists at most maxWaves Waves, by name, and flags the rest as truncated', async () => {
+    const saved = { ...BATCH1_LIMITS };
+    const extra = ['wave-2', 'wave-3'];
+    await t.db.privileged.wave.createMany({ data: extra.map((name) => ({ name })) });
+    try {
+      BATCH1_LIMITS.maxWaves = 2;
+      const truncated = (await (await call('/dashboard', { role: 'viewer' })).json()) as {
+        waves: { name: string }[];
+        wavesTruncated: boolean;
+      };
+      expect(truncated.wavesTruncated).toBe(true);
+      expect(truncated.waves.map((w) => w.name)).toEqual(['wave-1', 'wave-2']);
+      BATCH1_LIMITS.maxWaves = 3;
+      const whole = (await (await call('/dashboard', { role: 'viewer' })).json()) as {
+        waves: { name: string }[];
+        wavesTruncated: boolean;
+      };
+      expect(whole.wavesTruncated).toBe(false);
+      expect(whole.waves).toHaveLength(3);
+    } finally {
+      Object.assign(BATCH1_LIMITS, saved);
+      await t.db.privileged.wave.deleteMany({ where: { name: { in: extra } } });
+    }
+  });
 });
 
 describe('[API-020] [JOB-047] GET /quota', () => {
@@ -995,6 +1021,23 @@ describe('[API-020] [LIF-030] POST /routes/{id}/naming/preview', () => {
       body: { rule },
     });
   const slugOnly = { steps: [{ var: 'repository', op: 'slug' }], template: '{repository}' };
+
+  it('[LIF-030] a Route with more repositories than a preview plans is a 422 that names the cap', async () => {
+    const saved = { ...BATCH1_LIMITS };
+    try {
+      BATCH1_LIMITS.maxPreviewMigrations = 1;
+      const res = await preview({ scope: 'namespace', scopeRef: seed.ns1, pipeline: slugOnly });
+      const problem = await expectProblem(res, 422, 'validation_failed');
+      expect(problem.errors).toEqual([
+        { path: 'rule', message: expect.stringMatching(/a preview plans at most 1$/) },
+      ]);
+    } finally {
+      Object.assign(BATCH1_LIMITS, saved);
+    }
+    expect(
+      (await preview({ scope: 'namespace', scopeRef: seed.ns1, pipeline: slugOnly })).status,
+    ).toBe(200);
+  });
 
   it('[LIF-030] evaluates a namespace rule over its repositories and shows current against planned names', async () => {
     const res = await preview({ scope: 'namespace', scopeRef: seed.ns1, pipeline: slugOnly });
