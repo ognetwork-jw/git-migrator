@@ -7,8 +7,11 @@
 import {
   type LastRunStatus,
   type LifecycleState,
+  lastRunStatusOf,
   type MigrationStatus,
   RUN_KINDS,
+  type RunKind,
+  type RunOutcome,
   transition,
 } from '@git-migrator/core';
 import { type Db, publishEventIn } from '@git-migrator/db';
@@ -149,9 +152,8 @@ const stateOf = (m: {
 });
 
 /**
- * The status the latest finished Run that changed the status left behind (LIF-075, ADR-0058): a
- * migrate, run-anyway or resync Run leaves `migrated`, `partial` or `failed`; a rollback leaves
- * `rolled_back` (or `partial`); a cancelled Run changed the status only if it recorded a Mutation.
+ * The `lastRunStatus` of `revoke_complete` (LIF-075, ADR-0058), derived by `lastRunStatusOf` from
+ * the latest finished migrate/run-anyway/resync/rollback Runs.
  */
 async function lastRunStatus(tx: Tx, migrationId: string): Promise<LastRunStatus> {
   const runs = await tx.run.findMany({
@@ -164,21 +166,16 @@ async function lastRunStatus(tx: Tx, migrationId: string): Promise<LastRunStatus
     take: 20,
     select: { kind: true, status: true, hasMutations: true },
   });
-  for (const run of runs) {
-    if (run.status === 'cancelled') {
-      if (run.hasMutations) return 'partial';
-      continue;
-    }
-    if (run.kind === 'rollback') return run.status === 'succeeded' ? 'rolled_back' : 'partial';
-    return run.status === 'succeeded'
-      ? 'migrated'
-      : run.status === 'partial'
-        ? 'partial'
-        : 'failed';
-  }
+  const last = lastRunStatusOf(
+    runs.map((r) => ({
+      kind: r.kind as RunKind,
+      outcome: r.status as RunOutcome,
+      hasMutations: r.hasMutations,
+    })),
+  );
   // A Migration that was verified without any Run of its own: `migrated` is the outcome a
   // verification presupposes.
-  return 'migrated';
+  return last ?? 'migrated';
 }
 
 const savedStatuses = (state: LifecycleState) => ({

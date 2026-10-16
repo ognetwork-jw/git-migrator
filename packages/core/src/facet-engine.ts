@@ -399,7 +399,9 @@ function validateDecisions(
 /**
  * Fail closed: an `unsupported` decision, or an `unreadable` one without a Route default, must be
  * covered by a finding on the same path, or on an ancestor or descendant of it; otherwise the
- * Analysis would silently drop the difference.
+ * Analysis would silently drop the difference. A root-path finding is the one exception to the
+ * ancestor rule: it covers only a root decision, so an unrelated facet-wide finding (a warning on
+ * `''`) cannot swallow the follow-up task of a specific field.
  */
 function checkCovered(
   def: FacetDefinition<unknown>,
@@ -413,7 +415,8 @@ function checkCovered(
     if (!needsFinding) continue;
     const mine = parseFieldPath(d.path);
     const covered = paths.some((fp) => {
-      if (fp === '' || d.path === '') return true;
+      if (d.path === '') return true;
+      if (fp === '') return false;
       const theirs = parseFieldPath(fp);
       const [short, long] = theirs.length <= mine.length ? [theirs, mine] : [mine, theirs];
       return short.every(
@@ -563,14 +566,14 @@ export function translateFacet(
   const seenDraft = new Set<string>();
   for (const d of resolution.decisions) {
     if (d.fidelity !== 'unreadable' || d.defaulted !== true) continue;
-    const path = patternForPath(d.path);
-    if (path === '') {
+    if (d.path === '') {
       throw new FacetEngineError(
         'invalid_decision',
         facetKey,
         'a defaulted unreadable field needs a path',
       );
     }
+    const path = patternForPath(d.path);
     if (seenDraft.has(path)) continue;
     seenDraft.add(path);
     drafts.push({

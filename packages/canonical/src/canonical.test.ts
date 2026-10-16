@@ -25,6 +25,7 @@ import {
   getCanonicalFacet,
   type Members,
   type MergeSettings,
+  mergeWebhooksByKey,
   type OrgSecrets,
   type OrgVariables,
   type OrgWebhooks,
@@ -598,8 +599,10 @@ describe('parse-time validation', () => {
   it('[FAC-WEB-003] duplicate webhook URLs are rejected without echoing the secret path', () => {
     const url = 'https://chat.example.com/services/T0/B1/SECRETPART';
     const mk = (u: string) => ({ ...hook, url: u, key: webhookKey(u) });
+    // the same hook written differently: upper-case host, default port, an escaped `~`
+    const twin = 'HTTPS://Chat.Example.com:443/services/T0/B1/SECRETPART%7e#frag';
     const r = parseCanonical('webhooks', {
-      hooks: [mk(url), mk(`${url}?x=1`.replace('?x=1', ''))],
+      hooks: [mk(`${url}~`), mk(twin)],
     });
     expect(r.success).toBe(false);
     if (r.success) return;
@@ -619,8 +622,76 @@ describe('parse-time validation', () => {
   it('[FAC-WEB-003] the key is derived from the normalized URL', () => {
     expect(webhookKey('HTTPS://CI.Example.com:443/a')).toBe(webhookKey('https://ci.example.com/a'));
     expect(webhookKey('https://ci.example.com/a')).not.toBe(webhookKey('https://ci.example.com/b'));
+    // the fragment is never sent, an empty query is no query, and an escaped unreserved character
+    // is that character (RFC 3986 section 6.2.2); other escapes compare case-insensitively
+    const base = webhookKey('https://ci.example.com/a~b?t=1');
+    expect(webhookKey('https://ci.example.com/a~b?t=1#x')).toBe(base);
+    expect(webhookKey('https://ci.example.com/a%7Eb?t=1')).toBe(base);
+    expect(webhookKey('https://ci.example.com/a%7eb?t=%31')).toBe(base);
+    expect(webhookKey('https://ci.example.com/a?')).toBe(webhookKey('https://ci.example.com/a'));
+    expect(webhookKey('https://ci.example.com/a%2fb')).toBe(
+      webhookKey('https://ci.example.com/a%2Fb'),
+    );
+    expect(webhookKey('https://ci.example.com/a%2Fb')).not.toBe(
+      webhookKey('https://ci.example.com/a/b'),
+    );
+    expect(webhookKey('https://ci.example.com/a?t=1')).not.toBe(
+      webhookKey('https://ci.example.com/a?t=2'),
+    );
     const wrong = { hooks: [{ ...hook, key: 'https://ci.example.com#0000000000000000' }] };
     bad('webhooks', wrong, 'key must equal webhookKey(url)');
+  });
+
+  it('[FAC-WEB-002] mergeWebhooksByKey merges hooks that share a key, whatever the input order', () => {
+    const a = {
+      id: 1,
+      url: 'https://ci.example.com/hook?token=S1',
+      events: ['push' as const],
+      active: false,
+      hasSecret: false,
+      verifyTls: true,
+    };
+    const b = {
+      id: 2,
+      url: 'HTTPS://CI.example.com:443/hook?token=S1#x',
+      events: ['cr.opened' as const, 'push' as const],
+      active: true,
+      hasSecret: true,
+      verifyTls: false,
+    };
+    const c = { ...a, id: 3, url: 'https://other.example.com/h' };
+    const merged = mergeWebhooksByKey([a, b, c]);
+    expect(mergeWebhooksByKey([c, b, a]).hooks).toEqual(merged.hooks);
+    const key = webhookKey(a.url);
+    expect(merged.hooks.find((h) => h.key === key)).toEqual({
+      key,
+      url: b.url,
+      events: ['cr.opened', 'push'],
+      active: true,
+      hasSecret: true,
+      verifyTls: false,
+    });
+    expect(merged.groups.get(key)?.map((h) => h.id)).toEqual([1, 2]);
+    expect(merged.duplicates).toEqual([
+      { key, count: 2, targetUrlDisplay: 'https://ci.example.com/…' },
+    ]);
+    expect(JSON.stringify(merged.duplicates)).not.toContain('S1');
+    expect(parseCanonical('webhooks', { hooks: merged.hooks }).success).toBe(true);
+  });
+
+  it('[FAC-WEB-003] webhookKey throws an error that does not carry the URL', () => {
+    const raw = 'https://exa mple.com/services/SECRETPART';
+    let caught: unknown;
+    try {
+      webhookKey(raw);
+    } catch (e) {
+      caught = e;
+    }
+    expect(caught).toBeInstanceOf(Error);
+    const err = caught as Error & { input?: unknown; cause?: unknown };
+    expect(err.input).toBeUndefined();
+    expect(err.cause).toBeUndefined();
+    expect(`${err.message} ${err.stack ?? ''}`).not.toContain('SECRETPART');
   });
 
   it('[FAC-WEB-003] redactWebhookUrl keeps only the origin', () => {

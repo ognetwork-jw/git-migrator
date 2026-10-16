@@ -27,7 +27,7 @@ Each module exports its `FacetDefinition` (`gitRefsDefinition`, `mergeSettingsDe
 
 Tests for each facet check every row of its mapping table in `docs/spec/05-facets.md`, and `testing/integration/src/facets-git-settings-guidance.test.ts` calls `assertGuidanceCoverage` with the declared finding codes (ADR-0103).
 
-T-053 follows the same rule in `facets-webhooks-deploykeys-guidance.test.ts`. Reader helper: `mergeDuplicateWebhooks` (adapters call it before building a `webhooks` document, ADR-0141). Inputs the Route supplies: `route.webhookAllowlist` (URL patterns) and `routeIndex.deployKeyUsage` (`Record<publicKey, number>`, plain JSON).
+T-053 follows the same rule in `facets-webhooks-deploykeys-guidance.test.ts`. Reader helper: `mergeDuplicateWebhooks` wraps `mergeWebhooksByKey` from `@git-migrator/canonical` (which adapters call before building a `webhooks` document, ADR-0141) and adds the `webhooks.duplicate-url` warnings. Inputs the Route supplies: `route.webhookAllowlist` (URL patterns) and `routeIndex.deployKeyUsage` (`Record<publicKey, number>`, plain JSON).
 Endpoint-level facets (`members`, `teams`, `org-*`) share `src/endpoint-support.ts`. Their parity ignores what exists only on the target (ADR-0150). `teams` plans each team slug from the group mapping or the Route's `teamNaming` pipeline and relies on `routeIndex.plannedSlugs` / `routeIndex.invitationCandidates` / `routeIndex.targetOrgMembers` (plain JSON, filled by the Analysis job). Their guidance coverage test is `testing/integration/src/facets-members-teams-org-guidance.test.ts`.
 
 Declared internal dependencies (ARC-012, checked by `pnpm lint`): @git-migrator/core, @git-migrator/canonical.

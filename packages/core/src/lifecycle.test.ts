@@ -7,6 +7,7 @@ import {
   LifecycleError,
   type LifecycleEvent,
   type LifecycleState,
+  lastRunStatusOf,
   MIGRATION_STATUSES,
   type MigrationStatus,
   RUN_KINDS,
@@ -483,6 +484,37 @@ describe('[LIF-002] revoke_complete never restores verified without parity (LIF-
       ok: true,
       state: { status: 'failed' },
     });
+  });
+});
+
+describe('[LIF-075] lastRunStatusOf derives the last Run outcome from finished Runs', () => {
+  const run = (
+    kind: 'migrate' | 'run_anyway' | 'resync' | 'rollback' | 'verify' | 'source_read_only',
+    outcome: 'succeeded' | 'partial' | 'failed' | 'cancelled',
+    hasMutations = false,
+  ) => ({ kind, outcome, hasMutations });
+
+  it('[LIF-075] maps each changing Run to the status the run_finished row leaves', () => {
+    expect(lastRunStatusOf([run('migrate', 'succeeded')])).toBe('migrated');
+    expect(lastRunStatusOf([run('run_anyway', 'partial')])).toBe('partial');
+    expect(lastRunStatusOf([run('resync', 'failed')])).toBe('failed');
+    expect(lastRunStatusOf([run('rollback', 'succeeded')])).toBe('rolled_back');
+    expect(lastRunStatusOf([run('rollback', 'failed')])).toBe('partial');
+    expect(lastRunStatusOf([run('migrate', 'cancelled', true)])).toBe('partial');
+  });
+
+  it('[LIF-075] skips Runs that did not change the status and takes the newest that did', () => {
+    expect(
+      lastRunStatusOf([
+        run('migrate', 'cancelled', false),
+        run('verify', 'failed'),
+        run('source_read_only', 'cancelled', true),
+        run('resync', 'succeeded'),
+        run('migrate', 'failed'),
+      ]),
+    ).toBe('migrated');
+    expect(lastRunStatusOf([run('verify', 'succeeded')])).toBeUndefined();
+    expect(lastRunStatusOf([])).toBeUndefined();
   });
 });
 
