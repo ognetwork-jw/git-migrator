@@ -30,12 +30,23 @@ const KEY = 'ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIOMqqnkVzrm0SdG6UOoqKLsabgH5C9o
 
 type World = ReturnType<typeof createFakeGitHub>;
 
-async function connect(): Promise<ContractConnection<World>> {
-  const { privateKey, publicKey } = generateKeyPairSync('rsa', {
+/**
+ * One App key pair for the file. Every scenario connects afresh, and generating an RSA key per
+ * connection made the suite CPU-bound: some tests connect once per scenario and timed out when the
+ * whole suite ran in parallel. Each connection still gets its own fake GitHub.
+ */
+let appKeys: { privateKey: string; publicKey: string } | undefined;
+function appKeyPair(): { privateKey: string; publicKey: string } {
+  appKeys ??= generateKeyPairSync('rsa', {
     modulusLength: 2048,
     privateKeyEncoding: { type: 'pkcs1', format: 'pem' },
     publicKeyEncoding: { type: 'spki', format: 'pem' },
   });
+  return appKeys;
+}
+
+async function connect(): Promise<ContractConnection<World>> {
+  const { privateKey, publicKey } = appKeyPair();
   const fake = createFakeGitHub({ appPublicKeyPem: publicKey, gitBaseUrl: BASE });
   const git = {
     lsRemote: async () => ({
