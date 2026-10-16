@@ -228,7 +228,7 @@ export {
 } from './reaper.ts';
 export { applyRetention, type RetentionResult } from './retention.ts';
 export { unmapUndoneTeams } from './rollback/endpoint.ts';
-export { hasUndoableMutations } from './rollback/ledger.ts';
+export { dispositionOf, hasUndoableMutations } from './rollback/ledger.ts';
 export {
   createRollbackPlanner,
   DELETION_FORBIDDEN,
