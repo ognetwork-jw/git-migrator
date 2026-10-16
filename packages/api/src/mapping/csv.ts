@@ -141,6 +141,12 @@ function tokenize(text: string): RawRecord[] | undefined {
   return records;
 }
 
+/**
+ * A plausible address: one `@`, a dot in the domain, no spaces, quotes or brackets. An apostrophe
+ * is allowed in the local part (`o'brien@...`, RFC 5322 atext), not in the domain.
+ */
+const EMAIL = /^[^\s@,;"<>()[\]\\]+@[^\s@,;"'<>()[\]\\]+\.[^\s@,;"'<>()[\]\\]+$/;
+
 /** Syntax checks of one row (`source`, `target`, `action` already trimmed). */
 export function checkRow(source: string, target: string, action: string): CsvErrorCode[] {
   const errors: CsvErrorCode[] = [];
@@ -158,10 +164,7 @@ export function checkRow(source: string, target: string, action: string): CsvErr
       if (target !== '') add('target_not_allowed');
     } else if (target === '') {
       add('target_missing');
-    } else if (
-      action === 'invite' &&
-      !/^[^\s@,;"'<>()[\]\\]+@[^\s@,;"'<>()[\]\\]+\.[^\s@,;"'<>()[\]\\]+$/.test(target)
-    ) {
+    } else if (action === 'invite' && !EMAIL.test(target)) {
       add('target_not_email');
     }
   }

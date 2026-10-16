@@ -1086,6 +1086,82 @@ describe('Expected Difference endpoints', () => {
   });
 });
 
+describe('task and Expected Difference endpoints without their collaborators', () => {
+  const hub = () =>
+    createEventHub({
+      listener: { start: () => undefined, subscribe: () => () => undefined, connected: false },
+    });
+  const request = (target: ReturnType<typeof createApiApp>, path: string, method: string) =>
+    target.request(`${ORIGIN}/api/v1${path}`, {
+      method,
+      headers: { authorization: `Bearer ${keys.operator}`, 'content-type': 'application/json' },
+      body: '{}',
+    });
+
+  it('[API-021] a task action without the registry service is a 503 not_ready and changes nothing', async () => {
+    const { registry: _registry, ...rest } = services;
+    const noRegistry = createApiApp({
+      db: t.db,
+      auth: {} as AuthService,
+      publicUrl: ORIGIN,
+      events: hub(),
+      services: rest,
+    });
+    const m = await mkMigration();
+    const task = await mkTask(m.id);
+    const res = await request(noRegistry, `/migrations/${m.id}/tasks/${task.id}/done`, 'POST');
+    await expectProblem(res, 503, 'not_ready');
+    expect(
+      (await t.db.privileged.manualTask.findUniqueOrThrow({ where: { id: task.id } })).status,
+    ).toBe('open');
+  });
+
+  it('[LIF-062] a failed lookup for the Route-wide Parity fan-out is reported, and the revoke still succeeds', async () => {
+    const reported: unknown[] = [];
+    const failingFanOut = createApiApp({
+      db: {
+        ...t.db,
+        privileged: new Proxy(t.db.privileged, {
+          get: (target, prop, receiver) =>
+            prop === 'migration'
+              ? new Proxy(target.migration, {
+                  get: (delegate, op, r) =>
+                    op === 'findMany'
+                      ? () => Promise.reject(new Error('lookup failed: secret-detail'))
+                      : Reflect.get(delegate, op, r),
+                })
+              : Reflect.get(target, prop, receiver),
+        }) as never,
+      },
+      auth: {} as AuthService,
+      publicUrl: ORIGIN,
+      events: hub(),
+      services,
+      logger: {
+        error: (fields: unknown, message: string) => reported.push([message, fields]),
+      } as never,
+    });
+    const ed = await t.db.privileged.expectedDifference.create({
+      data: {
+        routeId,
+        facetKey: 'webhooks',
+        path: '/hooks/fanout',
+        reason: 'manual_accepted',
+        note: 'n',
+      },
+    });
+    const res = await request(failingFanOut, `/expected-differences/${ed.id}`, 'DELETE');
+    expect(res.status).toBe(200);
+    expect(
+      (await t.db.privileged.expectedDifference.findUniqueOrThrow({ where: { id: ed.id } }))
+        .revokedAt,
+    ).not.toBeNull();
+    expect(parityJobs).toEqual([]);
+    expect(reported.map((r) => (r as [string])[0])).toEqual(['queue or database call failed']);
+    expect(JSON.stringify(reported)).not.toContain('secret-detail');
+  });
+});
+
 describe('POST /migrations/{id}/drift/accept (LIF-065)', () => {
   const accept = (
     id: string,

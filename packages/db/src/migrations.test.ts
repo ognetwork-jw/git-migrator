@@ -122,6 +122,10 @@ describe('[DATA-011] required indexes', () => {
     expect(ed?.indexdef).toMatch(/revoked_at IS NULL/);
   });
 
+  it('[DATA-020] has an index on raw_response (fetched_at) for the batched retention delete', async () => {
+    expect(await find('raw_response', /\(fetched_at\)/)).toBeDefined();
+  });
+
   it('[DATA-011] the trigram index serves a similarity search on repository.full_path', async () => {
     const ns = await t.db.privileged.endpoint.create({
       data: {

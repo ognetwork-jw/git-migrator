@@ -3,16 +3,16 @@
  * Remove from wave over an explicit selection or a saved filter. The selection is re-validated
  * here, per Migration, against the database (Route, scope, status, readiness, Analysis age): the
  * client's view of readiness is never trusted. Every item the action does not apply to comes back
- * in `skipped` with a reason code. `bulkMigrate` goes through the same `createRun` guard the
- * single-Run endpoint uses. Decisions: ADR-0405, ADR-0406, ADR-0407.
+ * in `skipped` with a reason code. `bulkMigrate` starts Runs through `launchRun`, the path (guard,
+ * audit, enqueue, cancel) the single-Run endpoint uses. Decisions: ADR-0405, ADR-0406, ADR-0407.
  */
 import { type Capability, can } from '@git-migrator/auth';
 import type { Db } from '@git-migrator/db';
-import { createRun, RunGuardError, requestRunCancel } from '@git-migrator/jobs';
 import { createRoute, OpenAPIHono, z } from '@hono/zod-openapi';
 import type { Context } from 'hono';
 import type { Principal } from './principal.ts';
 import { ProblemError, ProblemSchema } from './problem.ts';
+import { launchRun } from './run-start.ts';
 import { type ApiServices, requireService } from './services.ts';
 
 interface Env {
@@ -295,8 +295,8 @@ export interface BulkContext {
 }
 
 /**
- * Creates and enqueues one migrate Run per eligible row; the rest are skipped with a reason.
- * The Run endpoint (T-074) reuses `createRun` the same way.
+ * Creates and enqueues one migrate Run per eligible row through `launchRun`, the path the Run
+ * endpoint (T-074) uses; the rest are skipped with a reason.
  */
 export async function bulkMigrate(ctx: BulkContext, rows: readonly Row[]): Promise<BulkResult> {
   const out: BulkResult = { accepted: [], skipped: [] };
@@ -309,40 +309,21 @@ export async function bulkMigrate(ctx: BulkContext, rows: readonly Row[]): Promi
       out.skipped.push({ id: row.id, reason: skip });
       continue;
     }
-    let created: Awaited<ReturnType<typeof createRun>>;
-    try {
-      created = await createRun(ctx.db, {
-        migrationId: row.id,
-        kind: 'migrate',
-        triggeredById: ctx.actorId,
-      });
-    } catch (error) {
-      if (error instanceof RunGuardError) {
-        out.skipped.push({ id: row.id, reason: GUARD_REASON[error.code] ?? 'not_permitted' });
-        continue;
-      }
-      throw error;
+    const outcome = await launchRun(
+      { db: ctx.db, jobs: ctx.jobs, onFault: ctx.onFault },
+      { migrationId: row.id, kind: 'migrate', actorId: ctx.actorId, bulk: true },
+    );
+    if (outcome.kind === 'refused') {
+      out.skipped.push({ id: row.id, reason: GUARD_REASON[outcome.error.code] ?? 'not_permitted' });
+      continue;
     }
-    await audit(ctx.db, ctx.actorId, 'run.create', 'run', created.runId, {
-      migrationId: row.id,
-      kind: 'migrate',
-      bulk: true,
-    });
-    try {
-      await ctx.jobs.enqueueRun(created.runId, created.routing);
-    } catch (error) {
-      ctx.onFault?.(error);
+    if (outcome.kind === 'queue_unavailable') {
       queueDown = true;
-      // No job will ever start this Run: cancel it so the Migration returns to its saved status.
-      await requestRunCancel(ctx.db, created.runId).catch((e) => ctx.onFault?.(e));
-      await audit(ctx.db, ctx.actorId, 'run.cancel', 'run', created.runId, {
-        migrationId: row.id,
-        reason: 'queue_unavailable',
-        bulk: true,
-      });
       out.skipped.push({ id: row.id, reason: 'queue_unavailable' });
       continue;
     }
+    // A Run a worker already owned when the enqueue failed is real; the queue is still suspect.
+    if (outcome.enqueueFailed) queueDown = true;
     out.accepted.push(row.id);
   }
   return out;
@@ -387,9 +368,9 @@ function waveSkip(
 
 /**
  * Wave membership is not an Analysis input, so no Analysis is marked stale (ADR-0407). One
- * transaction: the Wave is locked `FOR SHARE` (a concurrent delete waits, then the assignment is a
- * 404), each Migration is locked and re-read in id order, and the decision, the update and the
- * audit rows all use that locked read.
+ * transaction: every Wave involved is locked `FOR SHARE` first (a concurrent delete waits, then
+ * an assignment to it is a 404), each Migration is locked and re-read in id order, and the
+ * decision, the update and the audit rows all use that locked read.
  */
 async function bulkWave(
   ctx: BulkContext,
@@ -398,10 +379,19 @@ async function bulkWave(
   only: string | undefined,
 ): Promise<BulkResult> {
   return ctx.db.$transaction(async (tx) => {
-    if (waveId !== null) {
-      const found = await tx.$queryRaw<{ id: string }[]>`
-        SELECT id FROM app.wave WHERE id = ${waveId} FOR SHARE`;
-      if (found.length === 0) throw new ProblemError('not_found', { detail: 'unknown Wave' });
+    // Every Wave involved is locked before any Migration row, in id order: the target, the one
+    // `only` names and those the Migrations are in. A Wave delete locks its row and then clears
+    // `wave_id` on its Migrations (ON DELETE SET NULL); taking the Migrations first could deadlock
+    // with it (40P01). Share locks do not conflict with each other.
+    const waves = [
+      ...new Set(
+        [waveId, only, ...rows.map((r) => r.waveId)].filter((w): w is string => w != null),
+      ),
+    ].sort();
+    const locked = await tx.$queryRaw<{ id: string }[]>`
+      SELECT id FROM app.wave WHERE id = ANY(${waves}::text[]) ORDER BY id FOR SHARE`;
+    if (waveId !== null && !locked.some((w) => w.id === waveId)) {
+      throw new ProblemError('not_found', { detail: 'unknown Wave' });
     }
     const out: BulkResult = { accepted: [], skipped: [] };
     const previous = new Map<string, string | null>();

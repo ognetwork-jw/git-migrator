@@ -424,6 +424,32 @@ describe('[UI-021] repositories list', () => {
     expect(JSON.parse(posts()[0]?.init?.body as string)).toEqual({ kind: 'run_anyway' });
   });
 
+  it('[UI-021] [LIF-006] the Run anyway dialog reads the live row: a refetch while it is open updates the count', async () => {
+    const needing = (preTasks: number) =>
+      row(2, {
+        readiness: 'needs_attention',
+        readinessCounts: { blockers: 0, preTasks, postTasks: 0 },
+      });
+    source = [needing(3)];
+    mockApi();
+    const client = fresh();
+    renderWithApp(
+      <ActorProvider value={actor('operator')}>
+        <RepositoriesView pageSize={5} />
+      </ActorProvider>,
+      client,
+    );
+    await screen.findByText('acme/plat/repo-2');
+    fireEvent.click(screen.getByRole('button', { name: 'Run anyway' }));
+    const dialog = await screen.findByRole('dialog');
+    expect(within(dialog).getByText('3 open tasks will not be done by the Run.')).toBeTruthy();
+    source = [needing(1)];
+    await client.invalidateQueries();
+    expect(
+      await within(dialog).findByText('1 open task will not be done by the Run.'),
+    ).toBeTruthy();
+  });
+
   it.each([
     [409, 'run_active', 'already has a queued or running Run'],
     [409, 'conflict', 'cannot start a Run right now'],

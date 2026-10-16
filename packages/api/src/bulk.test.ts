@@ -22,6 +22,8 @@ const analysisJobs: string[] = [];
 const runJobs: { runId: string; routing: unknown }[] = [];
 let enqueueRunCalls = 0;
 let enqueueAnalysisCalls = 0;
+/** Runs before a failing run enqueue rejects (a worker may already hold the Run). */
+let beforeFailedRunEnqueue: ((runId: string) => Promise<void>) | undefined;
 
 const services: ApiServices = {
   jobs: {
@@ -32,11 +34,14 @@ const services: ApiServices = {
       analysisJobs.push(migrationId);
       return Promise.resolve({} as never);
     },
-    enqueueRun: (runId: string, routing: unknown) => {
+    enqueueRun: async (runId: string, routing: unknown) => {
       enqueueRunCalls++;
-      if (failQueue) return Promise.reject(new Error('queue down'));
+      if (failQueue) {
+        await beforeFailedRunEnqueue?.(runId);
+        throw new Error('queue down');
+      }
       runJobs.push({ runId, routing });
-      return Promise.resolve({} as never);
+      return {} as never;
     },
     queue: () => ({ getJobs: () => Promise.resolve([]) }) as never,
   } as never,
@@ -164,6 +169,7 @@ beforeAll(async () => {
 
 beforeEach(() => {
   failQueue = false;
+  beforeFailedRunEnqueue = undefined;
   enqueueRunCalls = 0;
   enqueueAnalysisCalls = 0;
   analysisJobs.length = 0;
@@ -279,6 +285,56 @@ describe('POST /migrations/bulk', () => {
     expect(enqueueAnalysisCalls).toBe(1);
   });
 
+  it('[LIF-090] a Run a worker already started when the enqueue failed is accepted, and the rest are not tried', async () => {
+    const a = await mig();
+    const b = await mig();
+    failQueue = true;
+    beforeFailedRunEnqueue = async (runId) => {
+      await t.db.privileged.run.update({
+        where: { id: runId },
+        data: { status: 'running', startedAt: new Date(), leaseOwner: 'worker-token' },
+      });
+    };
+    const out = await ok(await bulk({ ids: [a, b], action: 'migrate-ready' }));
+    expect(out.accepted).toEqual([a]);
+    expect(reasons(out)).toEqual({ [b]: 'queue_unavailable' });
+    const run = await t.db.privileged.run.findFirstOrThrow({ where: { migrationId: a } });
+    expect(run.status).toBe('running');
+    const cancel = await t.db.privileged.auditEvent.findFirstOrThrow({
+      where: { action: 'run.cancel', subjectId: run.id },
+    });
+    expect(cancel.data).toMatchObject({
+      outcome: 'requested',
+      reason: 'enqueue_failed',
+      bulk: true,
+    });
+  });
+
+  it('[LIF-090] the run.create audit row commits with the Run: when it fails, no Run is left behind', async () => {
+    const m = await mig();
+    await t.db.pool.query(`
+      CREATE OR REPLACE FUNCTION app.gm_test_refuse_audit() RETURNS trigger AS $$
+      BEGIN
+        IF NEW.action = 'run.create' AND NEW.data->>'migrationId' = '${m}' THEN
+          RAISE EXCEPTION 'audit refused for a test';
+        END IF;
+        RETURN NEW;
+      END $$ LANGUAGE plpgsql;
+      CREATE TRIGGER gm_test_refuse_audit BEFORE INSERT ON app.audit_event
+        FOR EACH ROW EXECUTE FUNCTION app.gm_test_refuse_audit();`);
+    try {
+      const res = await bulk({ ids: [m], action: 'migrate-ready' });
+      expect(res.status).toBe(500);
+    } finally {
+      await t.db.pool.query('DROP TRIGGER gm_test_refuse_audit ON app.audit_event');
+    }
+    expect(await t.db.privileged.run.count({ where: { migrationId: m } })).toBe(0);
+    expect((await t.db.privileged.migration.findUniqueOrThrow({ where: { id: m } })).status).toBe(
+      'analyzed',
+    );
+    expect(enqueueRunCalls).toBe(0);
+  });
+
   it('[LIF-090] audits the previous Wave read under the lock and answers 404 for a Wave deleted since', async () => {
     const other = (await t.db.privileged.wave.create({ data: { name: 'wave-other' } })).id;
     const m = await mig({ waveId: other });
@@ -291,6 +347,66 @@ describe('POST /migrations/bulk', () => {
     await t.db.privileged.wave.delete({ where: { id: other } });
     const gone = await bulk({ ids: [m], action: 'assign-to-wave', waveId: other });
     expect(gone.status).toBe(404);
+  });
+
+  /** Holds `lock` in another transaction while `request` starts, then commits it. */
+  async function whileLocked(
+    lock: string,
+    params: unknown[],
+    request: () => Response | Promise<Response>,
+  ) {
+    const holder = await t.db.pool.connect();
+    try {
+      await holder.query('BEGIN');
+      await holder.query(lock, params);
+      let settled = false;
+      const pending = Promise.resolve(request()).finally(() => {
+        settled = true;
+      });
+      await new Promise((r) => setTimeout(r, 300));
+      const waited = !settled;
+      await holder.query('COMMIT');
+      return { res: await pending, waited };
+    } finally {
+      await holder.query('ROLLBACK').catch(() => undefined);
+      holder.release();
+    }
+  }
+
+  it('[LIF-090] a Wave deleted while the assignment waits for its lock is a 404, and nothing changes', async () => {
+    const doomed = (await t.db.privileged.wave.create({ data: { name: 'wave-doomed' } })).id;
+    const m = await mig();
+    const { res, waited } = await whileLocked('DELETE FROM app.wave WHERE id = $1', [doomed], () =>
+      bulk({ ids: [m], action: 'assign-to-wave', waveId: doomed }),
+    );
+    expect(waited).toBe(true);
+    expect(res.status).toBe(404);
+    expect((await t.db.privileged.migration.findUniqueOrThrow({ where: { id: m } })).waveId).toBe(
+      null,
+    );
+  });
+
+  it('[LIF-090] remove-from-wave locks the Waves it leaves before the Migrations (no deadlock with a Wave delete)', async () => {
+    const w = (await t.db.privileged.wave.create({ data: { name: 'wave-locked' } })).id;
+    const m = await mig({ waveId: w });
+    const { res, waited } = await whileLocked(
+      'SELECT id FROM app.wave WHERE id = $1 FOR UPDATE',
+      [w],
+      () => bulk({ ids: [m], action: 'remove-from-wave' }),
+    );
+    // It waited for the Wave lock instead of taking the Migration row first.
+    expect(waited).toBe(true);
+    expect((await ok(res)).accepted).toEqual([m]);
+    // The same holds for the Wave a Migration is moved out of by an assignment.
+    const from = (await t.db.privileged.wave.create({ data: { name: 'wave-from' } })).id;
+    const moved = await mig({ waveId: from });
+    const assign = await whileLocked(
+      'SELECT id FROM app.wave WHERE id = $1 FOR UPDATE',
+      [from],
+      () => bulk({ ids: [moved], action: 'assign-to-wave', waveId }),
+    );
+    expect(assign.waited).toBe(true);
+    expect((await ok(assign.res)).accepted).toEqual([moved]);
   });
 
   it('[LIF-090] refuses an ids array longer than 1000 before de-duplicating', async () => {

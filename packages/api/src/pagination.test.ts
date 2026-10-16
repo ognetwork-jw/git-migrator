@@ -1,6 +1,12 @@
 import { describe, expect, it } from 'vitest';
 import { DEFAULT_PAGE_LIMIT, MAX_PAGE_LIMIT, PageQuerySchema, toPage } from './pagination.ts';
-import { PROBLEM_BASE, PROBLEMS, problemBody, problemResponse } from './problem.ts';
+import {
+  PROBLEM_BASE,
+  PROBLEMS,
+  problemBody,
+  problemCodeForStatus,
+  problemResponse,
+} from './problem.ts';
 
 describe('[API-011] cursor pagination', () => {
   it('[API-011] limit defaults to 50 and is at most 200', () => {
@@ -39,5 +45,10 @@ describe('[API-011] problem documents', () => {
       expect(res.status).toBe(status);
       expect(res.headers.get('content-type')).toBe('application/problem+json');
     }
+  });
+
+  it('[API-011] a bare 429 is a generic too_many_requests, not the event-stream limit', () => {
+    expect(problemCodeForStatus(429)).toBe('too_many_requests');
+    expect(PROBLEMS[problemCodeForStatus(429)].status).toBe(429);
   });
 });

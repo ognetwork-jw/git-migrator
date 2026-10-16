@@ -170,6 +170,7 @@
     "payload_too_large": "The request is too large.",
     "validation_failed": "Some of the values you entered are not valid.",
     "too_many_streams": "Too many live update connections are open. Close other tabs or try again shortly.",
+    "too_many_requests": "Too many requests. Wait a moment and try again.",
     "busy": "Another change to the same Route is in progress. Try again in a few seconds.",
     "not_ready": "The service is starting or temporarily unavailable. Try again shortly.",
     "internal_error": "Something went wrong on our side. Try again, or contact an administrator if it keeps happening.",

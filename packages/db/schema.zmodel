@@ -381,6 +381,7 @@ model RawResponse {
 
     endpoint   Endpoint @relation(fields: [endpointId], references: [id], onDelete: Restrict)
 
+    @@index([fetchedAt]) // the batched retention delete (DATA-020) selects by age
     @@map("raw_response")
     @@schema('app')
     @@allow('read', auth() != null && auth().disabled == false)

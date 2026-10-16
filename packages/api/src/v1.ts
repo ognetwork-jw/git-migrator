@@ -257,6 +257,12 @@ export function createV1(deps: V1Deps) {
       // SERIALIZABLE transaction gave false conflicts (a 500) between unrelated demotions.
       const { target, updated } = await privileged.$transaction(async (tx) => {
         await tx.$executeRaw`SELECT pg_advisory_xact_lock(${ADMIN_CHANGE_LOCK_KEY}::bigint)`;
+        // The caller was authenticated before the wait: a change committed meanwhile (disabled,
+        // demoted) applies to this request too.
+        const acting = await tx.actor.findUnique({ where: { id: by.id } });
+        if (!can(acting ?? undefined, 'manageActors')) {
+          throw new ProblemError('forbidden', { detail: 'requires the manageActors capability' });
+        }
         const before = await tx.actor.findUnique({ where: { id } });
         if (!before) throw new ProblemError('not_found');
         if (body.role !== undefined && before.kind !== 'service') {

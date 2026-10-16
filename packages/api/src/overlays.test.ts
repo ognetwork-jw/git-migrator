@@ -303,3 +303,74 @@ describe('[DOM-001] [DOM-003] [UI-032] overlay writes are validated against the 
     expect(JSON.stringify(rows)).not.toContain('"x":1');
   });
 });
+
+describe('[UI-032] overlay writes read their rows inside the transaction', () => {
+  /** Runs `during` in another transaction that holds its row locks while `request` starts. */
+  async function racing(
+    during: string,
+    params: unknown[],
+    request: () => Response | Promise<Response>,
+  ) {
+    const holder = await t.db.pool.connect();
+    try {
+      await holder.query('BEGIN');
+      await holder.query(during, params);
+      const pending = Promise.resolve(request());
+      await new Promise((r) => setTimeout(r, 300));
+      await holder.query('COMMIT');
+      return await pending;
+    } finally {
+      await holder.query('ROLLBACK').catch(() => undefined);
+      holder.release();
+    }
+  }
+
+  it('[UI-032] a concurrent PATCH audits the value it actually changed from', async () => {
+    const made = (await (await create({})).json()) as { id: string };
+    const res = await racing(
+      'UPDATE app.overlay SET enabled = false WHERE id = $1',
+      [made.id],
+      () =>
+        call(`/overlays/${made.id}`, { method: 'PATCH', role: 'admin', body: { enabled: true } }),
+    );
+    expect(res.status).toBe(200);
+    const event = await t.db.privileged.auditEvent.findFirstOrThrow({
+      where: { subjectId: made.id, action: 'overlay.update' },
+    });
+    expect((event.data as { enabled: unknown }).enabled).toEqual({ from: false, to: true });
+  });
+
+  it('[UI-032] an Overlay deleted while a PATCH or DELETE waits is a 404, not a 500', async () => {
+    for (const method of ['PATCH', 'DELETE'] as const) {
+      const made = (await (await create({})).json()) as { id: string };
+      const res = await racing('DELETE FROM app.overlay WHERE id = $1', [made.id], () =>
+        call(`/overlays/${made.id}`, {
+          method,
+          role: 'admin',
+          ...(method === 'PATCH' ? { body: { enabled: false } } : {}),
+        }),
+      );
+      await expectProblem(res, 404, 'not_found');
+    }
+  });
+
+  it('[UI-032] a Route deleted while a create waits is a 422 unknown Route, not a 500', async () => {
+    await t.db.privileged.route.create({
+      data: {
+        id: 'route-gone',
+        sourceEndpointId: 'src',
+        targetEndpointId: 'dst',
+        targetNamespacePath: 'gone',
+        policies: {},
+        defaults: {},
+        configHash: 'h',
+        sourcePostAction: 'read-only',
+      },
+    });
+    const res = await racing('DELETE FROM app.route WHERE id = $1', ['route-gone'], () =>
+      create({}, { routeId: 'route-gone' }),
+    );
+    const problem = await expectProblem(res, 422, 'validation_failed');
+    expect(problem.errors).toEqual([{ path: 'routeId', message: 'unknown Route' }]);
+  });
+});

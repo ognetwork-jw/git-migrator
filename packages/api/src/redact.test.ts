@@ -84,6 +84,30 @@ describe('[AUTH-022] diff redaction (ADR-0331)', () => {
     });
   });
 
+  it('[AUTH-022] a value reached through a bare index is redacted: the name that decides is not on the path', () => {
+    expect(redactAtPath('variables', '/headers[0]/value', 'clear-fake')).toBe('[REDACTED]');
+    expect(redactAtPath('variables', '/headers[3]/values', ['clear-fake'])).toEqual(['[REDACTED]']);
+    expect(redactAtPath('variables', '/headers[0]/value', 7)).toBe(7);
+    expect(redactAtPath('variables', '/items[0]/label', 'plain')).toBe('plain');
+    expect(redactAtPath('variables', '/variables[key=a]/value', 'v')).toBe('v');
+  });
+
+  it('[AUTH-022] a key-less [name, value] pair follows a sensitive name', () => {
+    expect(
+      redactFacetValue('variables', {
+        headers: [
+          ['Authorization', 'clear-fake'],
+          ['Accept', 'text/html'],
+        ],
+      }),
+    ).toEqual({
+      headers: [
+        ['Authorization', '[REDACTED]'],
+        ['Accept', 'text/html'],
+      ],
+    });
+  });
+
   it('[FAC-SEC-001] secrets Facets keep names but redact any value-like key', () => {
     expect(
       redactFacetValue('secrets', {

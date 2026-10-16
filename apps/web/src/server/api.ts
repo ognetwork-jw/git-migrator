@@ -98,7 +98,7 @@ export function buildApiRuntime(env: Env = process.env): ApiRuntime {
 
 /**
  * Runs every close step in order, even when one throws (a failed step must not leak the pools after
- * it), then rethrows the first error.
+ * it), then rethrows the error, or an `AggregateError` of all of them when several steps failed.
  */
 export async function closeAll(steps: readonly (() => unknown)[]): Promise<void> {
   const errors: unknown[] = [];
@@ -109,7 +109,8 @@ export async function closeAll(steps: readonly (() => unknown)[]): Promise<void>
       errors.push(error);
     }
   }
-  if (errors.length > 0) throw errors[0];
+  if (errors.length === 1) throw errors[0];
+  if (errors.length > 1) throw new AggregateError(errors, `${errors.length} close steps failed`);
 }
 
 /**

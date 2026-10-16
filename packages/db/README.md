@@ -45,7 +45,7 @@ A `rpc.wave.delete` event lists `clearedMigrationIds`, the Migrations whose `wav
 
 ## Events (JOB-060)
 
-`publishEvent(executor, event)` and `publishEventIn(tx, event)` run `pg_notify('gm_events', ...)` with the payload from `encodeEvent` (`@git-migrator/core`, at most 7,000 bytes); inside a transaction the notification is delivered on commit only. `createEventListener({ createClient: pgListenClient(pool) })` holds one dedicated `LISTEN gm_events` connection (not counted in `poolMax`), reconnects with backoff, probes the connection with `select 1` every 30 s (a half-open connection raises no error), bounds the connect at 10 s, and tells subscribers to resync after every successful connect. Fan-out to SSE clients is in `@git-migrator/api`.
+`publishEvent(executor, event)` and `publishEventIn(tx, event)` run `pg_notify('gm_events', ...)` with the payload from `encodeEvent` (`@git-migrator/core`, at most 7,000 bytes); inside a transaction the notification is delivered on commit only. `createEventListener({ createClient: pgListenClient(pool) })` holds one dedicated `LISTEN gm_events` connection (not counted in `poolMax`), reconnects with doubling backoff (+-20% jitter; the delay starts again from the first only after 10 s of uptime, so a flapping connection keeps backing off), probes the connection with `select 1` every 30 s (a half-open connection raises no error), bounds the connect at 10 s, and tells subscribers to resync after every successful connect. Fan-out to SSE clients is in `@git-migrator/api`.
 
 ## Staleness (LIF-021, API-012)
 

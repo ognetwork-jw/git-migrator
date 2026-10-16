@@ -4,6 +4,7 @@ import type { BucketSnapshot } from '@git-migrator/quota';
 import { createBuiltinRegistry } from '@git-migrator/registry';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { createApiApp } from './app.ts';
+import { BATCH1_LIMITS } from './batch1.ts';
 import { createEventHub } from './events.ts';
 import { PROBLEM_BASE, PROBLEM_CONTENT_TYPE } from './problem.ts';
 import type { ApiServices } from './services.ts';
@@ -24,6 +25,7 @@ let buckets: BucketSnapshot[] = [];
 let extraQueued = 0;
 let failEnqueue = false;
 let failGetJobs = false;
+let failSnapshot: Error | undefined;
 
 const services: ApiServices = {
   jobs: {
@@ -61,7 +63,9 @@ const services: ApiServices = {
             : Promise.resolve({ waiting: backgroundQueue.length + extraQueued }),
       }) as never,
   } as never,
-  quota: { snapshot: () => Promise.resolve(buckets) },
+  quota: {
+    snapshot: () => (failSnapshot ? Promise.reject(failSnapshot) : Promise.resolve(buckets)),
+  },
   registry: createBuiltinRegistry(),
 };
 
@@ -246,8 +250,20 @@ async function seedWorld(): Promise<Seed> {
       diffs: [
         { path: '/hooks[key=abc]/url', source: hook.url, target: 'https://other.example/q' },
         { path: '/variables/password', source: 'hunter2-fake', target: 'also-fake' },
+        // A path is free text too: a selector may quote a credential URL.
+        {
+          path: '/hooks[key=https://ops:diff-path-pw-fake@h.example]/active',
+          source: 1,
+          target: 2,
+        },
       ],
-      excluded: [{ path: '/hooks[key=abc]/active', expectedDifferenceId: 'ed-1' }],
+      excluded: [
+        { path: '/hooks[key=abc]/active', expectedDifferenceId: 'ed-1' },
+        {
+          path: '/hooks[key=https://ops:excl-path-pw-fake@h.example]/x',
+          expectedDifferenceId: 'ed-2',
+        },
+      ],
       checkedAt: new Date('2026-02-01T00:00:00.000Z'),
     },
   });
@@ -670,6 +686,31 @@ describe('[API-020] [UI-020] GET /dashboard', () => {
     expect(body.recentRuns[0]).toMatchObject({ migrationId: seed.mApi, kind: 'migrate' });
     expect(body.recentRuns.length).toBeLessThanOrEqual(20);
   });
+
+  it('[UI-020] lists at most maxWaves Waves, by name, and flags the rest as truncated', async () => {
+    const saved = { ...BATCH1_LIMITS };
+    const extra = ['wave-2', 'wave-3'];
+    await t.db.privileged.wave.createMany({ data: extra.map((name) => ({ name })) });
+    try {
+      BATCH1_LIMITS.maxWaves = 2;
+      const truncated = (await (await call('/dashboard', { role: 'viewer' })).json()) as {
+        waves: { name: string }[];
+        wavesTruncated: boolean;
+      };
+      expect(truncated.wavesTruncated).toBe(true);
+      expect(truncated.waves.map((w) => w.name)).toEqual(['wave-1', 'wave-2']);
+      BATCH1_LIMITS.maxWaves = 3;
+      const whole = (await (await call('/dashboard', { role: 'viewer' })).json()) as {
+        waves: { name: string }[];
+        wavesTruncated: boolean;
+      };
+      expect(whole.wavesTruncated).toBe(false);
+      expect(whole.waves).toHaveLength(3);
+    } finally {
+      Object.assign(BATCH1_LIMITS, saved);
+      await t.db.privileged.wave.deleteMany({ where: { name: { in: extra } } });
+    }
+  });
 });
 
 describe('[API-020] [JOB-047] GET /quota', () => {
@@ -731,6 +772,27 @@ describe('[API-020] [JOB-047] GET /quota', () => {
       await expectProblem(res, 503, 'not_ready');
     } finally {
       failGetJobs = false;
+    }
+  });
+
+  it('[API-011] a quota read that cannot reach the database is a 503 that does not blame the job queue', async () => {
+    failSnapshot = Object.assign(new Error('connect ECONNREFUSED'), { code: 'ECONNREFUSED' });
+    try {
+      const res = await call('/quota', { role: 'viewer' });
+      expect(res.headers.get('retry-after')).toBe('5');
+      const problem = await expectProblem(res, 503, 'not_ready');
+      expect(JSON.stringify(problem)).not.toMatch(/queue/);
+    } finally {
+      failSnapshot = undefined;
+    }
+  });
+
+  it('[API-011] a fault in the quota read that is not an outage is a 500, not a 503', async () => {
+    failSnapshot = new TypeError('cannot read properties of undefined');
+    try {
+      await expectProblem(await call('/quota', { role: 'viewer' }), 500, 'internal_error');
+    } finally {
+      failSnapshot = undefined;
     }
   });
 
@@ -824,7 +886,7 @@ describe('[API-020] [LIF-063] GET /migrations/{id}/diff', () => {
     const hooks = facet(body.facets, 'webhooks');
     expect(hooks.target).toEqual({ hooks: [] });
     expect(hooks.parity?.status).toBe('different');
-    expect(hooks.parity?.excluded).toHaveLength(1);
+    expect(hooks.parity?.excluded).toHaveLength(2);
     // The revoked Expected Difference is not listed.
     expect(hooks.expectedDifferences.map((d) => d.path)).toEqual(['/hooks/active']);
     const secrets = facet(body.facets, 'secrets');
@@ -843,6 +905,8 @@ describe('[API-020] [LIF-063] GET /migrations/{id}/diff', () => {
       'PATHSECRET',
       'also-fake',
       'note-pw-fake',
+      'diff-path-pw-fake',
+      'excl-path-pw-fake',
     ]) {
       expect(text, leak).not.toContain(leak);
     }
@@ -971,6 +1035,23 @@ describe('[API-020] [LIF-030] POST /routes/{id}/naming/preview', () => {
       body: { rule },
     });
   const slugOnly = { steps: [{ var: 'repository', op: 'slug' }], template: '{repository}' };
+
+  it('[LIF-030] a Route with more repositories than a preview plans is a 422 that names the cap', async () => {
+    const saved = { ...BATCH1_LIMITS };
+    try {
+      BATCH1_LIMITS.maxPreviewMigrations = 1;
+      const res = await preview({ scope: 'namespace', scopeRef: seed.ns1, pipeline: slugOnly });
+      const problem = await expectProblem(res, 422, 'validation_failed');
+      expect(problem.errors).toEqual([
+        { path: 'rule', message: expect.stringMatching(/a preview plans at most 1$/) },
+      ]);
+    } finally {
+      Object.assign(BATCH1_LIMITS, saved);
+    }
+    expect(
+      (await preview({ scope: 'namespace', scopeRef: seed.ns1, pipeline: slugOnly })).status,
+    ).toBe(200);
+  });
 
   it('[LIF-030] evaluates a namespace rule over its repositories and shows current against planned names', async () => {
     const res = await preview({ scope: 'namespace', scopeRef: seed.ns1, pipeline: slugOnly });

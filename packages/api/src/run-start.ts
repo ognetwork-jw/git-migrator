@@ -1,8 +1,9 @@
 /**
- * Starting a Run from the API (LIF-005, LIF-043, DOM-010): the one path a single-item caller uses.
- * It creates the Run only through the guard (`createRun`: concurrency, readiness, options, the
- * lifecycle) and then enqueues it; a Run that cannot be enqueued is cancelled at once, so it never
- * sits `queued` with no job. Decisions: docs/adr/0415-run-and-task-endpoints.md.
+ * Starting a Run from the API (LIF-005, LIF-043, DOM-010): the one path the Run endpoint and the
+ * bulk action use (`launchRun`). It creates the Run only through the guard (`createRun`:
+ * concurrency, readiness, options, the lifecycle), with its `run.create` audit row in the same
+ * transaction, and then enqueues it; a Run that cannot be enqueued is cancelled at once, so it
+ * never sits `queued` with no job. Decisions: docs/adr/0415-run-and-task-endpoints.md.
  */
 import type { RunKind } from '@git-migrator/core';
 import type { Db } from '@git-migrator/db';
@@ -22,6 +23,8 @@ export interface StartRunInput {
   readonly actorId: string;
   readonly options?: Record<string, unknown> | undefined;
   readonly confirm?: string | undefined;
+  /** Marks both audit rows `bulk: true` (the bulk action, T-088). */
+  readonly bulk?: boolean | undefined;
 }
 
 export interface StartRunContext {
@@ -56,14 +59,29 @@ export function problemForGuard(error: RunGuardError): ProblemError {
   }
 }
 
+/** What `launchRun` did. */
+export type LaunchOutcome =
+  /**
+   * The Run exists and a job will run it. `enqueueFailed`: the enqueue failed but a worker (or the
+   * orphan sweep) already owned the Run, so it is real anyway; the queue is still suspect.
+   */
+  | { readonly kind: 'started'; readonly created: CreatedRun; readonly enqueueFailed: boolean }
+  /** The guard refused: nothing was written. */
+  | { readonly kind: 'refused'; readonly error: RunGuardError }
+  /** The queue is down and the Run was cancelled (or could not be): no job will run it. */
+  | { readonly kind: 'queue_unavailable' };
+
 /**
  * Creates a `queued` Run and enqueues `run.execute`. The Run and its `run.create` AuditEvent
- * commit together. Throws a `ProblemError`: the guard's 404, 409 or 422, or 503 `not_ready` when
- * the queue is down and the Run could be cancelled (the Migration then returns to its saved
- * status). If the cancel finds the Run already started by a worker, the Run is real and is
- * returned as accepted.
+ * commit together. When the enqueue fails the Run is cancelled, with a `run.cancel` AuditEvent
+ * carrying the cancel's outcome; only a Run that ended `cancelled` (or whose cancel failed) is
+ * `queue_unavailable`. Any other error (the database) is thrown.
  */
-export async function startRun(ctx: StartRunContext, input: StartRunInput): Promise<CreatedRun> {
+export async function launchRun(
+  ctx: StartRunContext,
+  input: StartRunInput,
+): Promise<LaunchOutcome> {
+  const bulk: Record<string, boolean> = input.bulk === true ? { bulk: true } : {};
   let created: CreatedRun;
   try {
     created = await createRun(ctx.db, {
@@ -84,13 +102,14 @@ export async function startRun(ctx: StartRunContext, input: StartRunInput): Prom
               migrationId: input.migrationId,
               kind: input.kind,
               options: JSON.parse(JSON.stringify(input.options ?? {})),
+              ...bulk,
             },
           },
         });
       },
     });
   } catch (error) {
-    if (error instanceof RunGuardError) throw problemForGuard(error);
+    if (error instanceof RunGuardError) return { kind: 'refused', error };
     throw error;
   }
   try {
@@ -109,7 +128,7 @@ export async function startRun(ctx: StartRunContext, input: StartRunInput): Prom
             action: 'run.cancel',
             subjectType: 'run',
             subjectId: created.runId,
-            data: { outcome: result, reason: 'enqueue_failed' },
+            data: { outcome: result, reason: 'enqueue_failed', ...bulk },
           },
         });
       },
@@ -119,12 +138,26 @@ export async function startRun(ctx: StartRunContext, input: StartRunInput): Prom
     });
     // Only a Run that ended `cancelled` is a failed request. Any other outcome means a worker (or
     // the orphan sweep) owns the Run, so it is accepted.
-    if (outcome === 'cancelled' || outcome === 'failed') {
-      throw new ProblemError('not_ready', {
-        detail: 'the job queue is unavailable',
-        headers: { 'retry-after': '5' },
-      });
-    }
+    if (outcome === 'cancelled' || outcome === 'failed') return { kind: 'queue_unavailable' };
+    return { kind: 'started', created, enqueueFailed: true };
   }
-  return created;
+  return { kind: 'started', created, enqueueFailed: false };
+}
+
+/**
+ * `launchRun` for a single request. Throws a `ProblemError`: the guard's 404, 409 or 422, or 503
+ * `not_ready` when the queue is down and the Run could be cancelled (the Migration then returns to
+ * its saved status). If the cancel finds the Run already started by a worker, the Run is real and
+ * is returned as accepted.
+ */
+export async function startRun(ctx: StartRunContext, input: StartRunInput): Promise<CreatedRun> {
+  const outcome = await launchRun(ctx, input);
+  if (outcome.kind === 'refused') throw problemForGuard(outcome.error);
+  if (outcome.kind === 'queue_unavailable') {
+    throw new ProblemError('not_ready', {
+      detail: 'the job queue is unavailable',
+      headers: { 'retry-after': '5' },
+    });
+  }
+  return outcome.created;
 }

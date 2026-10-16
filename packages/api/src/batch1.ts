@@ -37,10 +37,12 @@ export interface Batch1Deps {
 const BACKLOG_READ_LIMIT = 10_000;
 /** Calls per Analysis assumed for a Route that has no mean yet (JOB-020). */
 const DEFAULT_AVG_CALLS = 30;
-/** Waves the dashboard lists; a Route has a handful, so more is a data problem, flagged not paged. */
-const MAX_WAVES = 200;
-/** Most Migrations a naming preview plans at once (collisions need the whole Route). */
-const MAX_PREVIEW_MIGRATIONS = 20_000;
+/**
+ * `maxWaves`: Waves the dashboard lists; a Route has a handful, so more is a data problem, flagged
+ * not paged. `maxPreviewMigrations`: most Migrations a naming preview plans at once (collisions
+ * need the whole Route). Tests lower them.
+ */
+export const BATCH1_LIMITS = { maxWaves: 200, maxPreviewMigrations: 20_000 };
 /** Runs the dashboard lists (UI-020). */
 const RECENT_RUNS = 20;
 
@@ -401,9 +403,11 @@ interface Backlog {
 const RETRY_AFTER = '5';
 
 /**
- * Runs a call to the queue or the database and turns a failure that is not already a problem into
- * a 503 `not_ready` with `Retry-After` (ADR-0330). The fault is reported through `onFault`, which
- * logs safe fields only; the response carries no detail of it.
+ * Runs a call to the job queue and turns a failure that is not already a problem into a 503
+ * `not_ready` with `Retry-After` (ADR-0330): the queue client gives no typed outage error, so any
+ * failure of it counts. The fault is reported through `onFault`, which logs safe fields only; the
+ * response carries no detail of it. Database and quota reads are not wrapped: the app's error
+ * handler answers an outage with 503 and anything else (a code fault) with 500.
  */
 async function guarded<T>(
   onFault: ((error: unknown) => void) | undefined,
@@ -430,14 +434,15 @@ async function guarded<T>(
 async function backgroundBacklog(
   jobs: ApiServices['jobs'],
   db: Db,
+  onFault: ((error: unknown) => void) | undefined,
 ): Promise<{ byEndpoint: Map<string, Backlog>; total: number; truncated: boolean }> {
   const queue = jobs.queue('analysis-background');
-  const counts = await queue.getJobCounts('waiting', 'delayed', 'prioritized');
+  const counts = await guarded(onFault, () =>
+    queue.getJobCounts('waiting', 'delayed', 'prioritized'),
+  );
   const total = (counts.waiting ?? 0) + (counts.delayed ?? 0) + (counts.prioritized ?? 0);
-  const queued = await queue.getJobs(
-    ['waiting', 'delayed', 'prioritized'],
-    0,
-    BACKLOG_READ_LIMIT - 1,
+  const queued = await guarded(onFault, () =>
+    queue.getJobs(['waiting', 'delayed', 'prioritized'], 0, BACKLOG_READ_LIMIT - 1),
   );
   const ids = new Set<string>();
   for (const job of queued) {
@@ -553,7 +558,7 @@ export function createBatch1(deps: Batch1Deps) {
             where: { scope: 'repository' },
             _count: { _all: true },
           }),
-          privileged.wave.findMany({ orderBy: { name: 'asc' }, take: MAX_WAVES + 1 }),
+          privileged.wave.findMany({ orderBy: { name: 'asc' }, take: BATCH1_LIMITS.maxWaves + 1 }),
           privileged.migration.groupBy({
             by: ['waveId', 'status'],
             where: { scope: 'repository', waveId: { not: null } },
@@ -604,8 +609,8 @@ export function createBatch1(deps: Batch1Deps) {
                 : null,
             };
           }),
-          wavesTruncated: waves.length > MAX_WAVES,
-          waves: waves.slice(0, MAX_WAVES).map((w) => ({
+          wavesTruncated: waves.length > BATCH1_LIMITS.maxWaves,
+          waves: waves.slice(0, BATCH1_LIMITS.maxWaves).map((w) => ({
             id: w.id,
             name: w.name,
             targetDate: iso(w.targetDate),
@@ -630,8 +635,8 @@ export function createBatch1(deps: Batch1Deps) {
       const quota = requireService(deps.services, 'quota');
       const jobs = requireService(deps.services, 'jobs');
       const [snapshot, queued] = await Promise.all([
-        guarded(deps.onFault, () => quota.snapshot()),
-        guarded(deps.onFault, () => backgroundBacklog(jobs, privileged)),
+        quota.snapshot(),
+        backgroundBacklog(jobs, privileged, deps.onFault),
       ]);
       const backlog = queued.byEndpoint;
       const buckets = snapshot.map((b) => {
@@ -788,13 +793,13 @@ export function createBatch1(deps: Batch1Deps) {
                 diffs: diffs.map((d) => {
                   const path = String(d.path ?? '');
                   return {
-                    path,
+                    path: redactText(path),
                     source: redactAtPath(key, path, d.source),
                     target: redactAtPath(key, path, d.target),
                   };
                 }),
                 excluded: excluded.map((e) => ({
-                  path: String(e.path ?? ''),
+                  path: redactText(String(e.path ?? '')),
                   expectedDifferenceId: String(e.expectedDifferenceId ?? ''),
                 })),
               }
@@ -851,12 +856,13 @@ export function createBatch1(deps: Batch1Deps) {
       const planned = await privileged.migration.count({
         where: { routeId: id, scope: 'repository', sourceRepository: { presence: 'present' } },
       });
-      if (planned > MAX_PREVIEW_MIGRATIONS) {
+      const cap = BATCH1_LIMITS.maxPreviewMigrations;
+      if (planned > cap) {
         throw new ProblemError('validation_failed', {
           errors: [
             {
               path: 'rule',
-              message: `the Route has ${planned} repositories; a preview plans at most ${MAX_PREVIEW_MIGRATIONS}`,
+              message: `the Route has ${planned} repositories; a preview plans at most ${cap}`,
             },
           ],
         });

@@ -57,7 +57,7 @@ All v1 paths in this document are relative to `/api/v1`. Bodies are JSON with `c
 |---|---|---|
 | `POST /inventory/refresh` | operator | Enqueue an inventory pass. Body `{"endpointId": "..."}` is optional; without it every active Endpoint is refreshed. Answers 202 `{"endpoints": [...]}`. 404 for an unknown Endpoint, 409 for a retired one. |
 | `POST /migrations/{id}/analyze` | operator | Enqueue an interactive analysis. 202 `{"migrationId": "...", "queue": "analysis-interactive"}`. 409 when the Migration's source is missing. A running Migration may be analyzed. |
-| `POST /routes/{id}/naming/preview` | operator | Evaluate a candidate naming rule against a Route without saving it. Body `{"rule": {"scope": "namespace" \| "repository", "scopeRef": "...", "pipeline": {...}}}`, or `"override": "name"` instead of `pipeline` at repository scope. Returns the planned names next to the current ones, collisions and findings, and takes `cursor` and `limit`. |
+| `POST /routes/{id}/naming/preview` | operator | Evaluate a candidate naming rule against a Route without saving it. Body `{"rule": {"scope": "namespace" \| "repository", "scopeRef": "...", "pipeline": {...}}}`, or `"override": "name"` instead of `pipeline` at repository scope. Returns the planned names next to the current ones, collisions and findings, and takes `cursor` and `limit`. A Route with more than 20,000 repositories is a 422 `validation_failed` (`rule`): a preview plans the whole Route at once. |
 
 Commands that enqueue answer **202 Accepted**: the work is queued, not done. Asking twice does not queue twice (queued jobs are de-duplicated), so retrying a command after a timeout is safe. Watch the result with events, or poll the model (`migration`, `analysis`).
 
@@ -103,6 +103,7 @@ Branch on `code`, never on `title` or `detail`. A 422 `validation_failed` also l
 | `unsupported_media_type` | 415 | Not `application/json`. |
 | `validation_failed` | 422 | The body or query is invalid; see `errors`. |
 | `too_many_streams` | 429 | Too many open event streams; honour `Retry-After`. |
+| `too_many_requests` | 429 | Any other 429; wait and retry, honouring `Retry-After` when present. |
 | `internal_error` | 500 | A server fault. The body never carries internal detail; report the time and the request. |
 | `not_ready` | 503 | The server is starting up, the queue or database is unreachable, or a service this endpoint needs is not configured. Retry after the `Retry-After` seconds, with backoff. |
 
