@@ -115,13 +115,29 @@ describe('event hub (JOB-060)', () => {
   it('[JOB-060] sends a heartbeat comment and event every 15 seconds', async () => {
     const a = open(['quota']);
     await settle();
-    expect(a.text).not.toContain('heartbeat');
+    // One heartbeat at once tells the client the listener is up (ADR-0520).
+    expect(a.text.match(/event: heartbeat/g)).toHaveLength(1);
     await vi.advanceTimersByTimeAsync(14_999);
-    expect(a.text).not.toContain('heartbeat');
+    expect(a.text.match(/event: heartbeat/g)).toHaveLength(1);
     await vi.advanceTimersByTimeAsync(1);
     expect(a.text).toContain(': heartbeat\n\nevent: heartbeat\ndata: {}\n\n');
-    await vi.advanceTimersByTimeAsync(15_000);
     expect(a.text.match(/event: heartbeat/g)).toHaveLength(2);
+    await vi.advanceTimersByTimeAsync(15_000);
+    expect(a.text.match(/event: heartbeat/g)).toHaveLength(3);
+  });
+
+  it('[JOB-060] a stream opened while the listener is down gets no heartbeat until it is back', async () => {
+    listener.connected = false;
+    const a = open(['quota']);
+    await settle();
+    expect(a.text).toContain(': connected');
+    expect(a.text).not.toContain('heartbeat');
+    await vi.advanceTimersByTimeAsync(30_000);
+    expect(a.text).not.toContain('heartbeat');
+    listener.connected = true;
+    listener.emit({ kind: 'resync' });
+    await settle();
+    expect(a.text).toContain('event: resync');
   });
 
   it('[JOB-060] tells clients to resync when the listener reconnects', async () => {
@@ -203,15 +219,15 @@ describe('event hub (JOB-060)', () => {
   it('[JOB-060] stops sending heartbeats while the listener is down and resumes after it is back', async () => {
     const a = open(['quota']);
     await vi.advanceTimersByTimeAsync(15_000);
-    expect(a.text.match(/event: heartbeat/g)).toHaveLength(1);
+    expect(a.text.match(/event: heartbeat/g)).toHaveLength(2);
     listener.connected = false;
     await vi.advanceTimersByTimeAsync(15_000 * 4);
-    expect(a.text.match(/event: heartbeat/g)).toHaveLength(1);
+    expect(a.text.match(/event: heartbeat/g)).toHaveLength(2);
     listener.connected = true;
     listener.emit({ kind: 'resync' });
     await vi.advanceTimersByTimeAsync(15_000);
     expect(a.text).toContain('event: resync');
-    expect(a.text.match(/event: heartbeat/g)).toHaveLength(2);
+    expect(a.text.match(/event: heartbeat/g)).toHaveLength(3);
   });
 
   it('[JOB-060] ends a stream after its lifetime, spread by 20% either way', async () => {

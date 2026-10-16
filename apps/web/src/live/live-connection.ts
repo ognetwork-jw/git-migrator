@@ -6,6 +6,9 @@
  * - If nothing arrives for `staleAfterMs` (45 s; the server sends a heartbeat every 15 s), or
  *   `EventSource` does not exist, the connection polls: it reports every topic each `pollEveryMs`
  *   (10 s). It keeps trying to reconnect, and returns to SSE after a successful reconnect (Q24).
+ * - A reconnect is successful when the stream proves the server's listener is up: the first
+ *   heartbeat, `gm` or `resync` after `open`. `open` alone is not enough, because the server
+ *   accepts streams while its listener is down and sends them no heartbeat (ADR-0520).
  * - After any gap (a reconnect, a `resync` event) every topic is reported once, because events may
  *   have been missed.
  */
@@ -72,6 +75,7 @@ export function createLiveConnection(options: LiveConnectionOptions): LiveConnec
   let watchdog: ReturnType<typeof setTimeout> | undefined;
   let reconnect: ReturnType<typeof setTimeout> | undefined;
   let poll: ReturnType<typeof setInterval> | undefined;
+  /** A stream was opened before: a later confirmation follows a gap. */
   let everOpened = false;
 
   const setMode = (next: LiveMode) => {
@@ -137,16 +141,30 @@ export function createLiveConnection(options: LiveConnectionOptions): LiveConnec
       return;
     }
     source = next;
-    next.onopen = () => {
-      if (source !== next) return;
-      backoff = INITIAL_BACKOFF_MS;
-      const wasDown = everOpened || mode === 'polling';
-      everOpened = true;
-      stopPolling();
+    let confirmed = false;
+    // An earlier stream opened: this one follows a gap, even if that one was never confirmed.
+    const afterGap = everOpened;
+    /**
+     * The stream delivered something only a live listener sends: leave polling. Returns true when
+     * this was the confirmation of a reconnect, which already reported every topic.
+     */
+    const confirm = (): boolean => {
       armWatchdog();
+      if (confirmed) return false;
+      confirmed = true;
+      backoff = INITIAL_BACKOFF_MS;
+      const wasDown = afterGap || mode === 'polling';
+      stopPolling();
       setMode('sse');
       // A reconnect follows a gap in which events may have been missed.
       if (wasDown) options.onInvalidate(all);
+      return wasDown;
+    };
+    next.onopen = () => {
+      if (source !== next) return;
+      // Open, but the listener may be down: keep polling until the stream proves otherwise.
+      armWatchdog();
+      everOpened = true;
     };
     next.onerror = () => {
       if (source !== next) return;
@@ -156,18 +174,18 @@ export function createLiveConnection(options: LiveConnectionOptions): LiveConnec
     };
     next.addEventListener('gm', (event) => {
       if (source !== next) return;
-      armWatchdog();
+      if (confirm()) return;
       const matched = parseMatched(event.data, wanted);
       if (matched.length > 0) options.onInvalidate(matched);
     });
     next.addEventListener('resync', () => {
       if (source !== next) return;
-      armWatchdog();
+      if (confirm()) return;
       options.onInvalidate(all);
     });
     next.addEventListener('heartbeat', () => {
       if (source !== next) return;
-      armWatchdog();
+      confirm();
     });
   }
 

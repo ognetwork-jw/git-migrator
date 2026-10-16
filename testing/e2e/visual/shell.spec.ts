@@ -31,16 +31,25 @@ async function mockApi(page: Page, role: Role | 'signed-out') {
   });
 }
 
-/** A deterministic live connection: it opens at once and stays quiet. */
+/**
+ * A deterministic live connection: it opens at once, sends the first heartbeat as a server with a
+ * live listener does (ADR-0520), and stays quiet.
+ */
 async function fakeEventSource(page: Page) {
   await page.addInitScript(() => {
     class QuietEventSource {
       onopen: ((event: unknown) => void) | null = null;
       onerror: ((event: unknown) => void) | null = null;
+      readonly listeners = new Map<string, (event: { data?: string }) => void>();
       constructor() {
-        setTimeout(() => this.onopen?.({}), 0);
+        setTimeout(() => {
+          this.onopen?.({});
+          this.listeners.get('heartbeat')?.({ data: '{}' });
+        }, 0);
       }
-      addEventListener() {}
+      addEventListener(type: string, listener: (event: { data?: string }) => void) {
+        this.listeners.set(type, listener);
+      }
       close() {}
     }
     (window as unknown as { EventSource: unknown }).EventSource = QuietEventSource;

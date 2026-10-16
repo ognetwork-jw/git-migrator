@@ -27,6 +27,11 @@ class FakeEventSource implements EventSourceLike {
   open() {
     this.onopen?.({});
   }
+  /** Opens and delivers the first heartbeat, as a server with a live listener does. */
+  ready() {
+    this.open();
+    this.emit('heartbeat', {});
+  }
   fail() {
     this.onerror?.({});
   }
@@ -76,7 +81,7 @@ describe('live connection (JOB-060)', () => {
   it('[JOB-060] invalidates the subscribed topics an event names and nothing else', () => {
     make();
     connection.start();
-    last().open();
+    last().ready();
     expect(connection.mode).toBe('sse');
     expect(invalidated).toEqual([]); // the first connection follows a fresh fetch
     last().emit('gm', { type: 'run.updated', ids: {}, at: '', topics: ['run:r1', 'run:evil'] });
@@ -113,7 +118,7 @@ describe('live connection (JOB-060)', () => {
     expect(FakeEventSource.instances).toHaveLength(2);
     vi.advanceTimersByTime(1);
     expect(FakeEventSource.instances).toHaveLength(3);
-    last().open();
+    last().ready();
     expect(connection.mode).toBe('sse');
     expect(invalidated).toEqual([['run:r1', 'list:runs']]);
     // A success resets the backoff.
@@ -140,7 +145,7 @@ describe('live connection (JOB-060)', () => {
   it('[JOB-060] polls every 10 seconds when nothing arrives for 45 seconds, then returns to SSE', () => {
     make();
     connection.start();
-    last().open();
+    last().ready();
     vi.advanceTimersByTime(44_999);
     expect(connection.mode).toBe('sse');
     last().emit('heartbeat', {}); // a heartbeat keeps the connection alive
@@ -157,12 +162,60 @@ describe('live connection (JOB-060)', () => {
     vi.advanceTimersByTime(20_000);
     expect(invalidated).toHaveLength(3);
     // The reconnect attempt succeeds: polling stops and one catch-up invalidation is made.
-    last().open();
+    last().ready();
     expect(connection.mode).toBe('sse');
     expect(invalidated).toHaveLength(4);
     vi.advanceTimersByTime(9_000);
     expect(invalidated).toHaveLength(4);
     expect(modes).toEqual(['sse', 'polling', 'sse']);
+  });
+
+  it('[JOB-060] a stream that opens but never heartbeats keeps polling every 10 seconds', () => {
+    make();
+    connection.start();
+    vi.advanceTimersByTime(45_000); // nothing at all: polling starts
+    expect(connection.mode).toBe('polling');
+    // The server accepts the reconnect while its listener is down: `open`, then silence.
+    vi.advanceTimersByTime(1_000);
+    last().open();
+    expect(connection.mode).toBe('polling');
+    const before = invalidated.length;
+    vi.advanceTimersByTime(30_000);
+    expect(connection.mode).toBe('polling');
+    expect(invalidated.length).toBe(before + 3);
+    // The listener is back: the first heartbeat ends polling with one catch-up invalidation.
+    last().emit('heartbeat', {});
+    expect(connection.mode).toBe('sse');
+    expect(invalidated.length).toBe(before + 4);
+    vi.advanceTimersByTime(10_000);
+    expect(invalidated.length).toBe(before + 4);
+    expect(modes).toEqual(['polling', 'sse']);
+  });
+
+  it('[JOB-060] a silent open does not reset the reconnect backoff', () => {
+    make();
+    connection.start();
+    last().fail();
+    vi.advanceTimersByTime(1_000);
+    last().open(); // open without a heartbeat
+    last().fail();
+    vi.advanceTimersByTime(1_999);
+    expect(FakeEventSource.instances).toHaveLength(2);
+    vi.advanceTimersByTime(1);
+    expect(FakeEventSource.instances).toHaveLength(3);
+  });
+
+  it('[JOB-060] the first event or resync after open also proves the stream, with one catch-up', () => {
+    make();
+    connection.start();
+    vi.advanceTimersByTime(45_000);
+    vi.advanceTimersByTime(1_000);
+    last().open();
+    const before = invalidated.length;
+    last().emit('gm', { topics: ['run:r1'] });
+    expect(connection.mode).toBe('sse');
+    // The catch-up already covers every topic; the event adds nothing.
+    expect(invalidated.slice(before)).toEqual([['run:r1', 'list:runs']]);
   });
 
   it('[JOB-060] falls back to polling when the stream cannot be established', () => {

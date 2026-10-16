@@ -23,6 +23,11 @@ class FakeEventSource implements EventSourceLike {
   close() {
     this.closed = true;
   }
+  /** Opens and delivers the first heartbeat, as a server with a live listener does. */
+  ready() {
+    this.onopen?.({});
+    this.listeners.get('heartbeat')?.({ data: '{}' });
+  }
 }
 
 const last = () => FakeEventSource.instances.at(-1) as FakeEventSource;
@@ -50,7 +55,7 @@ describe('useLiveInvalidation (JOB-060)', () => {
       { wrapper },
     );
     expect(result.current).toBe('connecting');
-    act(() => last().onopen?.({}));
+    act(() => last().ready());
     expect(result.current).toBe('sse');
     act(() => last().listeners.get('gm')?.({ data: JSON.stringify({ topics: ['run:r1'] }) }));
     expect(invalidate).toHaveBeenCalledTimes(1);
@@ -70,7 +75,7 @@ describe('useLiveInvalidation (JOB-060)', () => {
         }),
       { wrapper },
     );
-    act(() => last().onopen?.({}));
+    act(() => last().ready());
     act(() => last().listeners.get('resync')?.({}));
     expect(invalidate.mock.calls.map((c) => c[0])).toEqual([
       { queryKey: ['runs', 'list'] },
@@ -83,7 +88,7 @@ describe('useLiveInvalidation (JOB-060)', () => {
       () => useLiveInvalidation({ topics: ['quota'], createEventSource: create }),
       { wrapper },
     );
-    act(() => last().onopen?.({}));
+    act(() => last().ready());
     // The server goes silent: no event and no heartbeat.
     act(() => {
       vi.advanceTimersByTime(45_000);
@@ -100,7 +105,7 @@ describe('useLiveInvalidation (JOB-060)', () => {
     });
     expect(invalidate).toHaveBeenCalledTimes(2);
     // A later reconnect succeeds: back to SSE.
-    act(() => last().onopen?.({}));
+    act(() => last().ready());
     expect(result.current).toBe('sse');
   });
 
@@ -139,7 +144,7 @@ describe('useLiveInvalidation (JOB-060)', () => {
         useLiveInvalidation({ topics, createEventSource: create, debounceMs: 300 }),
       { wrapper, initialProps: { topics: ['list:runs'] } },
     );
-    act(() => last().onopen?.({}));
+    act(() => last().ready());
     act(() => last().listeners.get('gm')?.({ data: JSON.stringify({ topics: ['list:runs'] }) }));
     expect(invalidate).not.toHaveBeenCalled(); // waiting for the window
     rerender({ topics: ['list:runs', 'quota'] });
