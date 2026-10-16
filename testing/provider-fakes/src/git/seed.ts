@@ -41,6 +41,11 @@ export interface SeedSpec {
   tags?: SeedTag[];
   /** Files tracked with git-lfs: a pointer is committed and the object is stored in `lfs`. */
   lfsFiles?: SeedFile[];
+  /**
+   * Patterns `.gitattributes` tracks with LFS (for example `*.bin`). Default: each LFS file's path.
+   * The patterns must cover every `lfsFiles` path; the seeder does not check.
+   */
+  lfsPatterns?: string[];
   /** Ordinary (non-LFS) large blobs, e.g. to trigger the target's blob size rejection. */
   bigBlobs?: SeedFile[];
 }
@@ -50,6 +55,10 @@ export interface SeedResult {
   heads: Record<string, string>;
   /** Tag name -> object id the tag ref points at (tag object for annotated tags). */
   tags: Record<string, string>;
+  /** Tag name -> the commit the tag points at (annotated tags peeled). */
+  tagCommits: Record<string, string>;
+  /** The committed `.gitattributes` text, when LFS files were seeded. */
+  gitattributes?: string;
   /** LFS objects stored, by path. */
   lfs: Record<string, { oid: string; size: number }>;
 }
@@ -147,7 +156,7 @@ export async function seedBareRepo(
 ): Promise<SeedResult> {
   const def = spec.defaultBranch ?? 'main';
   const s = new Stream();
-  const result: SeedResult = { heads: {}, tags: {}, lfs: {} };
+  const result: SeedResult = { heads: {}, tags: {}, tagCommits: {}, lfs: {} };
   const marks: Record<string, number> = {};
 
   let head: number | undefined;
@@ -163,9 +172,10 @@ export async function seedBareRepo(
   const lfsFiles = spec.lfsFiles ?? [];
   if (lfsFiles.length > 0) {
     if (!lfs) throw new Error('seedBareRepo: lfsFiles requires the `lfs` store');
-    const attributes = lfsFiles
-      .map((f) => `${f.path} filter=lfs diff=lfs merge=lfs -text\n`)
+    const attributes = (spec.lfsPatterns ?? lfsFiles.map((f) => f.path))
+      .map((pattern) => `${pattern} filter=lfs diff=lfs merge=lfs -text\n`)
       .join('');
+    result.gitattributes = attributes;
     files.push(['.gitattributes', s.blob(attributes)]);
     for (const [i, f] of lfsFiles.entries()) {
       const stored = await lfs.store.put(lfs.repo, fileBytes(f, 100 + i));
@@ -204,15 +214,18 @@ export async function seedBareRepo(
   const env = isolatedGitEnv(dirname(barePath));
   await runGit(['fast-import', '--quiet', '--force'], { cwd: barePath, env, input: s.toBuffer() });
 
-  const refs = await runGit(['for-each-ref', '--format=%(refname) %(objectname)'], {
+  const refs = await runGit(['for-each-ref', '--format=%(refname) %(objectname) %(*objectname)'], {
     cwd: barePath,
     env,
   });
   for (const line of refs.stdout.split('\n')) {
-    const [ref, oid] = line.split(' ');
+    const [ref, oid, peeled] = line.split(' ');
     if (!ref || !oid) continue;
     if (ref.startsWith('refs/heads/')) result.heads[ref.slice(11)] = oid;
-    else if (ref.startsWith('refs/tags/')) result.tags[ref.slice(10)] = oid;
+    else if (ref.startsWith('refs/tags/')) {
+      result.tags[ref.slice(10)] = oid;
+      result.tagCommits[ref.slice(10)] = peeled || oid;
+    }
   }
   return result;
 }

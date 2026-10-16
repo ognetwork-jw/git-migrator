@@ -90,8 +90,24 @@ describe('fixture world', () => {
     expect(restr.map((r: Loose) => r.kind).sort()).toEqual(['delete', 'force']);
     expect(restr.every((r: Loose) => r.users.length === 0 && r.groups.length === 0)).toBe(true);
     expect((await bb(`${base}/deploy-keys`)).body.values).toHaveLength(1);
+    // The source API sees the seeded tags (annotated ones peeled to their commit) and LFS files.
+    const tags = (await bb(`${base}/refs/tags`)).body.values;
+    const main = (await git('auto-ok', 'rev-parse', 'main')).trim();
+    expect(tags.map((t: Loose) => [t.name, t.target.hash])).toEqual([
+      ['v1.0.0', (await git('auto-ok', 'rev-parse', 'v1.0.0^{commit}')).trim()],
+      ['v1.0.1', main],
+    ]);
+    expect(await git('auto-ok', 'show', 'main:.gitattributes')).toBe(
+      '*.bin filter=lfs diff=lfs merge=lfs -text\n',
+    );
+    const attributes = await fetch(bbUrl(`${base}/src/main/.gitattributes`), {
+      headers: { Authorization: BB_AUTH },
+    });
+    expect(await attributes.text()).toBe('*.bin filter=lfs diff=lfs merge=lfs -text\n');
+    const meta = await bb(`${base}/src/main/assets/sample.bin?format=meta`);
+    expect(meta.body).toMatchObject({ type: 'commit_file', path: 'assets/sample.bin' });
     const vars = (await bb(`${base}/pipelines_config/variables`)).body.values;
-    expect(vars.map((v: Loose) => v.key)).toContain('E2E_VAR');
+    expect(vars.map((v: Loose) => v.key)).toEqual(['E2E_VAR']);
     expect(vars.some((v: Loose) => v.secured)).toBe(false);
     expect((await bb(`${base}/environments`)).body.values).toHaveLength(1);
     expect((await bb(`${base}/permissions-config/users`)).body.values).toHaveLength(0);

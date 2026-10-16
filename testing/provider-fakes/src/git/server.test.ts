@@ -274,6 +274,29 @@ describe('fake git server', () => {
     expect((await readFile(join(other, 'big.dat'))).equals(payload)).toBe(true);
   });
 
+  it('[TST-013] the seeder writes LFS patterns to .gitattributes and reports the commit of each tag', async () => {
+    const path = server.repoDir('source', 'acme/patterns');
+    await createBareRepo(path);
+    const seeded = await seedBareRepo(
+      path,
+      {
+        commits: 1,
+        lfsFiles: [{ path: 'assets/sample.bin', bytes: 10 }],
+        lfsPatterns: ['*.bin'],
+        tags: [
+          { name: 'v1', annotated: true },
+          { name: 'v2', annotated: false },
+        ],
+      },
+      { store: server.lfsStore('source'), repo: 'acme/patterns' },
+    );
+    const attributes = await git(['show', 'main:.gitattributes'], path);
+    expect(attributes.stdout).toBe('*.bin filter=lfs diff=lfs merge=lfs -text\n');
+    expect(seeded.gitattributes).toBe(attributes.stdout);
+    expect(seeded.tags.v1).not.toBe(seeded.heads.main); // the tag object
+    expect(seeded.tagCommits).toEqual({ v1: seeded.heads.main, v2: seeded.heads.main });
+  });
+
   it('[TST-013] fetches seeded LFS objects and pointers', async () => {
     await createBareRepo(server.repoDir('source', 'acme/seeded'));
     const seeded = await seedBareRepo(

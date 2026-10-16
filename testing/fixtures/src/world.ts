@@ -96,6 +96,7 @@ export function seedSpecFor(key: string): SeedSpec {
           { name: 'v1.0.1', annotated: false },
         ],
         lfsFiles: [{ path: 'assets/sample.bin', bytes: 1_000_000 }],
+        lfsPatterns: ['*.bin'],
       };
     case 'plat/open-pr':
       return { commits: 2, branches: [{ name: 'feature/x' }] };
@@ -164,6 +165,22 @@ export async function seedSourceGit(git: FakeGitServer): Promise<SeededWorld> {
 
 const ws = WORLD_WORKSPACE;
 
+/** The tagger `seedBareRepo` writes into annotated tags. */
+const SEED_TAGGER = 'Fake Tagger <tagger@example.invalid>';
+
+/**
+ * The text files of the seeded default branch the fake serves from `src` (in memory, ref independent):
+ * `.gitattributes` and the LFS pointer files, as they are committed.
+ */
+function committedTextFiles(seed: SeedResult): Record<string, string> {
+  const files: Record<string, string> = {};
+  if (seed.gitattributes !== undefined) files['.gitattributes'] = seed.gitattributes;
+  for (const [path, { oid, size }] of Object.entries(seed.lfs)) {
+    files[path] = `version https://git-lfs.github.com/spec/v1\noid sha256:${oid}\nsize ${size}\n`;
+  }
+  return files;
+}
+
 /** The fake serves `src` from memory (ref independent), so the file is stored there as well. */
 function enablePipelines(state: BitbucketState, slug: string, yaml: string): void {
   const repo = state.repository(ws, slug);
@@ -181,7 +198,6 @@ const CONFIGURE: Record<string, Configure> = {
     s.addBranchRestriction(ws, slug, { kind: 'delete', pattern: 'main' });
     s.addDeployKey(ws, slug, { key: fakePublicKey('auto-ok'), label: 'e2e-key' });
     s.addVariable(ws, slug, { key: 'E2E_VAR', value: 'hello' });
-    s.addVariable(ws, slug, { key: 'RELEASE_CHANNEL', value: 'stable' });
     s.addEnvironment(ws, slug, { name: 'production', environmentType: 'Production' });
   },
   'data/with-grants': (s, slug) => {
@@ -279,7 +295,23 @@ export function buildBitbucketWorld(
           ...(seed?.heads[name] ? { hash: seed.heads[name] } : {}),
         }),
       ),
+      files: seed ? committedTextFiles(seed) : {},
     });
+    const created = state.repository(ws, repo.slug);
+    for (const tag of spec.tags ?? []) {
+      // Bitbucket lists a tag with the commit it points at (annotated tags peeled).
+      const hash =
+        seed?.tagCommits[tag.name] ??
+        created?.branches.find((b) => b.name === (tag.target ?? 'main'))?.hash ??
+        '';
+      state.addTag(ws, repo.slug, {
+        name: tag.name,
+        hash,
+        ...(tag.annotated
+          ? { message: tag.message ?? `Release ${tag.name}\n`, tagger: SEED_TAGGER }
+          : {}),
+      });
+    }
     CONFIGURE[repo.key]?.(state, repo.slug);
   }
   applyShared(state);

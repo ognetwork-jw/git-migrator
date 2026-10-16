@@ -20,7 +20,7 @@ Things to know:
 - Identities: `alice` matches GitHub `alice-gh` by email (AUTH-050, needs the Atlassian Admin email source on the Bitbucket side), `bob` matches `bob` by login only (suggested), `carol` matches nobody. `erin` exists only on GitHub. The operator account is a workspace admin.
 - Not modelled by the fakes, so not in the world: the repository website (`homepage`).
 - The wiki of `ops/wiki-issues` is a bare repository at `acme/wiki-issues.git/wiki` on the git server (`git ls-remote <repo>.git/wiki`).
-- `.gitattributes` and `assets/sample.bin` of `plat/auto-ok` come from the seeder (it tracks the exact path, not `*.bin`). Files such as `bitbucket-pipelines.yml` are seeded through the seeder's `bigBlobs` option, which is only a name.
+- `.gitattributes` (tracking `*.bin`, the seeder's `lfsPatterns`) and the pointer `assets/sample.bin` of `plat/auto-ok` come from the seeder, and the fake Bitbucket serves them from `src` too; its tags `v1.0.0` (annotated) and `v1.0.1` are listed by `refs/tags` with the seeded commit ids. Files such as `bitbucket-pipelines.yml` are seeded through the seeder's `bigBlobs` option, which is only a name.
 
 ## Expected readiness and findings
 
