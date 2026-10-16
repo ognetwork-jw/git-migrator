@@ -3,7 +3,7 @@ import { redactWebhookUrl } from '@git-migrator/canonical';
 import type { FindingCode } from './codes.ts';
 import { GUIDANCE } from './entries.ts';
 import enMessages from './messages/en.json' with { type: 'json' };
-import { entryMessageKey, type ParamValues } from './params.ts';
+import { entryMessageKey, PARAMS, type ParamName, type ParamValues } from './params.ts';
 import { isSupplied, renderLines, renderTemplate, type TemplateProblem } from './template.ts';
 import type { MessageLookup, RenderedGuidance, RenderedStep } from './types.ts';
 
@@ -111,6 +111,24 @@ function message(lookup: MessageLookup, key: string, problems: TemplateProblem[]
 }
 
 /**
+ * The entry kinds of an `entries` value, or undefined when the value is missing or has an entry that
+ * is not an object with a declared kind (the same values the summary shows as a marker).
+ */
+function entryKinds(param: ParamName, value: unknown): Set<string> | undefined {
+  const declared: readonly string[] =
+    (PARAMS[param] as { readonly entryKinds?: readonly string[] }).entryKinds ?? [];
+  if (!Array.isArray(value) || value.length === 0) return undefined;
+  const kinds = new Set<string>();
+  for (const entry of value as unknown[]) {
+    const kind =
+      typeof entry === 'object' && entry !== null ? (entry as { kind?: unknown }).kind : undefined;
+    if (typeof kind !== 'string' || !declared.includes(kind)) return undefined;
+    kinds.add(kind);
+  }
+  return kinds;
+}
+
+/**
  * Renders the guidance for one finding code with the supplied parameters. Missing or invalid
  * parameters render as `‹name›` and are listed in `problems`. A step whose copy snippet has a
  * problem omits `copy`, so the UI never offers a command that is not ready to run.
@@ -144,6 +162,10 @@ export function renderGuidance(
   for (const step of entry.steps) {
     if (step.when !== undefined && !isSupplied(effective[step.when])) continue;
     if (step.unless !== undefined && isSupplied(effective[step.unless])) continue;
+    if (step.whenEntry !== undefined) {
+      const present = entryKinds(step.whenEntry.param, effective[step.whenEntry.param]);
+      if (present !== undefined && !step.whenEntry.kinds.some((k) => present.has(k))) continue;
+    }
     const rendered: { -readonly [K in keyof RenderedStep]: RenderedStep[K] } = {
       text: text(step.text),
     };

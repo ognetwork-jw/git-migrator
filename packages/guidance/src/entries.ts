@@ -123,10 +123,27 @@ export const GUIDANCE: Readonly<Record<FindingCode, Guidance>> = {
     step('repository-settings.deletion-forbidden', 2),
   ]),
 
+  // One step per kind of change left, shown only when such a change was left (ADR-0465).
   'repository-settings.left-in-place': plain('repository-settings.left-in-place', [
-    step('repository-settings.left-in-place', 1),
-    step('repository-settings.left-in-place', 2),
-    step('repository-settings.left-in-place', 3),
+    step('repository-settings.left-in-place', 1, {
+      whenEntry: {
+        param: 'details',
+        kinds: [
+          'group-unproven',
+          'group-renamed',
+          'group-has-children',
+          'group-changed',
+          'group-in-use',
+          'group-membership-in-use',
+        ],
+      },
+    }),
+    step('repository-settings.left-in-place', 2, {
+      whenEntry: { param: 'details', kinds: ['branch-rule-replaced', 'branch-rule-exists'] },
+    }),
+    step('repository-settings.left-in-place', 3, {
+      whenEntry: { param: 'details', kinds: ['repository-earlier'] },
+    }),
   ]),
   'repository-settings.deletion-unproven': plain('repository-settings.deletion-unproven', [
     step('repository-settings.deletion-unproven', 1),

@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { FINDING_CODES } from './codes.ts';
 import { GUIDANCE } from './entries.ts';
 import enMessages from './messages/en.json' with { type: 'json' };
+import { PARAMS } from './params.ts';
 import {
   displayTargetUrl,
   GUIDANCE_MESSAGES_EN,
@@ -47,6 +48,55 @@ describe('guidance rendering', () => {
       details: [{ kind: 'group-renamed', name: '' }],
     });
     expect(bad.problems).toContainEqual({ param: 'details', reason: 'invalid' });
+  });
+
+  it('[LIF-077] left-in-place guidance shows only the steps for the kinds that were left', () => {
+    const steps = (details: unknown): string[] =>
+      renderGuidance('repository-settings.left-in-place', {
+        details: details as never,
+      }).steps.map((s) => s.text);
+    const [groups, rules, repositories] = steps([
+      { kind: 'group-renamed', name: 'g' },
+      { kind: 'branch-rule-exists', name: 'main' },
+      { kind: 'repository-earlier', name: 'r' },
+    ]);
+    expect(groups).toMatch(/^Groups/);
+    expect(rules).toMatch(/^Branch rules/);
+    expect(repositories).toMatch(/^Repositories/);
+    expect(steps([{ kind: 'repository-earlier', name: 'r' }])).toEqual([repositories]);
+    expect(steps([{ kind: 'branch-rule-replaced', name: 'main' }])).toEqual([rules]);
+    expect(
+      steps([
+        { kind: 'group-in-use', name: 'g' },
+        { kind: 'group-membership-in-use', name: 'h' },
+      ]),
+    ).toEqual([groups]);
+    // A missing or invalid list cannot say which kinds were left, so every step is shown.
+    expect(steps(undefined)).toHaveLength(3);
+    expect(steps([{ kind: 'made-up', name: 'x' }])).toHaveLength(3);
+  });
+
+  it('[LIF-077] every entry kind a step selects is declared, and every declared kind has a step', () => {
+    for (const [code, entry] of Object.entries(GUIDANCE)) {
+      const selected = new Map<string, Set<string>>();
+      for (const step of entry.steps) {
+        if (step.whenEntry === undefined) continue;
+        const declared: readonly string[] =
+          (PARAMS[step.whenEntry.param] as { entryKinds?: readonly string[] }).entryKinds ?? [];
+        const kinds = selected.get(step.whenEntry.param) ?? new Set<string>();
+        for (const kind of step.whenEntry.kinds) {
+          expect(declared, `${code}: ${kind}`).toContain(kind);
+          kinds.add(kind);
+        }
+        selected.set(step.whenEntry.param, kinds);
+      }
+      for (const [param, kinds] of selected) {
+        const declared: readonly string[] =
+          (PARAMS[param as keyof typeof PARAMS] as { entryKinds?: readonly string[] }).entryKinds ??
+          [];
+        expect([...kinds].sort(), `${code}: ${param}`).toEqual([...declared].sort());
+      }
+    }
   });
 
   it('[UI-040] carries severity and verifiable from the source list', () => {

@@ -40,7 +40,9 @@ renderGuidance('secrets.set-value', {
 
 - `severity` is `blocker`, `pre`, `post` or `warning` (the spec's B, pre, post and W). `verifiable` is the spec's `(v)`.
 - `steps[].copy` is a copy-ready snippet. It is omitted when a parameter it needs is missing or invalid, and the problem is listed in `problems`.
-- `steps[].when` and `steps[].unless` select a step by whether a parameter is supplied.
+- `steps[].when` and `steps[].unless` select a step by whether a parameter is supplied. `steps[].whenEntry`
+  selects it by whether an `entries` parameter has an entry of one of the given kinds (a missing or
+  invalid value shows the step).
 - Missing or invalid parameters render as `‹name›`. Nothing renders as `undefined`, `null` or `NaN`.
 
 ## Templates

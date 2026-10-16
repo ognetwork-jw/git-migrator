@@ -299,7 +299,7 @@ These are unresolved review findings (review loops that hit the 5-round cap) and
 | 2026-10-09 | T-082 | 1 | MINOR | Facet strip severity is colour plus aria-label/title only; add a visible icon or text (UI-001 "colour is never the only signal") | apps/web/src/migration-detail/detail-view.tsx:76-81 | open |
 | 2026-10-09 | T-089 | — | MINOR | rollback.left-in-place (and rollback.incomplete, rollback.deletion-unproven) Step failures have no guidance entry or post task listing left records (T-089 r2 spec) |  | open |
 | 2026-10-09 | T-089 | — | MINOR | rollback.deletion-unproven post-task path (steps.ts:526-533) has no test; add a [LIF-077] integration case (T-089 r3 spec) |  | open |
-| 2026-10-09 | T-089 | — | MINOR | repository-settings.left-in-place guidance always shows all three steps (team, grant, repository) regardless of what was left (T-089 r3 spec) |  | open |
+| 2026-10-09 | T-089 | — | MINOR | ~~repository-settings.left-in-place guidance always shows all three steps (team, grant, repository) regardless of what was left (T-089 r3 spec)~~ |  | resolved (claude/followups-guidance) |
 | 2026-10-09 | T-089 | — | MINOR | packages/guidance README 'Parameter kinds' omits the new entries kind (and flag) (T-089 r4 spec) |  | open |
 | 2026-10-09 | T-089 | — | MINOR | rollback left-in-place: MAX_LEFT=20 truncates the listed entries while the count reports all; add '(first 20 shown)' (T-089 r4 spec) |  | open |
 | 2026-10-09 | T-089 | — | MINOR | adapter-github getRepository login-mismatch/id-match branch (renamed org) only covered by integration tests; add a unit test (T-089 r5 spec) |  | open |
