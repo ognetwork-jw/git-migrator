@@ -18,6 +18,7 @@ import {
   ignoreGone,
   itemPath,
   mutation,
+  readBackGh,
   repoTarget,
   sortBy,
 } from './common.ts';
@@ -327,9 +328,29 @@ export function branchRulesDriver(deps: DriverDeps): FacetDriver<BranchRules> {
           pattern: rule.pattern,
           ...managedInput(rule, false, push, bypass),
         };
-        const written = await write(rule, input, (i) =>
-          gh.graphql<Json>(CREATE, { input: i }, true),
-        );
+        let written: { result: Json; exemptionsDropped: boolean };
+        try {
+          written = await write(rule, input, (i) => gh.graphql<Json>(CREATE, { input: i }, true));
+        } catch (error) {
+          // A lost response may still have created the rule: the pattern had none when this apply
+          // started, so a rule under it now is ours. Ledger it as it reads before failing (ADR-0222).
+          const now = await readRules(readBackGh(ctx), deps.org, repo.slug, new Collector()).catch(
+            () => undefined,
+          );
+          const made = now?.rules.find((r) => r.rule.pattern === rule.pattern);
+          if (made) {
+            const lost = bypass.dropped || made.rule.forcePushExempt.length < bypass.kept.length;
+            yield mutation(
+              'branch-rules',
+              'create',
+              { ...ref(rule.pattern, made.id), ...(lost ? { exemptionsDropped: true } : {}) },
+              [itemPath('rules', 'pattern', rule.pattern)],
+              null,
+              made.rule,
+            );
+          }
+          throw error;
+        }
         const dropped = written.exemptionsDropped || bypass.dropped;
         const id = str(obj(obj(written.result.createBranchProtectionRule).branchProtectionRule).id);
         yield mutation(

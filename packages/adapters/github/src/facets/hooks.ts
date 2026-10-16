@@ -16,6 +16,7 @@ import {
   itemPath,
   mutation,
   orgTarget,
+  readBackGh,
   repoTarget,
   sortBy,
 } from './common.ts';
@@ -112,6 +113,14 @@ export function mergeHooks(
   return { hooks: sortBy(hooks, (h) => h.key), groups };
 }
 
+function keyOf(url: string): string | undefined {
+  try {
+    return webhookKey(url);
+  } catch {
+    return undefined;
+  }
+}
+
 async function readHooks(gh: Gh, base: string, collector: Collector, prefix: string) {
   const list = await gh.list<Json>(`${base}/hooks`);
   return mergeHooks(
@@ -150,25 +159,38 @@ function hookDriver(
         const existing = haveByKey.get(hook.key);
         const events = toGithubEvents(hook.events);
         if (!existing) {
-          // FAC-WEB-003/004: JSON payloads; a hook with a secret is created inactive and without it.
-          const created = await gh.send<Json>('POST', `${base}/hooks`, {
-            name: 'web',
-            active: hook.hasSecret ? false : hook.active,
-            events,
-            config: {
-              url: hook.url,
-              content_type: 'json',
-              insecure_ssl: hook.verifyTls ? '0' : '1',
-            },
-          });
-          yield mutation(
-            facetKey,
-            'create',
-            { kind: 'webhook', id: created.id, key: hook.key },
-            [path],
-            null,
-            { ...hook, url: redactWebhookUrl(hook.url) },
-          );
+          const createdRecord = (id: unknown) =>
+            mutation(facetKey, 'create', { kind: 'webhook', id, key: hook.key }, [path], null, {
+              ...hook,
+              url: redactWebhookUrl(hook.url),
+            });
+          let created: Json;
+          try {
+            // FAC-WEB-003/004: JSON payloads; a hook with a secret is created inactive and without it.
+            created = await gh.send<Json>('POST', `${base}/hooks`, {
+              name: 'web',
+              active: hook.hasSecret ? false : hook.active,
+              events,
+              config: {
+                url: hook.url,
+                content_type: 'json',
+                insecure_ssl: hook.verifyTls ? '0' : '1',
+              },
+            });
+          } catch (error) {
+            // A lost response may still have created the hook: no hook had this URL before, so one
+            // that has it now is ours. Ledger it before failing (ADR-0222).
+            const now = await readBackGh(ctx)
+              .list<Json>(`${base}/hooks`)
+              .catch(() => [] as Json[]);
+            const made = now
+              .flatMap((h) => rawOf(h) ?? [])
+              .filter((h) => keyOf(h.url) === hook.key)
+              .sort((a, b) => b.id - a.id)[0];
+            if (made) yield createdRecord(made.id);
+            throw error;
+          }
+          yield createdRecord(created.id);
           continue;
         }
         // Several raw hooks can share the URL. The merged `existing` says whether any of them has
