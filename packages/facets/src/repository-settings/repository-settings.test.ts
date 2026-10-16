@@ -79,6 +79,16 @@ describe('repository-settings facet', () => {
       expect(stripMigratedPrefix('[MIGRATED → https://gh.example.test/a/b]')).toBe('');
     });
 
+    it('[FAC-SET-003] normalize strips repeated prefixes, so it is idempotent', () => {
+      const once = normalizeRepositorySettings({
+        ...base,
+        description:
+          '[MIGRATED → https://gh.example.test/a/b] [MIGRATED → https://gh.example.test/a/c] Payments',
+      });
+      expect(once.description).toBe('Payments');
+      expect(normalizeRepositorySettings(once)).toEqual(once);
+    });
+
     it('[FAC-SET-003] text that only looks like the prefix is kept', () => {
       expect(stripMigratedPrefix('[MIGRATED → url]text')).toBe('[MIGRATED → url]text');
       expect(stripMigratedPrefix('notes [MIGRATED → url] x')).toBe('notes [MIGRATED → url] x');
