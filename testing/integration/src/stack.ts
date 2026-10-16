@@ -25,6 +25,7 @@ import { type ApiRuntime, buildApiRuntime } from '@git-migrator/web/server/api';
 import { runMigrate, runSeed } from '@git-migrator/worker/db-commands';
 import { startWorker, type WorkerHandle } from '@git-migrator/worker/worker';
 import { expect } from 'vitest';
+import { queuesBusy } from './queue-work.ts';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const PEM = readFileSync(join(here, '../../fixtures/fake-github-app.pem'), 'utf8');
@@ -75,7 +76,7 @@ export interface Stack {
   open(path: string, signal: AbortSignal): Promise<Response>;
   /** A read through the Model API (`/api/model`). */
   model<T>(name: string, op: string, args: unknown): Promise<T>;
-  /** Waits until no work queue holds a job that is waiting, running or retrying. */
+  /** Waits until no work queue holds a job that is waiting, running, retrying or due soon. */
   idle(what: string): Promise<void>;
   /** Refreshes the inventory and analyzes every Migration, as phase 1 does (steps 2 and 3). */
   prepare(): Promise<void>;
@@ -262,26 +263,14 @@ routes:
     return (response.body as { data: T }).data;
   };
 
-  /**
-   * True while a job is waiting, running, or delayed for a retry on a work queue. A failed attempt
-   * waits out its backoff as `delayed` (JOB-013); a scheduler's next occurrence is not work.
-   */
-  async function busy(): Promise<boolean> {
-    for (const name of WORK_QUEUES) {
-      const queue = worker.runtime.queue(name);
-      const counts = await queue.getJobCounts('waiting', 'active', 'prioritized');
-      if (Object.values(counts).some((n) => n > 0)) return true;
-      const delayed = await queue.getJobs(['delayed']);
-      if (delayed.some((job) => job.attemptsMade > 0)) return true;
-    }
-    return false;
-  }
+  /** True while a work queue holds a job a scenario waits for (see queue-work.ts). */
+  const busy = () => queuesBusy(worker.runtime, WORK_QUEUES);
   const idle: Stack['idle'] = async (what) => {
     await until(what, async () => {
       if (await busy()) return false;
       // A job that just finished may have queued the next one: look twice. This is a heuristic,
-      // not a guarantee: a delayed job that never failed (a throttled or scheduled enqueue) is not
-      // counted, so a scenario that waits for an effect also waits for that effect with `until`.
+      // not a guarantee: a delayed job due after the wait window is not counted, so a scenario
+      // that waits for an effect also waits for that effect with `until`.
       await new Promise((resolve) => setTimeout(resolve, 250));
       return !(await busy());
     });

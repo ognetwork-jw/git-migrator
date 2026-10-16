@@ -30,6 +30,7 @@ import { type ApiRuntime, buildApiRuntime } from '@git-migrator/web/server/api';
 import { runMigrate, runSeed } from '@git-migrator/worker/db-commands';
 import { startWorker, type WorkerHandle } from '@git-migrator/worker/worker';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { queuesBusy } from './queue-work.ts';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const PEM = readFileSync(join(here, '../../fixtures/fake-github-app.pem'), 'utf8');
@@ -130,23 +131,8 @@ const unmigrated = () =>
     take: 500,
   });
 
-/**
- * True while a job is waiting, running, or delayed for a retry on a work queue. A job whose attempt
- * failed waits out its backoff as `delayed` (JOB-013), and an `analyze` request for its Migration
- * is deduplicated into it: not counting it let the wait end while an Analysis was still to come.
- * Other delayed jobs (a scheduler's next occurrence, a drift check spread over the day) are not
- * work this scenario waits for.
- */
-async function busy(): Promise<boolean> {
-  for (const name of WORK_QUEUES) {
-    const queue = worker.runtime.queue(name);
-    const counts = await queue.getJobCounts('waiting', 'active', 'prioritized');
-    if (Object.values(counts).some((n) => n > 0)) return true;
-    const delayed = await queue.getJobs(['delayed']);
-    if (delayed.some((job) => job.attemptsMade > 0)) return true;
-  }
-  return false;
-}
+/** True while a work queue holds a job this scenario waits for (see queue-work.ts). */
+const busy = () => queuesBusy(worker.runtime, WORK_QUEUES);
 
 const idle = (what: string) =>
   until(what, async () => {
