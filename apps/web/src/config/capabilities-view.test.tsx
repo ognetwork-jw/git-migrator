@@ -1,16 +1,12 @@
 // @vitest-environment jsdom
 
 import { QueryClient } from '@tanstack/react-query';
-import { cleanup, configure, screen } from '@testing-library/react';
+import { cleanup, screen } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { json, mockApi } from '../test-api.ts';
 import { installMatchMedia, renderWithApp } from '../test-render.tsx';
 import type { CapabilityMatrix, Fidelity, MatrixField } from './api.ts';
 import { CapabilityMatrixView, cellFor, pairsOf } from './capabilities-view.tsx';
-
-vi.setConfig({ testTimeout: 30_000 });
-// The machine is shared by parallel agents: async queries get more than the 1 s default (UI tests).
-configure({ asyncUtilTimeout: 10_000 });
 
 const fresh = () => new QueryClient({ defaultOptions: { queries: { retry: false } } });
 

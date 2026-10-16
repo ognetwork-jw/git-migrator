@@ -1,17 +1,13 @@
 // @vitest-environment jsdom
 
 import { QueryClient } from '@tanstack/react-query';
-import { cleanup, configure, fireEvent, screen, waitFor } from '@testing-library/react';
+import { cleanup, fireEvent, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ACTORS } from '../test-admin.ts';
 import { mockApi } from '../test-api.ts';
 import { installMatchMedia, renderWithApp } from '../test-render.tsx';
 import { AUDIT_PAGE } from './api.ts';
 import { AUDIT_DATA_PREVIEW, AuditLogView, auditBounds } from './audit-view.tsx';
-
-// antd tables are slow to mount in jsdom, and the machine is shared: explicit, bounded timeouts.
-vi.setConfig({ testTimeout: 30_000 });
-configure({ asyncUtilTimeout: 10_000 });
 
 const fresh = () => new QueryClient({ defaultOptions: { queries: { retry: false } } });
 

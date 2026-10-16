@@ -10,8 +10,6 @@ import { installMatchMedia, renderWithApp } from '../test-render.tsx';
 import type { Dashboard, Quota } from './api.ts';
 import { DashboardView } from './dashboard-view.tsx';
 
-vi.setConfig({ testTimeout: 30_000 });
-
 const actor = (role: Actor['role']): Actor => ({
   id: 'a1',
   displayName: 'Ada',

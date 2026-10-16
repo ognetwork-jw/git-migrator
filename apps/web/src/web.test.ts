@@ -3,7 +3,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { getRequestListener } from '@hono/node-server';
 import { Hono } from 'hono';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, inject, it, vi } from 'vitest';
 import { parse } from 'yaml';
 import {
   CLOSE_STEP_TIMEOUT_MS,
@@ -16,6 +16,9 @@ import {
   startWebServer,
   TERMINATION_GRACE_MS,
 } from './web.ts';
+
+/** Wall-clock budgets scale with GM_TEST_TIME_FACTOR (ADR-0507). */
+const budget = (ms: number): number => ms * inject('timeFactor');
 
 const repoRoot = join(import.meta.dirname, '..', '..', '..');
 
@@ -94,7 +97,7 @@ describe('web entrypoint server', () => {
     await reader?.read();
     const started = Date.now();
     await server.close(100);
-    expect(Date.now() - started).toBeLessThan(3000);
+    expect(Date.now() - started).toBeLessThan(budget(3000));
     await reader?.cancel().catch(() => undefined);
   });
 });

@@ -1,10 +1,13 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, inject, it } from 'vitest';
 import {
   matchingPatterns,
   overlayProblems,
   parseOverlayData,
   patternProblem,
 } from './rules-draft.ts';
+
+/** Wall-clock budgets scale with GM_TEST_TIME_FACTOR (ADR-0507). */
+const budget = (ms: number): number => ms * inject('timeFactor');
 
 describe('[UI-031] webhook allowlist patterns', () => {
   it('[UI-031] a pattern must be a non-empty http or https URL without spaces', () => {
@@ -35,7 +38,7 @@ describe('[UI-031] webhook allowlist patterns', () => {
     const url = `https://ci.example.test/${Array.from({ length: 40 }, (_, i) => `s${i}`).join('/')}`;
     const started = performance.now();
     expect(matchingPatterns(url, hostile)).toEqual([]);
-    expect(performance.now() - started).toBeLessThan(2000);
+    expect(performance.now() - started).toBeLessThan(budget(2000));
   });
 
   it('[UI-031] the tester answers with the patterns the sync would match (FAC-WEB-002)', () => {

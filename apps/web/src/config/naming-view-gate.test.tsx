@@ -1,16 +1,12 @@
 // @vitest-environment jsdom
 
 import { QueryClient } from '@tanstack/react-query';
-import { cleanup, configure, fireEvent, screen, waitFor, within } from '@testing-library/react';
+import { cleanup, fireEvent, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { callsTo, json, problem } from '../test-api.ts';
 import { COLLISION, preview, setupNaming } from '../test-naming.ts';
 import { installMatchMedia, renderWithApp } from '../test-render.tsx';
 import { NamingRulesView } from './naming-view.tsx';
-
-// antd modals are slow to mount in jsdom, and the machine is shared: explicit, bounded timeouts.
-vi.setConfig({ testTimeout: 30_000 });
-configure({ asyncUtilTimeout: 10_000 });
 
 const fresh = () => new QueryClient({ defaultOptions: { queries: { retry: false } } });
 

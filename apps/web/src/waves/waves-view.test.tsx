@@ -16,8 +16,6 @@ vi.mock('../repositories/repositories-view.tsx', () => ({
 }));
 const { WaveDetailView } = await import('./wave-detail-view.tsx');
 
-vi.setConfig({ testTimeout: 30_000 });
-
 const actor = (role: Actor['role']): Actor => ({
   id: 'a1',
   displayName: 'Ada',
