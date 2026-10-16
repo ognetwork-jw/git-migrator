@@ -39,26 +39,36 @@ const LiveTopicsContext = createContext<LiveTopicsValue | undefined>(undefined);
  * and a table must never open one per row.
  */
 export function LiveTopicsProvider({ children }: { readonly children: ReactNode }) {
-  const [registrations, setRegistrations] = useState<readonly Registration[]>([]);
+  // The registrations live in a ref so that the first connection can read the ones the page's
+  // views made while mounting: their effects run before the provider's (children first).
+  const registrationsRef = useRef<readonly Registration[]>([]);
+  const [version, setVersion] = useState(0);
   const register = useCallback((registration: Registration) => {
-    setRegistrations((current) => [...current, registration]);
-    return () => setRegistrations((current) => current.filter((r) => r !== registration));
+    registrationsRef.current = [...registrationsRef.current, registration];
+    setVersion((v) => v + 1);
+    return () => {
+      registrationsRef.current = registrationsRef.current.filter((r) => r !== registration);
+      setVersion((v) => v + 1);
+    };
   }, []);
-  const wanted = useMemo(
-    () =>
-      [...new Set([...SHELL_TOPICS, ...registrations.flatMap((r) => r.topics)])].sort().join(','),
-    [registrations],
-  );
-  // The first connection opens at once; later changes of the topic set settle first, so a quick
+  // biome-ignore lint/correctness/useExhaustiveDependencies: `version` stands for the ref's content
+  const wanted = useMemo(() => topicsOf(registrationsRef.current), [version]);
+  // No stream until the provider has mounted. The first connection then opens at once with the
+  // topics of every view on the page, so a page load opens one stream, not one for the shell's
+  // topics and another for the page's. Later changes of the topic set settle first, so a quick
   // navigation opens one stream and not one per step (ADR-0350).
-  const [settled, setSettled] = useState(wanted);
+  const [settled, setSettled] = useState<string | undefined>(undefined);
+  const mounted = useRef(false);
   useEffect(() => {
+    if (!mounted.current) {
+      mounted.current = true;
+      setSettled(topicsOf(registrationsRef.current));
+      return undefined;
+    }
     const timer = setTimeout(() => setSettled(wanted), TOPIC_SETTLE_MS);
     return () => clearTimeout(timer);
   }, [wanted]);
-  const topics = useMemo(() => settled.split(','), [settled]);
-  const registrationsRef = useRef(registrations);
-  registrationsRef.current = registrations;
+  const topics = useMemo(() => (settled === undefined ? [] : settled.split(',')), [settled]);
   const mode = useLiveInvalidation({
     topics,
     debounceMs: REFETCH_DEBOUNCE_MS,
@@ -69,6 +79,13 @@ export function LiveTopicsProvider({ children }: { readonly children: ReactNode 
   });
   const value = useMemo(() => ({ mode, register }), [mode, register]);
   return <LiveTopicsContext.Provider value={value}>{children}</LiveTopicsContext.Provider>;
+}
+
+/** The sorted, de-duplicated topic list of the shell and the registered views, as one key. */
+function topicsOf(registrations: readonly Registration[]): string {
+  return [...new Set([...SHELL_TOPICS, ...registrations.flatMap((r) => r.topics)])]
+    .sort()
+    .join(',');
 }
 
 /** The mode of the page's live connection, for the shell's status tag. */
