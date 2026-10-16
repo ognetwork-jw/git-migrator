@@ -549,9 +549,6 @@ importers:
       '@git-migrator/canonical':
         specifier: workspace:*
         version: link:../canonical
-      '@git-migrator/core':
-        specifier: workspace:*
-        version: link:../core
 
   packages/jobs:
     dependencies:

@@ -345,7 +345,10 @@ export const GUIDANCE: Readonly<Record<FindingCode, Guidance>> = {
   // while `count` is not (ADR-0155).
   'change-requests.open': plain('change-requests.open', [
     step('change-requests.open', 1, { when: 'ids' }),
-    step('change-requests.open', 2),
+    // Checked to answer 200 on 2026-10-16 (ADR-0094 follow-up).
+    step('change-requests.open', 2, {
+      link: 'https://support.atlassian.com/bitbucket-cloud/docs/merge-a-pull-request/',
+    }),
   ]),
 
   // extras

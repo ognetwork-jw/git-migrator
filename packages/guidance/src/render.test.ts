@@ -99,6 +99,23 @@ describe('guidance rendering', () => {
     }
   });
 
+  it('[UI-040] documentation links are absolute https URLs without credentials, and render on their step', () => {
+    const links = Object.values(GUIDANCE).flatMap((entry) =>
+      entry.steps.flatMap((step) => (step.link === undefined ? [] : [step.link])),
+    );
+    expect(links.length).toBeGreaterThan(0);
+    for (const link of links) {
+      const url = new URL(link);
+      expect(url.protocol, link).toBe('https:');
+      expect(url.username + url.password, link).toBe('');
+      expect(url.href, link).toBe(link);
+    }
+    const rendered = renderGuidance('change-requests.open', { count: 1, ids: ['1: Fix'] });
+    expect(rendered.steps[1]?.link).toBe(
+      'https://support.atlassian.com/bitbucket-cloud/docs/merge-a-pull-request/',
+    );
+  });
+
   it('[UI-040] carries severity and verifiable from the source list', () => {
     const rendered = renderGuidance('secrets.set-value', SAMPLE_VALUES);
     expect(rendered).toMatchObject({
