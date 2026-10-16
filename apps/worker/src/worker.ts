@@ -75,6 +75,11 @@ export interface StartWorkerOptions {
   readonly tracing?: TracingHandle;
   /** Aborts start-up (SIGTERM): what has started is closed and `startWorker` rejects. */
   readonly signal?: AbortSignal;
+  /**
+   * Called just before the queue Workers start, the last start-up stage: from then on jobs may be
+   * running, so an abort drains them instead of exiting on the start-up timer (ADR-0213).
+   */
+  readonly onWorkersStarted?: () => void;
   /** Extra or replacement job handlers, merged over the maintenance handlers (tests, later tasks). */
   readonly handlers?: JobHandlers;
   /** Bounds of the wait for the database and its schemas (cold start). */
@@ -358,11 +363,8 @@ export async function startWorker(options: StartWorkerOptions): Promise<WorkerHa
       }),
       ...(options.handlers ?? {}),
     };
-    await jobs.startWorkers(role, config, handlers);
-    checkpoint();
-    ready = true;
-
-    // Scratch is pod-local, so every pod cleans its own (JOB-015, JOB-050).
+    // Scratch is pod-local, so every pod cleans its own (JOB-015, JOB-050). The start-up sweep
+    // ends before the Workers take a job, so it never races a Run's scratch directory.
     cleaner = new ScratchCleaner({
       root: scratchRoot(env),
       cron: config.schedules.scratchCleanup,
@@ -394,6 +396,13 @@ export async function startWorker(options: StartWorkerOptions): Promise<WorkerHa
     }
 
     checkpoint();
+    // The Workers start last: from here a SIGTERM drains the jobs they took, with no start-up exit
+    // timer (ADR-0213).
+    options.onWorkersStarted?.();
+    await jobs.startWorkers(role, config, handlers);
+    // An abort while they started is draining them: never report ready over that.
+    checkpoint();
+    ready = true;
     log.info({ role, queues }, 'worker started');
     return {
       role,
@@ -411,8 +420,11 @@ export async function startWorker(options: StartWorkerOptions): Promise<WorkerHa
 }
 
 export interface WorkerProcessOptions {
-  /** Starts the worker; the signal aborts start-up on SIGTERM. */
-  start(signal: AbortSignal): Promise<Pick<WorkerHandle, 'stop'>>;
+  /**
+   * Starts the worker; the signal aborts start-up on SIGTERM. `workersStarted` is called once the
+   * queue Workers may take jobs: a SIGTERM after it drains them with no start-up exit timer.
+   */
+  start(signal: AbortSignal, workersStarted: () => void): Promise<Pick<WorkerHandle, 'stop'>>;
   /** Registers the shutdown listener for SIGTERM and SIGINT. */
   onShutdownSignal(listener: () => void): void;
   exit(code: number): void;
@@ -421,7 +433,7 @@ export interface WorkerProcessOptions {
   flush?(): Promise<void>;
   /**
    * How long a SIGTERM during start-up may take before the process exits with 1, for a stage that
-   * cannot be interrupted. Default 30 s. It applies only until start-up settles (ADR-0213).
+   * cannot be interrupted. Default 30 s. It applies only until the Workers start (ADR-0213).
    */
   readonly startupExitMs?: number;
 }
@@ -430,8 +442,9 @@ export interface WorkerProcessOptions {
 export const STARTUP_EXIT_MS = 30_000;
 
 /**
- * The process life cycle around `startWorker` (DEP-030). SIGTERM during start-up aborts it and,
- * if a stage cannot be interrupted, exits after `startupExitMs`. SIGTERM after start-up drains:
+ * The process life cycle around `startWorker` (DEP-030). SIGTERM before the Workers start aborts
+ * start-up and, if a stage cannot be interrupted, exits after `startupExitMs`. SIGTERM once the
+ * Workers start (the last start-up stage) drains:
  * in-flight jobs finish their current step however long it takes, and the process exits 0 when the
  * drain ends. There is no timer then: the pod's `terminationGracePeriodSeconds` (120 s standard,
  * 600 s large) is the only bound, so a long step is never cut short by the process itself.
@@ -441,6 +454,8 @@ export async function runWorkerProcess(options: WorkerProcessOptions): Promise<v
   let handle: Pick<WorkerHandle, 'stop'> | undefined;
   let startupExit: NodeJS.Timeout | undefined;
   let shuttingDown = false;
+  // Once the Workers may take jobs, an aborted start-up drains them like a started worker does.
+  let workersStarted = false;
   const drain = (worker: Pick<WorkerHandle, 'stop'>): void => {
     worker.stop().then(
       () => options.exit(0),
@@ -458,11 +473,15 @@ export async function runWorkerProcess(options: WorkerProcessOptions): Promise<v
       drain(handle);
       return;
     }
+    if (workersStarted) return; // the aborted start-up closes the Workers after their jobs end
     startupExit = setTimeout(() => options.exit(1), options.startupExitMs ?? STARTUP_EXIT_MS);
     startupExit.unref();
   });
   try {
-    handle = await options.start(starting.signal);
+    handle = await options.start(starting.signal, () => {
+      workersStarted = true;
+      clearTimeout(startupExit);
+    });
   } catch (error) {
     clearTimeout(startupExit);
     if (!starting.signal.aborted) {
@@ -488,7 +507,8 @@ export async function main(): Promise<void> {
     otlpEndpoint: config.observability.otlpEndpoint,
   });
   await runWorkerProcess({
-    start: (signal) => startWorker({ config, env: process.env, role, log, tracing, signal }),
+    start: (signal, onWorkersStarted) =>
+      startWorker({ config, env: process.env, role, log, tracing, signal, onWorkersStarted }),
     onShutdownSignal: (listener) => {
       process.on('SIGTERM', listener);
       process.on('SIGINT', listener);
