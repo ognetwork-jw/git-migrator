@@ -3,7 +3,12 @@ import net from 'node:net';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { type Config, resolveConfig } from '@git-migrator/config';
-import { adminDatabaseUrl, createTestDatabase, type TestDatabase } from '@git-migrator/db/testing';
+import {
+  adminDatabaseUrl,
+  createTestDatabase,
+  dropDatabaseNamed,
+  type TestDatabase,
+} from '@git-migrator/db/testing';
 import { migrateBullmqSchema } from '@git-migrator/jobs';
 import { createLogger } from '@git-migrator/observability';
 import pg from 'pg';
@@ -243,10 +248,7 @@ describe('cold start (DEP-030, ADR-0213)', () => {
   }, 60_000);
 
   afterAll(async () => {
-    const admin = new pg.Client({ connectionString: adminUrl });
-    await admin.connect();
-    await admin.query(`DROP DATABASE IF EXISTS "${bareName}" WITH (FORCE)`);
-    await admin.end();
+    await dropDatabaseNamed(bareName);
   }, 60_000);
 
   const freePort = async (): Promise<number> => {
@@ -384,8 +386,8 @@ describe('wait for the database', () => {
       controller.abort();
       await expect(starting).rejects.toThrow();
     } finally {
-      await admin.query(`DROP DATABASE IF EXISTS "${name}" WITH (FORCE)`);
       await admin.end();
+      await dropDatabaseNamed(name);
     }
   }, 60_000);
 });

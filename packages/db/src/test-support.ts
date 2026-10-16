@@ -55,11 +55,63 @@ export async function createTestDatabase(prefix = 'gm_test_'): Promise<TestDatab
 
 async function dropDatabase(db: DbHandle, name: string): Promise<void> {
   await db.close();
+  await dropDatabaseNamed(name);
+}
+
+/** Drops a throw-away database by name over a fresh admin connection (see {@link dropDatabaseWith}). */
+export async function dropDatabaseNamed(name: string): Promise<void> {
   const admin = new pg.Client({ connectionString: adminDatabaseUrl() });
   await admin.connect();
   try {
-    await admin.query(`DROP DATABASE IF EXISTS "${name}" WITH (FORCE)`);
+    await dropDatabaseWith(admin, name);
   } finally {
     await admin.end();
+  }
+}
+
+/** The part of a `pg` client that {@link dropDatabaseWith} needs. */
+export interface DropClient {
+  query(sql: string): Promise<unknown>;
+}
+
+const INSUFFICIENT_PRIVILEGE = '42501';
+const OBJECT_IN_USE = '55006';
+const DROP_ATTEMPTS = 5;
+
+function sqlState(error: unknown): string | undefined {
+  const code = (error as { code?: unknown } | null)?.code;
+  return typeof code === 'string' ? code : undefined;
+}
+
+/**
+ * Drops `name`, tolerating sessions the test role may not terminate.
+ *
+ * `WITH (FORCE)` terminates every other session on the database first, and fails with
+ * "permission denied to terminate process" (42501) when one of them belongs to a superuser. An
+ * autovacuum worker runs as the bootstrap superuser, so a non-superuser test role hits this whenever
+ * autovacuum happens to visit the fresh database, which is likely under load. A plain `DROP DATABASE`
+ * cancels autovacuum workers itself and waits a few seconds for other sessions, so it is the fallback;
+ * a database still in use (55006) is retried after a pause.
+ */
+export async function dropDatabaseWith(
+  admin: DropClient,
+  name: string,
+  pause: (ms: number) => Promise<void> = (ms) => new Promise((resolve) => setTimeout(resolve, ms)),
+): Promise<void> {
+  const quoted = `"${name.replaceAll('"', '""')}"`;
+  for (let attempt = 1; ; attempt++) {
+    try {
+      await admin.query(`DROP DATABASE IF EXISTS ${quoted} WITH (FORCE)`);
+      return;
+    } catch (error) {
+      if (sqlState(error) !== INSUFFICIENT_PRIVILEGE) throw error;
+    }
+    try {
+      await admin.query(`DROP DATABASE IF EXISTS ${quoted}`);
+      return;
+    } catch (error) {
+      if (sqlState(error) !== OBJECT_IN_USE || attempt >= DROP_ATTEMPTS) throw error;
+    }
+    await pause(attempt * 500);
   }
 }
