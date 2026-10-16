@@ -234,6 +234,13 @@ describe('repository-settings facet', () => {
       expect(t.postTasks).toHaveLength(1);
     });
 
+    it('[FAC-SET-002] a private repository that disallows forking raises nothing', () => {
+      const t = translate({ ...base, forking: 'disallowed' }, { targetCaps: noForking });
+      expect(desiredOf(t).forking).toBe('disallowed');
+      expect(t.postTasks).toEqual([]);
+      expect(t.decisions).toEqual([]);
+    });
+
     it('[FAC-SET-002] a public repository is unaffected by the organization setting', () => {
       const t = translate({ ...base, visibility: 'public' }, { targetCaps: noForking });
       expect(t.postTasks).toEqual([]);

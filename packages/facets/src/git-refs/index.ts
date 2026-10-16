@@ -17,9 +17,9 @@ import {
 const HEADS = 'refs/heads/';
 const TAGS = 'refs/tags/';
 
-/** Short branch name for a default-branch value that may be a full ref name. */
+/** Short branch name for a default-branch value that may be a full ref name; never empty. */
 function shortBranch(name: string): string {
-  return name.startsWith(HEADS) ? name.slice(HEADS.length) : name;
+  return name.startsWith(HEADS) && name.length > HEADS.length ? name.slice(HEADS.length) : name;
 }
 
 /**

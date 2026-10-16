@@ -76,7 +76,8 @@ export function translateRepositorySettings(
     if (source.forking === 'private-only') {
       forkingDecision = { path: '/forking', fidelity: 'translated', accepted: false };
     }
-    if (ctx.targetCaps.fields['/forking']?.kind === 'unsupported') {
+    // An organization that forbids private forking already gives `disallowed`: nothing to report.
+    if (forking === 'allowed' && ctx.targetCaps.fields['/forking']?.kind === 'unsupported') {
       forkingDecision = {
         path: '/forking',
         fidelity: 'unsupported',
