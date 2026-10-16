@@ -171,15 +171,18 @@ function hookDriver(
           );
           continue;
         }
-        const targetHook = (groups.get(hook.key) ?? [])[0];
+        // Several raw hooks can share the URL. The merged `existing` says whether any of them has
+        // a secret, so patch a member that has one when there is one, and guard on that member.
+        const members = groups.get(hook.key) ?? [];
+        const targetHook = members.find((h) => h.hasSecret) ?? members[0];
         if (!targetHook) continue;
         const missingEvents = hook.events.some((e) => !existing.events.includes(e));
         // A hook with a secret waits for a human to set the secret and activate it (FAC-WEB-003).
         // Never activate a target hook that has no secret, even on a later apply.
-        const activateWithoutSecret = hook.hasSecret && !existing.hasSecret && hook.active;
+        const activateWithoutSecret = hook.hasSecret && !targetHook.hasSecret && hook.active;
         const activeDiffers =
           hook.active !== existing.active &&
-          !(existing.hasSecret && hook.active === false) &&
+          !(targetHook.hasSecret && hook.active === false) &&
           !activateWithoutSecret;
         const patch: Json = {};
         if (missingEvents)
