@@ -11,7 +11,7 @@ The snapshot `src/__snapshots__/capability-matrix.txt` reflects the adapters' de
 
 `merge-settings` `/allowed` and `/deleteBranchOnMerge` stay dynamic: the reader reports them per repository through `FacetRead.unreadable` / `FacetRead.capabilities` (FAC-MRG-002), so they are not in the static matrix.
 
-Cells are a static worst-case ceiling (`ceiling: 'static'` in the output): they come from declared capabilities only, never say `translated`, and a per-repository analysis can be worse. Do not read `exact` as a guarantee.
+Cells are a static worst-case ceiling (`ceiling: 'static'` in the output): they come from declared capabilities only, never say `translated`, and a per-repository analysis can be worse. Do not read `exact` as a guarantee. In particular, pipelines translation losses and environment name collisions are decided in translate from the data, not in the static matrix: the `pipelines` cell shows `exact` and the `environments` cell does not reflect name collisions (ADR-0261).
 
 Some declared paths are matrix markers rather than schema paths (for example `/secrets/value`, which the canonical `secrets` schema does not have, and `/owners`, `/variables/name`, `/hooks/events`, which stand for a whole concern). They let the matrix show a source that never returns a value or a lossy mapping. `src/builtin.test.ts` pins the source-side markers and ADR-0261 states the rule.
 

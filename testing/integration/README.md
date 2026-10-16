@@ -2,6 +2,10 @@
 
 Integration-tier tests (TST-001). `pnpm test:integration` runs every file here in the Vitest `integration` project against Postgres and the provider fakes (ADR-0475). The files other than `phase1.test.ts` also run in `pnpm test`, because the coverage thresholds of `jobs` and the adapters are measured from them.
 
+## Prerequisites
+
+Postgres is an external prerequisite: `pnpm test:integration` does not start it. Start it first (`devenv up`, or `docker compose up -d postgres`). Each file creates and drops its own throw-away database through `GM_TEST_DATABASE_URL`, which defaults to `postgresql://git_migrator:git_migrator@127.0.0.1:5432/postgres` (`packages/db/src/test-support.ts`); the role needs `CREATEDB`. The provider fakes need no setup: each file starts its own on free ports. Spec 12 describes the command as starting its services; for Postgres that is not the case yet (follow-up).
+
 ## Phase-1 scenario (TST-020, T-075)
 
 `src/phase1.test.ts` is the canonical end-to-end test, steps 1 to 8 in order, one `it` per step. It does not call processors directly: it starts the real composition roots over a throw-away database and the fixture world's fakes. `runMigrate` and `runSeed` prepare the database, `buildApiRuntime` is the web process's API (Better Auth with test sign-in, job producer), and `startWorker` is the worker with every queue handler. The test signs in as `operator@test.local` and drives the API (`/inventory/refresh`, the Model API list, `/migrations/{id}/analyze`, `/migrations/{id}/runs`, `/dashboard`), then asserts directly against the fake GitHub and the fake Bitbucket. It checks the readiness of every fixture repository, then migrates `plat/auto-ok`. The other scenarios of TST-020 are in the coverage table below.

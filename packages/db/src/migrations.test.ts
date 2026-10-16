@@ -620,7 +620,7 @@ describe('[DEP-003] the migrate step writes nothing into the package', () => {
     rmSync(workRoot, { recursive: true, force: true });
   }, 60_000);
 
-  it('[DEP-003] signal handlers are removed after a failed mkdtemp and after a failed run', async () => {
+  it('[DEP-003] signal handlers are removed after a failed mkdtemp, a successful run and a failed run', async () => {
     const counts = () => [process.listenerCount('SIGTERM'), process.listenerCount('SIGINT')];
     const before = counts();
     await expect(

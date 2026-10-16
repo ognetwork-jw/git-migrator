@@ -109,6 +109,8 @@ The image tag defaults to the chart's `appVersion`, which the release workflow s
 
 Pushing a tag `v<major>.<minor>.<patch>[-prerelease]` runs `.github/workflows/release.yml`: it builds the multi-arch image (`linux/amd64`, `linux/arm64`), pushes it to `ghcr.io/<owner>/git-migrator:<tag>` with provenance and an SBOM, then packages the chart (version is the tag without `v`, `appVersion` is the tag) and pushes it to `oci://ghcr.io/<owner>/charts`. The workflow uses only `GITHUB_TOKEN`. Gates, in order: the tag is well formed; the tagged commit is an ancestor of `origin/main`; the amd64 image passes `smoke.sh` before anything is pushed (arm64 is built but not smoke-tested); an existing image tag or chart version is never overwritten; and the publishing jobs run in the GitHub environment `release`. Create that environment in the repository settings and add required reviewers, otherwise that last gate is not enforced.
 
+If the `chart` job fails after the `image` job has pushed, use **Re-run failed jobs** on the workflow run. **Re-run all jobs** runs the `image` job again, which stops at "Refuse to overwrite an existing image tag" because the tag now exists, so the chart is never reached. Re-running only the failed jobs reruns `chart` against the image already pushed.
+
 ## Worker database connections (JOB-014)
 
 Each process creates one shared BullMQ `pg.Pool` (ADR-0210) and one application pool. Maximum connections per process:
