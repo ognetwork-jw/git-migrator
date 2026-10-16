@@ -655,6 +655,7 @@
         "issueExpires": "Expiry (optional)",
         "issueExpiresHelp": "Leave empty for a key that does not expire.",
         "issueExpiresPast": "The expiry must be in the future.",
+        "issueTimeout": "The key was not confirmed in time. It may still have been created: check the list of keys and revoke any key you did not receive, then try again.",
         "once": {
           "title": "Copy your new API key",
           "warning": "This key is shown once. Copy it now and store it safely. It cannot be shown again; if it is lost, revoke it and create another.",

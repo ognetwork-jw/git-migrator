@@ -73,4 +73,22 @@ describe('[API-011] apiRequest', () => {
     expect(init.method).toBe('DELETE');
     expect(init.body).toBeUndefined();
   });
+
+  it('[API-011] a request past its time limit is aborted and reported as a timeout', async () => {
+    let signal: AbortSignal | undefined;
+    const fetchImpl = (async (_: RequestInfo | URL, init?: RequestInit) => {
+      signal = init?.signal ?? undefined;
+      return new Promise<Response>((_, reject) => {
+        init?.signal?.addEventListener('abort', () => reject(new Error('aborted')));
+      });
+    }) as typeof fetch;
+    const error = await apiRequest('/api/v1/x', { fetchImpl, timeoutMs: 20 }).catch((e) => e);
+    expect(error).toBeInstanceOf(ApiError);
+    expect((error as ApiError).code).toBe('timeout');
+    expect(signal?.aborted).toBe(true);
+    // Without a limit no signal is passed.
+    const plain = vi.fn(async () => new Response('{}', { status: 200 }));
+    await apiRequest('/api/v1/x', { fetchImpl: plain as unknown as typeof fetch });
+    expect((plain.mock.calls[0] as unknown[])[1]).not.toHaveProperty('signal');
+  });
 });

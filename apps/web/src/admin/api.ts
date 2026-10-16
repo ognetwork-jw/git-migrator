@@ -86,10 +86,19 @@ export const fetchApiKeys = (actorId: string) =>
  * Issues a key. The caller takes the answer into the one-time dialog's own state. It is not
  * returned by a mutation hook, which would keep it in the mutation cache (ADR-0365).
  */
-export const issueApiKey = (actorId: string, name: string, expiresAt?: string) =>
+/** How long the dialog waits for a new key before it gives up and lets the operator leave. */
+export const ISSUE_TIMEOUT_MS = 30_000;
+
+export const issueApiKey = (
+  actorId: string,
+  name: string,
+  expiresAt?: string,
+  timeoutMs: number = ISSUE_TIMEOUT_MS,
+) =>
   apiRequest<IssuedKey>(`/api/v1/actors/${enc(actorId)}/api-keys`, {
     method: 'POST',
     json: expiresAt === undefined ? { name } : { name, expiresAt },
+    timeoutMs,
   });
 
 export const revokeApiKey = (id: string) =>

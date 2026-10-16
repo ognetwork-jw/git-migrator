@@ -25,6 +25,11 @@ export interface ApiRequestInit {
   /** A text body (for example CSV) with its media type. */
   readonly text?: { readonly body: string; readonly type: string };
   readonly fetchImpl?: typeof fetch;
+  /**
+   * Give up after this many milliseconds: the request is aborted and an `ApiError` with code
+   * `timeout` is thrown. The server may still have done the work. Default: no limit.
+   */
+  readonly timeoutMs?: number;
 }
 
 async function readErrors(response: Response): Promise<ApiError['errors']> {
@@ -57,14 +62,26 @@ export async function apiRequest<T>(path: string, init: ApiRequestInit = {}): Pr
     body = JSON.stringify(init.json);
   }
   let response: Response;
+  const abort = init.timeoutMs === undefined ? undefined : new AbortController();
+  let timedOut = false;
+  const timer =
+    abort === undefined
+      ? undefined
+      : setTimeout(() => {
+          timedOut = true;
+          abort.abort();
+        }, init.timeoutMs);
   try {
     response = await fetchImpl(path, {
       method: init.method ?? 'GET',
       headers,
       ...(body === undefined ? {} : { body }),
+      ...(abort === undefined ? {} : { signal: abort.signal }),
     });
   } catch {
-    throw new ApiError(0, 'not_ready');
+    throw new ApiError(0, timedOut ? 'timeout' : 'not_ready');
+  } finally {
+    if (timer !== undefined) clearTimeout(timer);
   }
   if (!response.ok) {
     // `readErrors` clones the response, so the body is still there for `problemCodeOf`.
