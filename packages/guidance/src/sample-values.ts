@@ -18,6 +18,7 @@ export const SAMPLE_VALUES: ParamValues = {
   size: '120MiB',
   limit: '100MiB',
   count: 3,
+  omitted: 5,
   ids: ['#12 Fix the build'],
   refs: ['refs/notes/commits'],
   kinds: ['custom-kind'],

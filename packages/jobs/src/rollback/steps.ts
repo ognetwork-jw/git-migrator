@@ -444,6 +444,26 @@ async function settleLeftInPlaceTasks(ctx: MigrationContext, keep: string | null
 }
 
 /**
+ * The entries a `left-in-place` task and failure name (at most `MAX_LEFT`), the task's params and
+ * the failure message. When entries are cut, the params carry how many are not listed and the
+ * message says only the first ones are shown, so the count and the list never disagree silently.
+ */
+export function leftInPlaceReport(lefts: readonly UndoLeftEntry[]): {
+  details: { kind: UndoLeftEntry['kind']; name: string }[];
+  params: { details: { kind: UndoLeftEntry['kind']; name: string }[]; omitted?: number };
+  message: string;
+} {
+  const details = lefts.slice(0, MAX_LEFT).map((l) => ({ kind: l.kind, name: l.name }));
+  const omitted = lefts.length - details.length;
+  const listed = details.map((d) => `${d.kind} ${d.name}`).join('; ');
+  return {
+    details,
+    params: omitted > 0 ? { details, omitted } : { details },
+    message: `${lefts.length} change(s) were left as they are because they are no longer provably the framework's: ${listed}${omitted > 0 ? ` (first ${MAX_LEFT} shown)` : ''}`,
+  };
+}
+
+/**
  * Raises the post task that tells the operator what to do by hand, in place of the one an earlier
  * rollback raised, and builds the failure. The entries are structured: guidance renders each kind
  * in the glossary's terms (GLO-002).
@@ -452,8 +472,7 @@ async function leftInPlace(
   ctx: MigrationContext,
   lefts: readonly UndoLeftEntry[],
 ): Promise<StepFailure> {
-  const details = lefts.slice(0, MAX_LEFT).map((l) => ({ kind: l.kind, name: l.name }));
-  const params = { details };
+  const { details, params, message } = leftInPlaceReport(lefts);
   await ctx.findings.addTask({
     code: LEFT_IN_PLACE,
     facetKey: 'repository-settings',
@@ -461,11 +480,7 @@ async function leftInPlace(
     params,
   });
   await settleLeftInPlaceTasks(ctx, hashCanonical(params));
-  return new StepFailure(
-    'rollback.left-in-place',
-    `${lefts.length} change(s) were left as they are because they are no longer provably the framework's: ${details.map((d) => `${d.kind} ${d.name}`).join('; ')}`,
-    { left: details },
-  );
+  return new StepFailure('rollback.left-in-place', message, { left: details });
 }
 
 /** True when a write was answered with a redirect: the repository moved under the rollback. */

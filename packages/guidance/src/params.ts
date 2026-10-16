@@ -51,6 +51,10 @@ export const PARAMS = {
   size: { kind: 'text', description: 'Human-readable size, such as "120 MiB".' },
   limit: { kind: 'text', description: 'Size limit without spaces, such as 100MiB.' },
   count: { kind: 'integer', description: 'A count of items.' },
+  omitted: {
+    kind: 'integer',
+    description: 'How many entries of a cut list are not listed. Supplied only when some are cut.',
+  },
   ids: { kind: 'list', description: 'Identifiers and titles of open Change Requests.' },
   refs: { kind: 'list', description: 'Ignored ref names.' },
   kinds: { kind: 'list', description: 'Unrecognized restriction kinds.' },

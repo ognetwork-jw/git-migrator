@@ -144,6 +144,7 @@ export const GUIDANCE: Readonly<Record<FindingCode, Guidance>> = {
     step('repository-settings.left-in-place', 3, {
       whenEntry: { param: 'details', kinds: ['repository-earlier'] },
     }),
+    step('repository-settings.left-in-place', 4, { when: 'omitted' }),
   ]),
   'repository-settings.deletion-unproven': plain('repository-settings.deletion-unproven', [
     step('repository-settings.deletion-unproven', 1),
