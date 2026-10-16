@@ -368,9 +368,9 @@ function waveSkip(
 
 /**
  * Wave membership is not an Analysis input, so no Analysis is marked stale (ADR-0407). One
- * transaction: the Wave is locked `FOR SHARE` (a concurrent delete waits, then the assignment is a
- * 404), each Migration is locked and re-read in id order, and the decision, the update and the
- * audit rows all use that locked read.
+ * transaction: every Wave involved is locked `FOR SHARE` first (a concurrent delete waits, then
+ * an assignment to it is a 404), each Migration is locked and re-read in id order, and the
+ * decision, the update and the audit rows all use that locked read.
  */
 async function bulkWave(
   ctx: BulkContext,
@@ -379,10 +379,19 @@ async function bulkWave(
   only: string | undefined,
 ): Promise<BulkResult> {
   return ctx.db.$transaction(async (tx) => {
-    if (waveId !== null) {
-      const found = await tx.$queryRaw<{ id: string }[]>`
-        SELECT id FROM app.wave WHERE id = ${waveId} FOR SHARE`;
-      if (found.length === 0) throw new ProblemError('not_found', { detail: 'unknown Wave' });
+    // Every Wave involved is locked before any Migration row, in id order: the target, the one
+    // `only` names and those the Migrations are in. A Wave delete locks its row and then clears
+    // `wave_id` on its Migrations (ON DELETE SET NULL); taking the Migrations first could deadlock
+    // with it (40P01). Share locks do not conflict with each other.
+    const waves = [
+      ...new Set(
+        [waveId, only, ...rows.map((r) => r.waveId)].filter((w): w is string => w != null),
+      ),
+    ].sort();
+    const locked = await tx.$queryRaw<{ id: string }[]>`
+      SELECT id FROM app.wave WHERE id = ANY(${waves}::text[]) ORDER BY id FOR SHARE`;
+    if (waveId !== null && !locked.some((w) => w.id === waveId)) {
+      throw new ProblemError('not_found', { detail: 'unknown Wave' });
     }
     const out: BulkResult = { accepted: [], skipped: [] };
     const previous = new Map<string, string | null>();

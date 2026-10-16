@@ -349,6 +349,66 @@ describe('POST /migrations/bulk', () => {
     expect(gone.status).toBe(404);
   });
 
+  /** Holds `lock` in another transaction while `request` starts, then commits it. */
+  async function whileLocked(
+    lock: string,
+    params: unknown[],
+    request: () => Response | Promise<Response>,
+  ) {
+    const holder = await t.db.pool.connect();
+    try {
+      await holder.query('BEGIN');
+      await holder.query(lock, params);
+      let settled = false;
+      const pending = Promise.resolve(request()).finally(() => {
+        settled = true;
+      });
+      await new Promise((r) => setTimeout(r, 300));
+      const waited = !settled;
+      await holder.query('COMMIT');
+      return { res: await pending, waited };
+    } finally {
+      await holder.query('ROLLBACK').catch(() => undefined);
+      holder.release();
+    }
+  }
+
+  it('[LIF-090] a Wave deleted while the assignment waits for its lock is a 404, and nothing changes', async () => {
+    const doomed = (await t.db.privileged.wave.create({ data: { name: 'wave-doomed' } })).id;
+    const m = await mig();
+    const { res, waited } = await whileLocked('DELETE FROM app.wave WHERE id = $1', [doomed], () =>
+      bulk({ ids: [m], action: 'assign-to-wave', waveId: doomed }),
+    );
+    expect(waited).toBe(true);
+    expect(res.status).toBe(404);
+    expect((await t.db.privileged.migration.findUniqueOrThrow({ where: { id: m } })).waveId).toBe(
+      null,
+    );
+  });
+
+  it('[LIF-090] remove-from-wave locks the Waves it leaves before the Migrations (no deadlock with a Wave delete)', async () => {
+    const w = (await t.db.privileged.wave.create({ data: { name: 'wave-locked' } })).id;
+    const m = await mig({ waveId: w });
+    const { res, waited } = await whileLocked(
+      'SELECT id FROM app.wave WHERE id = $1 FOR UPDATE',
+      [w],
+      () => bulk({ ids: [m], action: 'remove-from-wave' }),
+    );
+    // It waited for the Wave lock instead of taking the Migration row first.
+    expect(waited).toBe(true);
+    expect((await ok(res)).accepted).toEqual([m]);
+    // The same holds for the Wave a Migration is moved out of by an assignment.
+    const from = (await t.db.privileged.wave.create({ data: { name: 'wave-from' } })).id;
+    const moved = await mig({ waveId: from });
+    const assign = await whileLocked(
+      'SELECT id FROM app.wave WHERE id = $1 FOR UPDATE',
+      [from],
+      () => bulk({ ids: [moved], action: 'assign-to-wave', waveId }),
+    );
+    expect(assign.waited).toBe(true);
+    expect((await ok(assign.res)).accepted).toEqual([moved]);
+  });
+
   it('[LIF-090] refuses an ids array longer than 1000 before de-duplicating', async () => {
     const res = await bulk({ ids: Array(1001).fill('same'), action: 'analyze' });
     expect(res.status).toBe(422);

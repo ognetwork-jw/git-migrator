@@ -65,7 +65,7 @@ Publish with `publishEvent(pool, event)` or, inside a ZenStack transaction, `pub
 - Neither or both of `ids` and `filter`, a missing `waveId`, an unknown action, or a selection above 200 is a 422 `validation_failed` whose `errors` give `{path, message}` (`ids`, `filter` or `waveId`); an unknown Wave is a 404; nothing is acted on. A role below operator is a 403. A missing job service is a 503 `not_ready`.
 - Answer: `{accepted: [id], skipped: [{id, reason}]}`. Reasons: `not_found`, `not_repository`, `source_missing`, `route_retired`, `not_ready`, `not_analyzed`, `analysis_stale`, `run_active`, `not_permitted`, `already_in_wave`, `not_in_wave`, `queue_unavailable`.
 - After one failed enqueue the remaining items are skipped as `queue_unavailable` without being tried. The Run whose enqueue failed is cancelled and audited (`run.create`, committed with the Run, then `run.cancel` with the cancel's outcome); if a worker had already started it, it is accepted.
-- Wave changes run in one transaction: the Wave is locked against deletion, each Migration is locked and re-read, and the audit rows carry the `previousWaveId` read under the lock.
+- Wave changes run in one transaction: every Wave involved (the target, the one `waveId` names for a removal, and the Waves the Migrations are in) is locked against deletion before any Migration, so a concurrent Wave delete cannot deadlock with it; each Migration is then locked and re-read, and the audit rows carry the `previousWaveId` read under the lock.
 
 ## Invitation batches (AUTH-060, AUTH-061, T-085)
 
