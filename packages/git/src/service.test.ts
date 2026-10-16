@@ -897,6 +897,68 @@ describe('stalled remotes', () => {
     expect(pids).toHaveLength(1);
     expect(liveGroupMembers(pids[0] as number)).toEqual([]);
   });
+
+  it('[ADP-060] [LIF-044] an abort during the push backoff ends the wait at once, spends no more quota and starts no git', async () => {
+    const src = await source('abort-backoff', { commits: 2 });
+    const dst = await target('abort-backoff');
+    server.setLimits('target', { maxPushBytes: null });
+    const scratchDir = await scratch();
+    const calls: Call[] = [];
+    const quota = recordingQuota();
+    const controller = new AbortController();
+    const service = new GitService({
+      quota,
+      scratchDir,
+      random: () => 0.99,
+      backoffBaseMs: 60_000,
+      spawn: recordingSpawn(calls, (args) => {
+        if (!args.includes('push')) return undefined;
+        setTimeout(() => controller.abort(), 300);
+        return ['-c', 'echo "error: RPC failed; HTTP 503 curl 22" >&2; exit 1'];
+      }),
+    });
+    const dir = join(scratchDir, 'm');
+    await service.mirror({ url: src.url, credential, dir });
+    const started = Date.now();
+    const error = await service
+      .pushRefs({ dir, url: dst.url, credential, defaultBranch: 'main', signal: controller.signal })
+      .catch((e: unknown) => e);
+    expect(Date.now() - started).toBeLessThan(10_000);
+    expect(isGitCommandError(error)).toBe(true);
+    expect(error).toMatchObject({ code: 'transient', reason: 'cancelled', retryable: false });
+    expect(calls.filter((c) => c.args.includes('push'))).toHaveLength(1);
+    // clone 3, target ls-remote 1, one push attempt 3.
+    expect(quota.units).toEqual([3, 1, 3]);
+  });
+
+  it('[ADP-060] [LIF-043] deleteRefs with an aborted signal acquires no quota and starts no push', async () => {
+    const src = await source('delete-aborted', { commits: 1, branches: [{ name: 'topic' }] });
+    const dst = await target('delete-aborted');
+    server.setLimits('target', { maxPushBytes: null });
+    const scratchDir = await scratch();
+    const { service, quota, calls } = serviceFor(scratchDir);
+    const dir = join(scratchDir, 'm');
+    await service.mirror({ url: src.url, credential, dir });
+    await service.pushRefs({ dir, url: dst.url, credential, defaultBranch: 'main' });
+    const before = quota.units.length;
+    const pushesBefore = calls.filter((c) => c.args.includes('push')).length;
+    const controller = new AbortController();
+    controller.abort();
+    const error = await service
+      .deleteRefs({
+        dir,
+        url: dst.url,
+        credential,
+        refs: ['refs/heads/topic'],
+        signal: controller.signal,
+      })
+      .catch((e: unknown) => e);
+    expect(error).toMatchObject({ reason: 'cancelled', retryable: false });
+    expect(quota.units.length).toBe(before);
+    expect(calls.filter((c) => c.args.includes('push')).length).toBe(pushesBefore);
+    const remote = await service.lsRemote({ url: dst.url, credential });
+    expect(remote.refs.map((r) => r.name)).toContain('refs/heads/topic');
+  });
 });
 
 describe('URL normalisation', () => {

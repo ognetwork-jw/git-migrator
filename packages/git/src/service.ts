@@ -60,7 +60,8 @@ export interface GitServiceOptions {
   /** Backoff base and cap in milliseconds (ADP-060: 1 s, 60 s). */
   readonly backoffBaseMs?: number;
   readonly backoffCapMs?: number;
-  readonly sleep?: (ms: number) => Promise<void>;
+  /** Backoff wait; given the request's signal, it may return early on abort. */
+  readonly sleep?: (ms: number, signal?: AbortSignal) => Promise<void>;
   readonly random?: () => number;
   /** Force one pack size estimator; by default `rev-list --disk-usage` when git has it. */
   readonly estimator?: EstimatorMode | PackEstimator;
@@ -109,7 +110,34 @@ export interface LfsRequest {
   readonly signal?: AbortSignal;
 }
 
-const sleepFor = (ms: number): Promise<void> => new Promise((resolve) => setTimeout(resolve, ms));
+/** Waits `ms`, or less when `signal` aborts first (the caller checks the signal afterwards). */
+const sleepFor = (ms: number, signal?: AbortSignal): Promise<void> =>
+  new Promise((resolve) => {
+    if (signal?.aborted) return resolve();
+    const done = (): void => {
+      clearTimeout(timer);
+      signal?.removeEventListener('abort', done);
+      resolve();
+    };
+    const timer = setTimeout(done, ms);
+    signal?.addEventListener('abort', done, { once: true });
+  });
+
+/** Throws the non-retryable `cancelled` error when `signal` has aborted (ADP-060). */
+function throwIfCancelled(
+  signal: AbortSignal | undefined,
+  operation: string,
+  secrets: readonly string[],
+): void {
+  if (!signal?.aborted) return;
+  throw new GitCommandError({
+    operation,
+    exitCode: -1, // no process was started
+    stderr: 'cancelled',
+    secrets,
+    klass: { code: 'transient', reason: 'cancelled', retryable: false },
+  });
+}
 
 export class GitService implements GitClient {
   readonly #options: GitServiceOptions;
@@ -436,6 +464,8 @@ export class GitService implements GitClient {
     const random = this.#options.random ?? Math.random;
     const sleep = this.#options.sleep ?? sleepFor;
     for (let attempt = 1; ; attempt++) {
+      // Checked before the quota: an aborted Run spends no units and starts no git.
+      throwIfCancelled(signal, 'push', context.secrets);
       await this.#options.quota.acquire(GIT_UNITS.push);
       try {
         const result = await this.#runner.run(
@@ -478,7 +508,7 @@ export class GitService implements GitClient {
         if (!retryable || attempt > retries) throw error;
         const delay = Math.floor(random() * Math.min(cap, base * 2 ** (attempt - 1)));
         this.#logger.warn({ attempt, delayMs: delay, refs: refspecs.length }, 'git push retry');
-        await sleep(delay);
+        await sleep(delay, signal);
       }
     }
   }
