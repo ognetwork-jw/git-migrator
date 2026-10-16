@@ -1,5 +1,8 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, inject, it } from 'vitest';
 import { must, world } from './harness.ts';
+
+/** Wall-clock budgets scale with GM_TEST_TIME_FACTOR (ADR-0507). */
+const budget = (ms: number): number => ms * inject('timeFactor');
 
 const OID = 'c'.repeat(64);
 
@@ -228,7 +231,7 @@ describe('reset races', () => {
     await new Promise((r) => setTimeout(r, 20));
     const started = Date.now();
     await w.fake.reset();
-    expect(Date.now() - started).toBeLessThan(5000);
+    expect(Date.now() - started).toBeLessThan(budget(5000));
     expect(w.fake.state.repos.size).toBe(0);
     expect((await w.call('GET', '/__state', { token: null })).status).toBe(200);
   });
