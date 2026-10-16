@@ -6,21 +6,22 @@
 
 /**
  * Actions are pinned to full commit SHAs (a tag can be moved). The version is in the comment; the
- * SHAs were read from the public tags of each action's repository.
+ * SHAs were read from the public tags of each action's repository (`git ls-remote`, 2026-10-16),
+ * and each is the latest release of the first major whose `action.yml` runs on Node 24.
  */
 export const ACTIONS = {
   checkout: {
-    uses: 'actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683',
-    version: 'v4.2.2',
+    uses: 'actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09',
+    version: 'v5.1.0',
   },
-  cache: { uses: 'actions/cache@1bd1e32a3bdc45362d1e726936510720a7c30a57', version: 'v4.2.0' },
+  cache: { uses: 'actions/cache@caa296126883cff596d87d8935842f9db880ef25', version: 'v5.1.0' },
   uploadArtifact: {
-    uses: 'actions/upload-artifact@65c4c4a1ddee5b72f698fdd19549f0f0fb45cf08',
-    version: 'v4.6.0',
+    uses: 'actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f',
+    version: 'v6.0.0',
   },
   downloadArtifact: {
-    uses: 'actions/download-artifact@fa0a91b85d4f404e444e00e005971372dc801d16',
-    version: 'v4.1.8',
+    uses: 'actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131',
+    version: 'v7.0.0',
   },
 } as const;
 

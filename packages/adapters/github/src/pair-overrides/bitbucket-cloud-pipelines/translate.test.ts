@@ -1235,6 +1235,20 @@ ${Array.from({ length: 50 }, () => '    - step: *s').join('\n')}
     for (const w of r.workflows) expect(w.content.length).toBeLessThan(MAX_WORKFLOW_BYTES);
   });
 
+  it('[FAC-PIP-002] actions are pinned by full commit SHA to their Node 24 majors', () => {
+    const majors = Object.fromEntries(
+      Object.entries(ACTIONS).map(([k, a]) => [k, a.version.split('.')[0]]),
+    );
+    expect(majors).toEqual({
+      checkout: 'v5',
+      cache: 'v5',
+      uploadArtifact: 'v6',
+      downloadArtifact: 'v7',
+    });
+    for (const a of Object.values(ACTIONS))
+      expect(a.uses).toMatch(/^actions\/[a-z-]+@[0-9a-f]{40}$/);
+  });
+
   it('[FAC-PIP-002] once the estimate passes the limit no step is added and the rest is reported', () => {
     const big = 'x'.repeat(250_000);
     const r = translate(
