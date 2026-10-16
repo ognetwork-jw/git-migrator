@@ -333,6 +333,27 @@ describe('source read-only (LIF-070)', () => {
     expect(repoState(world).description).toBe(`${PREFIX}hello`);
   });
 
+  it('[LIF-070] brackets in the target URL path are percent-encoded, so the prefix stays removable', async () => {
+    expect(migrationPrefix('https://github.com/acme/old[1]]x')).toBe(
+      '[MIGRATED → https://github.com/acme/old%5B1%5D%5Dx] ',
+    );
+    const world = makeWorld();
+    const { conn } = await makeConnection(world);
+    const first =
+      (await conn.sourceLock?.apply(target().repository, {
+        targetWebUrl: 'https://github.com/acme/old[1]',
+      })) ?? [];
+    expect(repoState(world).description).toBe(
+      '[MIGRATED → https://github.com/acme/old%5B1%5D] hello',
+    );
+    await conn.sourceLock?.apply(target().repository, { targetWebUrl: URL_TARGET });
+    expect(repoState(world).description).toBe(`${PREFIX}hello`);
+    // Undoing the first lock after a later edit strips only the prefix.
+    repoState(world).description = '[MIGRATED → https://github.com/acme/old%5B1%5D] edited';
+    await conn.sourceLock?.undo(target().repository, first);
+    expect(repoState(world).description).toBe('edited');
+  });
+
   it('[LIF-070] rejects unusable target URLs and unknown mutations', async () => {
     expect(() => migrationPrefix('not a url')).toThrow(/not a URL/);
     expect(() => migrationPrefix('https://u:p@github.com/x')).toThrow(/without credentials/);
