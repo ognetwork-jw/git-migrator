@@ -69,6 +69,52 @@ describe('[DOM-003] overlay document validation', () => {
     expect(validateOverlayDocument(defaulted, { b: 'no' })[0]?.path).toBe('b');
   });
 
+  it('[DOM-003] keeps array length rules but not refinements a partial collection cannot meet', () => {
+    const schema = z.object({
+      a: z.array(z.string()).min(1).max(2),
+      b: z.array(z.number()).length(1),
+    });
+    expect(validateOverlayDocument(schema, { a: ['x'], b: [1] })).toEqual([]);
+    expect(validateOverlayDocument(schema, { a: ['x', 'y', 'z'] })[0]?.path).toBe('a');
+    expect(validateOverlayDocument(schema, { a: [] })[0]?.path).toBe('a');
+    expect(validateOverlayDocument(schema, { b: [1, 2] })[0]?.path).toBe('b');
+    const unique = z.object({
+      items: z
+        .array(z.object({ key: z.string(), v: z.number() }))
+        .refine((xs) => new Set(xs.map((x) => x.key)).size === xs.length),
+    });
+    expect(validateOverlayDocument(unique, { items: [{ v: 1 }, { v: 2 }] })).toEqual([]);
+  });
+
+  it('[DOM-003] tuples and lazy schemas are made partial and strict too', () => {
+    const tuple = z.object({ t: z.tuple([z.object({ x: z.number(), y: z.number() })]) });
+    expect(validateOverlayDocument(tuple, { t: [{ x: 1 }] })).toEqual([]);
+    expect(validateOverlayDocument(tuple, { t: [{ zzz: 1 }] }).length).toBeGreaterThan(0);
+    interface Node {
+      name: string;
+      children: Node[];
+    }
+    const node: z.ZodType<Node> = z.lazy(() =>
+      z.object({ name: z.string(), children: z.array(node) }),
+    );
+    const tree = z.object({ root: node });
+    expect(validateOverlayDocument(tree, { root: { children: [{ name: 'a' }] } })).toEqual([]);
+    const deep = validateOverlayDocument(tree, { root: { children: [{ zzz: 1 }] } });
+    expect(deep.some((issue) => /zzz/.test(issue.message))).toBe(true);
+  });
+
+  it('[DOM-003] fails closed for schema parts it cannot make partial', () => {
+    const inner = z.object({ a: z.string() });
+    for (const schema of [
+      z.object({ p: inner.pipe(z.object({ a: z.string() })) }),
+      z.object({ p: inner.transform((v) => v) }),
+      z.object({ p: z.intersection(inner, z.object({ b: z.string() })) }),
+      z.object({ p: z.lazy(() => inner.transform((v) => v)) }),
+    ]) {
+      expect(validateOverlayDocument(schema, {})[0]?.message).toMatch(/cannot be applied/);
+    }
+  });
+
   it('[DOM-003] fails closed for a parser that is not a Zod schema', () => {
     const issues = validateOverlayDocument({ parse: (value: unknown) => value }, {});
     expect(issues[0]?.message).toMatch(/cannot be applied/);

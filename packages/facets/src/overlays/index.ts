@@ -32,7 +32,48 @@ interface Def {
 
 const defOf = (schema: AnySchema): Def => (schema as unknown as { _zod: { def: Def } })._zod.def;
 
-/** The deep-partial strict form of a Facet schema. Leaves keep their own rules. */
+/** Schema types without nested objects: they keep their own rules unchanged. */
+const LEAF_TYPES: ReadonlySet<string> = new Set([
+  'string',
+  'number',
+  'int',
+  'bigint',
+  'boolean',
+  'date',
+  'symbol',
+  'undefined',
+  'null',
+  'void',
+  'nan',
+  'never',
+  'any',
+  'unknown',
+  'enum',
+  'literal',
+  'template_literal',
+  'file',
+  'custom',
+]);
+
+/** Thrown when a schema holds a part this module cannot make partial (fail closed). */
+export class OverlaySchemaError extends Error {}
+
+/** Length rules hold for a partial collection too; refinements (e.g. key uniqueness) may not. */
+const LENGTH_CHECKS: ReadonlySet<string> = new Set(['min_length', 'max_length', 'length_equals']);
+
+/** Copies the length rules of an array or tuple onto its partial form. */
+function withLengthChecks(next: AnySchema, def: Def): AnySchema {
+  const checks = ((def.checks as z.core.$ZodCheck<unknown>[] | undefined) ?? []).filter((c) =>
+    LENGTH_CHECKS.has((c._zod.def as { check: string }).check),
+  );
+  return checks.length === 0 ? next : next.check(...checks);
+}
+
+/**
+ * The deep-partial strict form of a Facet schema. Leaves keep their own rules. A part that cannot
+ * be made partial without losing strictness or validating the wrong shape (pipe, transform,
+ * intersection, map, set, catch, ...) throws `OverlaySchemaError`.
+ */
 export function deepPartialStrict(schema: AnySchema): AnySchema {
   const def = defOf(schema);
   switch (def.type) {
@@ -46,7 +87,20 @@ export function deepPartialStrict(schema: AnySchema): AnySchema {
       return z.strictObject(next).partial();
     }
     case 'array':
-      return z.array(deepPartialStrict(def.element as AnySchema));
+      return withLengthChecks(z.array(deepPartialStrict(def.element as AnySchema)), def);
+    case 'tuple': {
+      const items = (def.items as AnySchema[]).map(deepPartialStrict);
+      const rest = def.rest as AnySchema | null | undefined;
+      const tuple =
+        rest === undefined || rest === null
+          ? z.tuple(items as [AnySchema, ...AnySchema[]])
+          : z.tuple(items as [AnySchema, ...AnySchema[]], deepPartialStrict(rest));
+      return withLengthChecks(tuple, def);
+    }
+    case 'lazy': {
+      const getter = def.getter as () => AnySchema;
+      return z.lazy(() => deepPartialStrict(getter()));
+    }
     case 'optional':
     case 'default':
     case 'prefault':
@@ -61,7 +115,8 @@ export function deepPartialStrict(schema: AnySchema): AnySchema {
     case 'record':
       return z.record(def.keyType as z.ZodString, deepPartialStrict(def.valueType as AnySchema));
     default:
-      return schema;
+      if (LEAF_TYPES.has(def.type)) return schema;
+      throw new OverlaySchemaError(`a schema of type "${def.type}" cannot be made partial`);
   }
 }
 
@@ -71,7 +126,13 @@ function partialSchemaOf(parser: DocumentParser<unknown>): AnySchema | undefined
   const cached = compiled.get(parser);
   if (cached) return cached;
   if (typeof (parser as { _zod?: unknown })._zod !== 'object') return undefined;
-  const schema = deepPartialStrict(parser as AnySchema);
+  let schema: AnySchema;
+  try {
+    schema = deepPartialStrict(parser as AnySchema);
+  } catch (e) {
+    if (e instanceof OverlaySchemaError) return undefined;
+    throw e;
+  }
   compiled.set(parser, schema);
   return schema;
 }
@@ -147,7 +208,16 @@ export function validateOverlayDocument(
   if (structural) return [structural];
   const schema = partialSchemaOf(parser);
   if (schema === undefined) return [{ path: '', message: 'the Facet schema cannot be applied' }];
-  const result = schema.safeParse(data);
+  let result: ReturnType<AnySchema['safeParse']>;
+  try {
+    result = schema.safeParse(data);
+  } catch (e) {
+    // A lazy schema is made partial when it is first used.
+    if (e instanceof OverlaySchemaError) {
+      return [{ path: '', message: 'the Facet schema cannot be applied' }];
+    }
+    throw e;
+  }
   if (result.success) return [];
   return result.error.issues.map((issue) => ({
     path: issue.path.map(String).join('.'),
