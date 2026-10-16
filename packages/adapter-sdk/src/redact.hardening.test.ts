@@ -369,4 +369,40 @@ describe('authorize runs before quota', () => {
     expect((await client.get('/x')).status).toBe(200);
     expect(calls).toBe(3);
   });
+
+  it('[ADP-060] only network error codes in authorize are transient; other system codes are not retried', async () => {
+    for (const code of ['ERR_INVALID_ARG_TYPE', 'ENOENT', 'EACCES', 'EINVAL', 'ERR_OUT_OF_RANGE']) {
+      let calls = 0;
+      const { client, fetchFn } = build(async () => {
+        calls++;
+        throw Object.assign(new Error('bug'), { code });
+      });
+      await expect(client.get('/x'), code).rejects.toMatchObject({ code: 'unauthorized' });
+      expect(calls, code).toBe(1);
+      expect(fetchFn).not.toHaveBeenCalled();
+    }
+    for (const code of [
+      'ECONNRESET',
+      'ECONNREFUSED',
+      'ETIMEDOUT',
+      'EAI_AGAIN',
+      'ENOTFOUND',
+      'EPIPE',
+      'ENETUNREACH',
+      'EHOSTUNREACH',
+      'UND_ERR_SOCKET',
+      'UND_ERR_CONNECT_TIMEOUT',
+    ]) {
+      let calls = 0;
+      const { client } = build(async () => {
+        calls++;
+        if (calls === 1) {
+          throw new TypeError('wrapped', { cause: Object.assign(new Error('x'), { code }) });
+        }
+        return { headers: {} };
+      });
+      expect((await client.get('/x')).status, code).toBe(200);
+      expect(calls, code).toBe(2);
+    }
+  });
 });

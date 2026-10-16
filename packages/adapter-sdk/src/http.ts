@@ -169,6 +169,12 @@ export interface ProviderHttpClientOptions extends ProviderHttpEnvironment {
   readonly endpointId: string;
   readonly baseUrl: string;
   readonly classify: Classifier;
+  /**
+   * Obtains the request's credentials. It runs on every attempt and every redirect hop, before the
+   * lease and the quota acquire, so adapters MUST make it cheap: cached, and single-flight per
+   * credential (concurrent calls share one refresh). A network failure (an allowlisted system
+   * error code, or `fetch failed`) is `transient` and retried; any other error is `unauthorized`.
+   */
   readonly authorize: () => Promise<RequestCredentials>;
   readonly interpret?: Interpreter;
   /** Provider-specific token shapes (for example key prefixes) to scrub from captures, errors and logs. */
@@ -277,13 +283,35 @@ function parseBody(text: string, contentType: string | null): unknown {
   return text;
 }
 
-const SYSTEM_ERROR_CODE = /^E[A-Z0-9_]+$/;
+/**
+ * System error codes of a real network failure. Any other code (`ERR_INVALID_ARG_TYPE`, `ENOENT`,
+ * `EACCES`) is a bug or a configuration problem in `authorize`, so it is not retried.
+ */
+const NETWORK_ERROR_CODES: ReadonlySet<string> = new Set([
+  'ECONNRESET',
+  'ECONNREFUSED',
+  'ECONNABORTED',
+  'ETIMEDOUT',
+  'EAI_AGAIN',
+  'ENOTFOUND',
+  'EPIPE',
+  'ENETUNREACH',
+  'ENETDOWN',
+  'EHOSTUNREACH',
+  'EHOSTDOWN',
+]);
+/** undici's network error codes (`UND_ERR_SOCKET`, `UND_ERR_CONNECT_TIMEOUT`, ...). */
+const UNDICI_ERROR_CODE = /^UND_ERR_[A-Z_]{1,64}$/;
 
-/** A real network failure: a system error code (ECONNRESET), or undici's `fetch failed`. */
+/** A real network failure: an allowlisted system error code (ECONNRESET), or undici's `fetch failed`. */
 function isNetworkError(error: unknown): boolean {
   const codeOf = (value: unknown): unknown => (value as { code?: unknown } | null)?.code;
-  const isCode = (value: unknown) =>
-    typeof codeOf(value) === 'string' && SYSTEM_ERROR_CODE.test(codeOf(value) as string);
+  const isCode = (value: unknown) => {
+    const code = codeOf(value);
+    return (
+      typeof code === 'string' && (NETWORK_ERROR_CODES.has(code) || UNDICI_ERROR_CODE.test(code))
+    );
+  };
   if (isCode(error)) return true;
   const cause = (error as { cause?: unknown } | null)?.cause;
   if (isCode(cause)) return true;
