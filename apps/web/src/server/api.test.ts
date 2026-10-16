@@ -97,21 +97,25 @@ describe('[API-011] problem messages for the UI', () => {
     for (const text of Object.values(messages.problem)) expect(text.length).toBeGreaterThan(10);
   });
 
-  it('[API-001] closeAll runs every step even when one throws, then rethrows the first error', async () => {
+  it('[API-001] closeAll runs every step even when some throw, then rethrows every error', async () => {
     const closed: string[] = [];
     const step = (name: string, fail?: Error) => () => {
       closed.push(name);
       if (fail) throw fail;
     };
-    await expect(
-      closeAll([
-        step('events'),
-        step('jobs', new Error('first')),
-        step('auth', new Error('second')),
-        step('db'),
-      ]),
-    ).rejects.toThrow('first');
+    const first = new Error('first');
+    const second = new Error('second');
+    const failure = await closeAll([
+      step('events'),
+      step('jobs', first),
+      step('auth', second),
+      step('db'),
+    ]).catch((error: unknown) => error);
     expect(closed).toEqual(['events', 'jobs', 'auth', 'db']);
+    expect(failure).toBeInstanceOf(AggregateError);
+    expect((failure as AggregateError).errors).toEqual([first, second]);
+    // A single failure is rethrown as it is.
+    await expect(closeAll([step('jobs', first), step('db')])).rejects.toBe(first);
   });
 });
 
