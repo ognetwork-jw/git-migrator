@@ -186,4 +186,27 @@ describe('ProviderRegistry', () => {
     expect(matrix.rows[0]?.cells.every((c) => c.fields.length === 0)).toBe(true);
     expect(reg.capabilities('m').facets['git-refs']?.fields).toEqual({});
   });
+
+  it('[ADP-032] capabilities or limits that are not plain data fail as a RegistryError naming the adapter', () => {
+    const odd = adapter('odd', {
+      'git-refs': { read: true, write: true, fields: {}, note: () => 'x' } as never,
+    });
+    const error = (() => {
+      try {
+        new ProviderRegistry({ facets, adapters: [odd] });
+      } catch (e) {
+        return e;
+      }
+    })();
+    expect(error).toBeInstanceOf(RegistryError);
+    expect((error as Error).message).toMatch(/adapter odd/);
+    expect(
+      () =>
+        new ProviderRegistry({
+          facets,
+          adapters: [A],
+          limits: { a: { repositoryName: { check: () => true } } as never },
+        }),
+    ).toThrow(/limits of adapter a/);
+  });
 });

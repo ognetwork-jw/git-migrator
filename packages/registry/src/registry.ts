@@ -65,6 +65,19 @@ export interface RegistryParts {
 /** A detect-only Facet is never written (FAC-EXT-001), so the target's declarations do not matter. */
 const DETECT_ONLY_TARGET: FacetCapability = { read: false, write: false, fields: {} };
 
+/**
+ * A copy of plain data. What `structuredClone` refuses (a function, a host object) becomes a
+ * `RegistryError` naming the adapter; the clone error's text is left out, since it can quote the
+ * offending value.
+ */
+function cloneData<T>(value: T, what: string): T {
+  try {
+    return structuredClone(value);
+  } catch {
+    throw new RegistryError(`${what} must be plain data (no functions or host objects)`);
+  }
+}
+
 /** The read-only side of the Facet registry: lookups only, so validation at construction holds. */
 export type FacetView = Pick<
   FacetRegistry,
@@ -112,13 +125,16 @@ export class ProviderRegistry {
         }
       }
       this.#adapters.set(adapter.type, adapter);
-      this.#capabilities.set(adapter.type, structuredClone(adapter.capabilities));
+      this.#capabilities.set(
+        adapter.type,
+        cloneData(adapter.capabilities, `capabilities of adapter ${adapter.type}`),
+      );
     }
     for (const [type, limits] of Object.entries(parts.limits ?? {})) {
       if (!this.#adapters.has(type)) {
         throw new RegistryError(`limits given for unregistered adapter ${type}`);
       }
-      this.#limits.set(type, structuredClone(limits));
+      this.#limits.set(type, cloneData(limits, `limits of adapter ${type}`));
     }
     for (const override of parts.overrides ?? []) {
       for (const side of [override.source, override.target]) {
