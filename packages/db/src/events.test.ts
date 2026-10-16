@@ -173,6 +173,7 @@ describe('listener connection handling (JOB-060)', () => {
     const listener = createEventListener({
       createClient: () => new FakeClient(++attempts < 4),
       initialBackoffMs: 100,
+      random: () => 0.5,
       maxBackoffMs: 200,
       onProblem: (what) => problems.push(what),
     });
@@ -200,6 +201,7 @@ describe('listener connection handling (JOB-060)', () => {
     const listener = createEventListener({
       createClient: () => new FakeClient(false),
       initialBackoffMs: 50,
+      random: () => 0.5,
     });
     const seen: FeedMessage[] = [];
     listener.subscribe(() => {
@@ -248,6 +250,7 @@ describe('listener connection handling (JOB-060)', () => {
     const listener = createEventListener({
       createClient: () => new FakeClient(++attempts < 2),
       initialBackoffMs: 100,
+      random: () => 0.5,
     });
     const seen: FeedMessage[] = [];
     listener.subscribe((m) => seen.push(m));
@@ -269,6 +272,7 @@ describe('listener connection handling (JOB-060)', () => {
       createClient: () => new FakeClient(false, ++attempts === 1 ? never : undefined),
       connectTimeoutMs: 1000,
       initialBackoffMs: 100,
+      random: () => 0.5,
       onProblem: (what) => problems.push(what),
     });
     listener.start();
@@ -296,6 +300,7 @@ describe('listener connection handling (JOB-060)', () => {
       probeIntervalMs: 30_000,
       probeTimeoutMs: 5_000,
       initialBackoffMs: 100,
+      random: () => 0.5,
       onProblem: (what) => problems.push(what),
     });
     listener.subscribe((m) => seen.push(m));
@@ -334,6 +339,7 @@ describe('listener connection handling (JOB-060)', () => {
       },
       probeIntervalMs: 1000,
       initialBackoffMs: 50,
+      random: () => 0.5,
       onProblem: (what) => problems.push(what),
     });
     listener.start();
@@ -342,5 +348,81 @@ describe('listener connection handling (JOB-060)', () => {
     await vi.advanceTimersByTimeAsync(50);
     expect(listener.connected).toBe(true);
     await listener.close();
+  });
+});
+
+describe('listener backoff and timers (JOB-060)', () => {
+  afterEach(() => {
+    vi.useRealTimers();
+    FakeClient.all = [];
+  });
+
+  it('[JOB-060] a connection that drops right after connecting keeps backing off', async () => {
+    vi.useFakeTimers();
+    const listener = createEventListener({
+      createClient: () => new FakeClient(false),
+      initialBackoffMs: 100,
+      maxBackoffMs: 10_000,
+      minUptimeMs: 5_000,
+      random: () => 0.5,
+    });
+    listener.start();
+    await vi.advanceTimersByTimeAsync(0);
+    const drop = () => FakeClient.all.at(-1)?.handlers.end?.();
+    drop();
+    await vi.advanceTimersByTimeAsync(100);
+    expect(FakeClient.all).toHaveLength(2);
+    drop();
+    await vi.advanceTimersByTimeAsync(199);
+    expect(FakeClient.all).toHaveLength(2);
+    await vi.advanceTimersByTimeAsync(1);
+    expect(FakeClient.all).toHaveLength(3);
+    // Up for the minimum time: the next drop starts again from the initial delay.
+    await vi.advanceTimersByTimeAsync(5_000);
+    drop();
+    await vi.advanceTimersByTimeAsync(100);
+    expect(FakeClient.all).toHaveLength(4);
+    await listener.close();
+  });
+
+  it('[JOB-060] reconnect delays carry +-20% jitter', async () => {
+    vi.useFakeTimers();
+    let r = 0;
+    const listener = createEventListener({
+      createClient: () => new FakeClient(true),
+      initialBackoffMs: 1_000,
+      maxBackoffMs: 1_000,
+      random: () => r,
+    });
+    listener.start();
+    await vi.advanceTimersByTimeAsync(0);
+    expect(FakeClient.all).toHaveLength(1);
+    // random 0 gives the shortest delay, 0.8 x 1,000 ms.
+    await vi.advanceTimersByTimeAsync(799);
+    expect(FakeClient.all).toHaveLength(1);
+    r = 0.75;
+    await vi.advanceTimersByTimeAsync(1);
+    expect(FakeClient.all).toHaveLength(2);
+    // random 0.75 gives 1.1 x 1,000 ms (random near 1 approaches 1.2 x).
+    await vi.advanceTimersByTimeAsync(1_099);
+    expect(FakeClient.all).toHaveLength(2);
+    await vi.advanceTimersByTimeAsync(1);
+    expect(FakeClient.all).toHaveLength(3);
+    await listener.close();
+  });
+
+  it('[JOB-060] close clears the timeout of a probe still in flight', async () => {
+    vi.useFakeTimers();
+    const never = new Promise<void>(() => undefined);
+    const listener = createEventListener({
+      createClient: () => new FakeClient(false, undefined, () => never),
+      probeIntervalMs: 1_000,
+      probeTimeoutMs: 60_000,
+    });
+    listener.start();
+    await vi.advanceTimersByTimeAsync(1_000);
+    expect(FakeClient.all[0]?.queries).toEqual(['LISTEN gm_events', 'select 1']);
+    await listener.close();
+    expect(vi.getTimerCount()).toBe(0);
   });
 });

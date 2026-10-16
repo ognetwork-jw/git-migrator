@@ -46,10 +46,20 @@ export interface ListenClient {
 export interface EventListenerOptions {
   /** Creates a fresh dedicated connection. See `pgListenClient`. */
   readonly createClient: () => ListenClient;
-  /** First reconnect delay; it doubles up to `maxBackoffMs`. Default 500 ms. */
+  /**
+   * First reconnect delay; it doubles up to `maxBackoffMs`. Each delay is spread by +-20% so that
+   * many processes do not reconnect in step. Default 500 ms.
+   */
   readonly initialBackoffMs?: number;
   /** Default 30,000 ms. */
   readonly maxBackoffMs?: number;
+  /**
+   * How long a connection must stay up before the delay starts again from `initialBackoffMs`, so a
+   * flapping connection keeps backing off (and resyncing less often). Default 10,000 ms.
+   */
+  readonly minUptimeMs?: number;
+  /** Source of the jitter, in [0, 1). Default `Math.random`; tests pin it. */
+  readonly random?: () => number;
   /** Longest a connect plus `LISTEN` may take before it counts as failed. Default 10,000 ms. */
   readonly connectTimeoutMs?: number;
   /** Gap between liveness probes (`select 1`) on the connection. Default 30,000 ms. */
@@ -85,6 +95,11 @@ export function createEventListener(options: EventListenerOptions): EventListene
   let started = false;
   let closed = false;
   let probeTimer: ReturnType<typeof setTimeout> | undefined;
+  let stableTimer: ReturnType<typeof setTimeout> | undefined;
+  /** Timeouts of connects and probes still in flight, cleared on close. */
+  const deadlines = new Set<ReturnType<typeof setTimeout>>();
+  const minUptime = options.minUptimeMs ?? 10_000;
+  const random = options.random ?? Math.random;
   const connectTimeout = options.connectTimeoutMs ?? 10_000;
   const probeInterval = options.probeIntervalMs ?? 30_000;
   const probeTimeout = options.probeTimeoutMs ?? 10_000;
@@ -103,10 +118,13 @@ export function createEventListener(options: EventListenerOptions): EventListene
 
   function schedule() {
     if (closed || timer !== undefined) return;
-    timer = setTimeout(() => {
-      timer = undefined;
-      void connect();
-    }, backoff);
+    timer = setTimeout(
+      () => {
+        timer = undefined;
+        void connect();
+      },
+      backoff * (0.8 + 0.4 * random()),
+    );
     backoff = Math.min(backoff * 2, max);
   }
 
@@ -119,6 +137,8 @@ export function createEventListener(options: EventListenerOptions): EventListene
     connected = false;
     if (probeTimer !== undefined) clearTimeout(probeTimer);
     probeTimer = undefined;
+    if (stableTimer !== undefined) clearTimeout(stableTimer);
+    stableTimer = undefined;
     from.end().catch(() => undefined);
     if (closed) return;
     options.onProblem?.(what);
@@ -129,7 +149,7 @@ export function createEventListener(options: EventListenerOptions): EventListene
   const scheduleProbe = (from: ListenClient) => {
     probeTimer = setTimeout(() => {
       probeTimer = undefined;
-      withTimeout(from.query('select 1'), probeTimeout).then(
+      withTimeout(from.query('select 1'), probeTimeout, deadlines).then(
         () => {
           if (client === from) scheduleProbe(from);
         },
@@ -154,6 +174,7 @@ export function createEventListener(options: EventListenerOptions): EventListene
       await withTimeout(
         next.connect().then(() => next.query(`LISTEN ${EVENT_CHANNEL}`)),
         connectTimeout,
+        deadlines,
       );
     } catch {
       if (client === next) {
@@ -169,7 +190,10 @@ export function createEventListener(options: EventListenerOptions): EventListene
       return;
     }
     connected = true;
-    backoff = initial;
+    stableTimer = setTimeout(() => {
+      stableTimer = undefined;
+      backoff = initial;
+    }, minUptime);
     scheduleProbe(next);
     // Notifications sent while there was no connection are gone, and a first connection can also
     // follow failed attempts: subscribers refetch after every successful connect.
@@ -198,6 +222,10 @@ export function createEventListener(options: EventListenerOptions): EventListene
       timer = undefined;
       if (probeTimer !== undefined) clearTimeout(probeTimer);
       probeTimer = undefined;
+      if (stableTimer !== undefined) clearTimeout(stableTimer);
+      stableTimer = undefined;
+      for (const deadline of deadlines) clearTimeout(deadline);
+      deadlines.clear();
       subscribers.clear();
       const current = client;
       client = undefined;
@@ -223,16 +251,27 @@ export function pgListenClient(pool: pg.Pool): () => ListenClient {
     }) as unknown as ListenClient;
 }
 
-function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
+/** Rejects after `ms`. The pending timer is kept in `deadlines` so that `close()` can clear it. */
+function withTimeout<T>(
+  promise: Promise<T>,
+  ms: number,
+  deadlines: Set<ReturnType<typeof setTimeout>>,
+): Promise<T> {
   return new Promise<T>((resolve, reject) => {
-    const timer = setTimeout(() => reject(new Error('timed out')), ms);
+    const timer = setTimeout(() => {
+      deadlines.delete(timer);
+      reject(new Error('timed out'));
+    }, ms);
+    deadlines.add(timer);
     promise.then(
       (value) => {
         clearTimeout(timer);
+        deadlines.delete(timer);
         resolve(value);
       },
       (error) => {
         clearTimeout(timer);
+        deadlines.delete(timer);
         reject(error);
       },
     );
