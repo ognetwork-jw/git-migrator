@@ -683,10 +683,15 @@ describe('inventory against the fixture world', () => {
     const before = await t.db.privileged.repository.findMany({ where: { endpointId: SOURCE } });
     tweaks = { hideRepositories: new Set(['pipelines-simple']) };
     try {
-      await run(SOURCE);
+      expect((await run(SOURCE)).missing).toBe(1);
     } finally {
       tweaks = {};
     }
+    const hidden = await t.db.privileged.repository.findMany({ where: { endpointId: SOURCE } });
+    expect(hidden).toHaveLength(before.length);
+    expect(hidden.filter((r) => r.presence === 'missing').map((r) => r.slug)).toEqual([
+      'pipelines-simple',
+    ]);
     await run(SOURCE);
     const after = await t.db.privileged.repository.findMany({ where: { endpointId: SOURCE } });
     expect(after).toHaveLength(before.length);
@@ -775,7 +780,38 @@ describe('inventory against the fixture world', () => {
     expect(
       await t.db.privileged.identityMapping.findUniqueOrThrow({ where: { id: alice?.id ?? '' } }),
     ).toMatchObject({ status: 'confirmed', method: 'manual' });
-    expect(result.mappingsChanged).toBeGreaterThanOrEqual(0);
+    // The raced row was the only one the pass would have rewritten, and the guarded write lost.
+    expect(result.mappingsChanged).toBe(0);
+  }, 120_000);
+
+  it('[AUTH-050] keeps an operator group decision made while the pass is running', async () => {
+    const db = t.db.privileged;
+    const platform = await db.groupMapping.findFirstOrThrow({
+      where: { routeId: 'r-manual', sourceGroup: { slug: 'platform-team' } },
+    });
+    // Back to undecided: the next pass would suggest the target team with the same slug again.
+    await db.groupMapping.update({
+      where: { id: platform.id },
+      data: { status: 'unmapped', targetGroupId: null },
+    });
+    const racing: InventoryDeps = {
+      ...deps,
+      hooks: {
+        beforeMappingWrite: async (id) => {
+          if (id !== platform.id) return;
+          await db.groupMapping.update({ where: { id }, data: { status: 'excluded' } });
+        },
+      },
+    };
+    const result = await runInventory(racing, SOURCE, { shutdown: shutdown.signal });
+    expect(await db.groupMapping.findUniqueOrThrow({ where: { id: platform.id } })).toMatchObject({
+      status: 'excluded',
+      targetGroupId: null,
+    });
+    expect(result.mappingsChanged).toBe(0);
+    // Restore for the following tests.
+    await db.groupMapping.update({ where: { id: platform.id }, data: { status: 'unmapped' } });
+    await run(SOURCE);
   }, 120_000);
 
   it('[AUTH-050] never auto-confirms one target for two sources', async () => {
