@@ -736,12 +736,14 @@ describe('PROC-012 guard-bash: narrowed GIT_* rule and dynamic words (ADR-0047)'
   it.each([
     ['git push origin $BR'],
     ['git push origin "$BR"'],
+    // biome-ignore lint/suspicious/noTemplateCurlyInString: a shell parameter expansion, not JS
     ['git push origin ${BR}'],
     ['git push $REMOTE $BRANCH'],
     ['git commit $FLAGS -m x'],
     ['git $SUB origin main'],
     ['$GIT push origin main'],
     ['g=git; $g push origin main'],
+    // biome-ignore lint/suspicious/noTemplateCurlyInString: a shell parameter expansion, not JS
     ['${G} push origin main'],
     ['git push origin {main,x}'],
     ['git push origin feat/*'],
@@ -804,7 +806,7 @@ describe('PROC-012 guard-bash: round 4 and 5 fixes (ADR-0047)', () => {
     const started = Date.now();
     const result = runHook(
       'guard-bash.sh',
-      bashPayload('echo ' + '$(true)'.repeat(2000), taskRepo),
+      bashPayload(`echo ${'$(true)'.repeat(2000)}`, taskRepo),
     );
     expect(result.code).toBe(2);
     expect(Date.now() - started).toBeLessThan(5000);
