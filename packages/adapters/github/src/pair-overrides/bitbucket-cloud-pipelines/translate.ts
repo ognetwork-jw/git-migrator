@@ -30,6 +30,7 @@ import {
   MAX_SERVICES_PER_STEP,
   MAX_TEXT_BUDGET,
   MAX_TOTAL_JOBS,
+  MAX_TOTAL_OUTPUT,
   MAX_WORKFLOW_BYTES,
   PREDEFINED_CACHES,
   REASONS,
@@ -221,6 +222,8 @@ class Translator {
   private gate = false;
   private jobTotal = 0;
   private textBudget = MAX_TEXT_BUDGET;
+  /** Estimated characters still allowed across all workflows (MAX_TOTAL_OUTPUT). */
+  private outputBudget = MAX_TOTAL_OUTPUT;
   private overflow = false;
   /** Running estimate of the size of the workflow being built (checked before each step). */
   private bytes = 0;
@@ -511,13 +514,14 @@ class Translator {
       const id = `step-${counter + 1}`;
       const built = this.step(step, stepPath, id);
       if (built === undefined) return undefined;
-      if (this.bytes + built.size > WORKFLOW_ESTIMATE_LIMIT) {
+      if (this.bytes + built.size > WORKFLOW_ESTIMATE_LIMIT || built.size > this.outputBudget) {
         this.report(stepPath, REASONS.tooLarge);
         return undefined;
       }
       counter++;
       this.jobTotal++;
       this.bytes += built.size;
+      this.outputBudget -= built.size;
       jobs.set(id, built.job);
       return { id, artifacts: built.artifacts, setup: built.setup };
     };

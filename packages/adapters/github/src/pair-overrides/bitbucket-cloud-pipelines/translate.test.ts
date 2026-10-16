@@ -12,6 +12,7 @@ import {
   MAX_PATTERNS,
   MAX_REPORTS,
   MAX_TOTAL_JOBS,
+  MAX_TOTAL_OUTPUT,
   MAX_WORKFLOW_BYTES,
   PREDEFINED_CACHES,
   WORKFLOW_ESTIMATE_LIMIT,
@@ -1272,6 +1273,37 @@ ${Array.from({ length: 50 }, () => '    - step: *s').join('\n')}
     const r = translate(source);
     expect(Date.now() - started).toBeLessThan(3000);
     for (const w of r.workflows) expect(w.content.length).toBeLessThan(MAX_WORKFLOW_BYTES);
+  });
+
+  it('[FAC-PIP-002] output across all workflows is bounded: a service reused by many pipelines cannot fan out', () => {
+    // Service variable names are not text-budget items, and every use of the service repeats them.
+    const env = Array.from({ length: 200 }, (_, i) => `K${'x'.repeat(120)}${i}: v`).join(
+      '\n          ',
+    );
+    const custom = Array.from(
+      { length: 50 },
+      (_, i) =>
+        `    p${i}:\n${Array.from({ length: 10 }, () => '      - step: {script: [make], services: [db]}').join('\n')}`,
+    ).join('\n');
+    const source = `definitions:
+  services:
+    db:
+      image: postgres:16
+      variables:
+          ${env}
+pipelines:
+  custom:
+${custom}
+`;
+    expect(source.length).toBeLessThan(100_000);
+    const started = Date.now();
+    const r = translate(source);
+    expect(Date.now() - started).toBeLessThan(10_000);
+    const total = r.workflows.reduce((n, w) => n + w.content.length, 0);
+    expect(r.workflows.length).toBeGreaterThan(0);
+    // The bound is on estimated sizes; the serialized text adds indentation and comments.
+    expect(total).toBeLessThan(MAX_TOTAL_OUTPUT * 1.2);
+    expect(r.unsupported.some((u) => u.reason.includes('too large'))).toBe(true);
   });
 
   it('[FAC-PIP-002] actions are pinned by full commit SHA to their Node 24 majors', () => {

@@ -67,6 +67,11 @@ export const MAX_JOBS_PER_WORKFLOW = 50;
 export const MAX_TOTAL_JOBS = 500;
 export const MAX_TEXT_BUDGET = 4_000_000;
 export const MAX_WORKFLOW_BYTES = 2_000_000;
+/**
+ * Estimated characters of all generated workflows together: definitions reused by many steps and
+ * pipelines are emitted again each time, so per-workflow bounds alone do not bound the result.
+ */
+export const MAX_TOTAL_OUTPUT = 8_000_000;
 export const MAX_REPORTS = 500;
 /** Per list of one step (aliases can repeat a step, so every list is bounded on its own). */
 export const MAX_LIST_ENTRIES = 200;
