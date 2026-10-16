@@ -87,9 +87,11 @@ export type LifecycleEvent =
       /** The latest parity is all equal and no task is open. */
       readonly parityEqualAndNoOpenTasks: boolean;
       /**
-       * The status the last Run left (`Migration` before it became manually completed). Needed
-       * only when parity/tasks do not allow `verified` and the saved status was `verified` or
-       * `drifted`: LIF-075 restores "the last Run outcome", never `verified`.
+       * The status the latest finished migrate/run-anyway/resync/rollback Run that changed the
+       * status left behind; derive it with `lastRunStatusOf`. It is never `statusBeforeManual`,
+       * which may be `verified` or `drifted`. Needed only when parity/tasks do not allow `verified`
+       * and the saved status was `verified` or `drifted`: LIF-075 restores "the last Run outcome",
+       * never `verified`.
        */
       readonly lastRunStatus?: LastRunStatus;
     }
@@ -270,6 +272,56 @@ function finishRun(s: LifecycleState, e: Extract<LifecycleEvent, { type: 'run_fi
   return ok(
     to(s, outcome === 'succeeded' ? 'migrated' : outcome === 'partial' ? 'partial' : 'failed'),
   );
+}
+
+/** One finished Run, as `lastRunStatusOf` needs it. */
+export interface FinishedRun {
+  readonly kind: RunKind;
+  readonly outcome: RunOutcome;
+  /** Whether the Run recorded any Mutation (`Run.hasMutations`). */
+  readonly hasMutations: boolean;
+}
+
+const LAST_RUN_KINDS: ReadonlySet<RunKind> = new Set([
+  'migrate',
+  'run_anyway',
+  'resync',
+  'rollback',
+]);
+
+/**
+ * The `lastRunStatus` of a `revoke_complete` event (LIF-075, ADR-0058): the status that the latest
+ * finished migrate/run-anyway/resync/rollback Run that changed the status left behind. `runs` is
+ * newest first. It reads each Run through the same `run_finished` rows as `transition`, so a
+ * cancelled Run without a Mutation (which restored the earlier status) is skipped. Returns
+ * `undefined` when no Run changed the status.
+ */
+export function lastRunStatusOf(runs: Iterable<FinishedRun>): LastRunStatus | undefined {
+  // `discovered` is never a Run outcome, so a Run that restored `statusBeforeRun` reads as no change.
+  const before: LifecycleState = {
+    status: 'running',
+    statusBeforeRun: 'discovered',
+    statusBeforeDrift: null,
+    statusBeforeManual: null,
+    statusBeforeMissing: null,
+  };
+  for (const run of runs) {
+    if (!LAST_RUN_KINDS.has(run.kind)) continue;
+    const event: LifecycleEvent =
+      run.outcome === 'cancelled'
+        ? {
+            type: 'run_finished',
+            kind: run.kind,
+            outcome: 'cancelled',
+            recordedMutation: run.hasMutations,
+          }
+        : { type: 'run_finished', kind: run.kind, outcome: run.outcome };
+    const r = finishRun(before, event);
+    if (r.ok && (LAST_RUN_STATUSES as readonly string[]).includes(r.state.status)) {
+      return r.state.status as LastRunStatus;
+    }
+  }
+  return undefined;
 }
 
 /** Applies `event` to `state`. Pure; never throws for a well-typed or malformed event. */
