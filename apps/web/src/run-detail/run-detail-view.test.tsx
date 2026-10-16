@@ -8,6 +8,7 @@ import { ActorProvider } from '../shell/actor-context.tsx';
 import { type Call, callsTo, json, mockApi, problem, rpcOf } from '../test-api.ts';
 import { installMatchMedia, renderWithApp } from '../test-render.tsx';
 import {
+  LOG_MAX_LINES,
   LOG_PAGE,
   type MutationRow,
   type RunDetail,
@@ -63,9 +64,15 @@ const step = (n: number, extra: Partial<RunStepRow> = {}): RunStepRow => ({
   ...extra,
 });
 
-/** Log ids are zero-padded so their order is their sort order, as with UUIDv7. */
+const LOG_EPOCH = Date.parse('2026-10-02T10:00:00.000Z');
+/** A UUIDv7 made `ms` after the log's epoch; `n` keeps ids of the same millisecond apart. */
+const uuid7 = (ms: number, n: number): string => {
+  const hex = (LOG_EPOCH + ms).toString(16).padStart(12, '0');
+  return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-7000-8000-${String(n).padStart(12, '0')}`;
+};
+/** Line `n` is inserted `n` seconds after the epoch, so id order is insert order (UUIDv7). */
 const line = (n: number, extra: Partial<RunLogRow> = {}): RunLogRow => ({
-  id: `l${String(n).padStart(6, '0')}`,
+  id: uuid7(n * 1000, n),
   stepId: 's1',
   ts: '2026-10-02T10:00:02.000Z',
   level: 'info',
@@ -122,11 +129,17 @@ function start(role: Actor['role'] = 'operator') {
     if (rpc?.model === 'runLog' && rpc.op === 'findMany') {
       (api.calls as Call[]).push({ url, ...(init ? { init } : {}) });
       const args = JSON.parse(url.searchParams.get('q') ?? '{}') as {
-        where: { id?: { gt: string } };
+        where: { id?: { gt?: string; lt?: string } };
+        orderBy: { id: 'asc' | 'desc' };
         take: number;
       };
-      const after = args.where.id?.gt ?? '';
-      return json({ data: world.log.filter((l) => l.id > after).slice(0, args.take) });
+      const { gt, lt } = args.where.id ?? {};
+      const sorted = [...world.log].sort((a, b) => (a.id < b.id ? -1 : 1));
+      const matched = sorted.filter(
+        (l) => (gt === undefined || l.id > gt) && (lt === undefined || l.id < lt),
+      );
+      if (args.orderBy.id === 'desc') matched.reverse();
+      return json({ data: matched.slice(0, args.take) });
     }
     return delegate(input, init);
   });
@@ -277,20 +290,54 @@ describe('[UI-023] the live log', () => {
     expect(rendered).toBeLessThan(80);
   });
 
-  it('[JOB-060] a live update fetches only the lines after the last one it has', async () => {
-    world.log = [line(1), line(2)];
+  const logRequests = () =>
+    calls
+      .filter((c) => rpcOf(c.url)?.model === 'runLog')
+      .map((c) => JSON.parse(c.url.searchParams.get('q') ?? '{}'));
+
+  it('[JOB-060] a live update reads only a short window before the last line, without duplicates', async () => {
+    world.log = Array.from({ length: 100 }, (_, i) => line(i + 1));
     start();
-    await screen.findByText('2 of 2 lines');
-    world.log = [...world.log, line(3)];
+    await screen.findByText('100 of 100 lines');
+    world.log = [...world.log, line(101)];
     await act(async () => {
       await client.invalidateQueries({ queryKey: runRootKey('r1') });
     });
+    await screen.findByText('101 of 101 lines');
+    const live = logRequests().at(-1);
+    // 30 s before line 100 (inserted at 100 s): the floor of second 70.
+    expect(live.where).toEqual({
+      runId: 'r1',
+      id: { gt: `${uuid7(70_000, 0).slice(0, 13)}-0000-0000-000000000000` },
+    });
+    expect(live.orderBy).toEqual({ id: 'asc' });
+  });
+
+  it('[JOB-060] a line committed after a later one still shows after the next live update', async () => {
+    world.log = [line(1), line(2), line(4)];
+    start();
     await screen.findByText('3 of 3 lines');
-    const fetches = calls
-      .filter((c) => rpcOf(c.url)?.model === 'runLog')
-      .map((c) => JSON.parse(c.url.searchParams.get('q') ?? '{}').where);
-    expect(fetches[0]).toEqual({ runId: 'r1' });
-    expect(fetches.at(-1)).toEqual({ runId: 'r1', id: { gt: line(2).id } });
+    // Line 3 was inserted before line 4 but its transaction committed after the page read.
+    world.log = [line(1), line(2), line(3), line(4), line(5)];
+    await act(async () => {
+      await client.invalidateQueries({ queryKey: runRootKey('r1') });
+    });
+    await screen.findByText('5 of 5 lines');
+    const log = screen.getByRole('log', { name: 'Log' });
+    const order = [...log.querySelectorAll('div.absolute')].map(
+      (el) => /message (\d+)/.exec(el.textContent ?? '')?.[1],
+    );
+    expect(order).toEqual(['1', '2', '3', '4', '5']);
+  });
+
+  it('[UI-023] the first load reads only the newest lines, from the end of the log', async () => {
+    world.log = Array.from({ length: LOG_MAX_LINES + 3 * LOG_PAGE }, (_, i) => line(i + 1));
+    start();
+    await screen.findByText(`${LOG_MAX_LINES} of ${LOG_MAX_LINES} lines`, {}, { timeout: 20_000 });
+    expect(screen.getByText('Older lines are not shown.')).toBeTruthy();
+    const requests = logRequests();
+    expect(requests[0]?.orderBy).toEqual({ id: 'desc' });
+    expect(requests).toHaveLength(LOG_MAX_LINES / LOG_PAGE);
   });
 
   it('[UI-023] pages through a log longer than one request', async () => {
