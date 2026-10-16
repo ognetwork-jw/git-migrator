@@ -178,9 +178,9 @@ export function escapeMarkdown(text: string): string {
 export function neutraliseAutolinks(text: string): string {
   // No word boundary: a scheme or host glued to a preceding word character is still neutralised.
   // Any URI scheme (RFC 3986 form), not only web schemes: ssh://, git://, file:///, and so on.
-  return text
-    .replace(/([A-Za-z][A-Za-z0-9+.-]*):\/\//g, '$1&#58;//')
-    .replace(/www\./gi, 'www&#46;');
+  // The match is anchored on "://" with a one-character lookbehind, so it stays linear on long runs
+  // of scheme characters; it may also neutralise a "://" after a digit, which renders the same.
+  return text.replace(/(?<=[A-Za-z0-9+.-]):\/\//g, '&#58;//').replace(/(www)\./gi, '$1&#46;');
 }
 
 /** POSIX shell word: plain words stay bare, anything else is single-quoted. Leading "-" is refused earlier. */
