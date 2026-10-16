@@ -88,6 +88,21 @@ function FacetJump({
   );
 }
 
+/**
+ * The Wave choices: the loaded Waves (the first 200 by name), plus the Migration's own Wave when it
+ * is not among them, so the selector names it instead of showing its raw id.
+ */
+export function waveOptions(
+  loaded: readonly { readonly id: string; readonly name: string }[],
+  current: MigrationDetail['wave'],
+): { value: string; label: string }[] {
+  const options = loaded.map((w) => ({ value: w.id, label: w.name }));
+  if (current && !loaded.some((w) => w.id === current.id)) {
+    options.push({ value: current.id, label: current.name });
+  }
+  return options;
+}
+
 function WaveField({
   migration,
   editable,
@@ -116,7 +131,7 @@ function WaveField({
         placeholder={t('noWave')}
         loading={waves.isLoading || change.isPending}
         value={migration.waveId ?? undefined}
-        options={(waves.data ?? []).map((w) => ({ value: w.id, label: w.name }))}
+        options={waveOptions(waves.data ?? [], migration.wave)}
         onChange={(value: string | undefined) => change.mutate(value ?? null)}
       />
       {change.isError ? <ActionError error={change.error} scope="wave" /> : null}

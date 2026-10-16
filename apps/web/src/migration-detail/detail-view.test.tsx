@@ -138,6 +138,17 @@ describe('[UI-022] the repository detail header', () => {
     });
   });
 
+  it('[UI-022] the Wave selector names a Wave beyond the loaded choices', async () => {
+    world.migration = migration({ waveId: 'w9', wave: { id: 'w9', name: 'Wave nine' } });
+    start();
+    await ready();
+    const select = screen
+      .getByRole('combobox', { name: 'Wave' })
+      .closest('.ant-select') as HTMLElement;
+    expect(within(select).getByText('Wave nine')).toBeTruthy();
+    expect(within(select).queryByText('w9')).toBeNull();
+  });
+
   it('[LIF-021] says when the analysis is out of date', async () => {
     world.migration = migration({ analysisStaleAt: '2026-10-02T00:00:00.000Z' });
     start();
