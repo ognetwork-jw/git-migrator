@@ -704,9 +704,27 @@ describe('[LIF-030] replace safety (ADR-0095)', () => {
     });
   });
 
-  it('[LIF-030] accepts resolving references, $$, and literal braces, $& and a lone $', () => {
+  it('[LIF-030] the reference scanner is never looser than the engine', () => {
+    // The engine would read `$10` on a one-group pattern as `$1` then `0`; the scanner reads every
+    // digit and rejects the ambiguous reference.
+    expect(validateReplacePattern('(a)', '$10')).toMatch(/group 10 but the pattern has 1/);
+    // The engine leaves `$<n b>` and an unterminated `$<name` literal; the scanner rejects both.
+    expect(validateReplacePattern('(?P<n>a)', '$<n b>')).toMatch(/unknown group "n b"/);
+    expect(validateReplacePattern('(?P<n>a)', 'x$<n')).toMatch(/unterminated/);
+    // The engine substitutes `$&`, `$\`` and `$'` (match, prefix, suffix); none is RE2J syntax.
+    for (const ref of ['$&', '$`', "$'"]) {
+      expect(validateReplacePattern('a', `x${ref}`), ref).toMatch(/unsupported reference/);
+    }
+    expect(validateReplacePattern('a', '$$&')).toBeNull(); // `$$` then a literal `&`
+  });
+
+  it('[LIF-030] accepts resolving references, $$, literal braces and a lone $', () => {
     expect(validateReplacePattern('(a)(?P<y>b)', '$1-$2-$<y>-$$')).toBeNull();
-    expect(validateReplacePattern('a', '$\u007b1}$&$')).toBeNull();
+    expect(validateReplacePattern('a', '$\u007b1}$')).toBeNull();
+    expect(runNamingPipeline(rp('a', '$\u007b1}$'), src('K', 'a'))).toEqual({
+      ok: true,
+      value: '$\u007b1}$',
+    });
     expect(runNamingPipeline(rp('a', 'x$$'), src('K', 'a'))).toEqual({ ok: true, value: 'x$' });
   });
 

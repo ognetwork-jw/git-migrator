@@ -137,8 +137,20 @@ export function compileReplacePattern(
   }
   const groups = re.groupCount();
   const names = re.namedGroups();
-  for (const m of replacement.matchAll(/\$(?:\$|(\d+)|<([^>]*)>)/g)) {
-    const [ref, digits, name] = m;
+  // Never looser than the engine (ADR-0095): every digit after `$` is read, so `$10` on a
+  // one-group pattern is rejected rather than read as `$1` then `0`; any `$<` must close and name a
+  // group; and the engine's `$&`, `` $` `` and `$'` substitutions are not RE2J syntax.
+  for (const m of replacement.matchAll(/\$(?:\$|(\d+)|<([^>]*)(>?)|([&`']))/g)) {
+    const [ref, digits, name, close, other] = m;
+    if (other !== undefined) {
+      return {
+        ok: false,
+        problem: `the replacement uses unsupported reference "${ref}" (use $1, $<name> or $$)`,
+      };
+    }
+    if (name !== undefined && close === '') {
+      return { ok: false, problem: 'the replacement has an unterminated "$<" reference' };
+    }
     if (digits !== undefined && (Number(digits) < 1 || Number(digits) > groups)) {
       return {
         ok: false,
