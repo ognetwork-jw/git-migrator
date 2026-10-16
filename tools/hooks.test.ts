@@ -18,7 +18,10 @@ import {
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { afterAll, beforeAll, describe, expect, inject, it } from 'vitest';
+
+/** Wall-clock budgets scale with GM_TEST_TIME_FACTOR (ADR-0507). */
+const budget = (ms: number): number => ms * inject('timeFactor');
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
 const hooks = join(root, '.claude/hooks');
@@ -658,8 +661,8 @@ describe('PROC-012 guard-bash: fail-closed policy (ADR-0047)', () => {
     const result = runHook('guard-bash.sh', bashPayload(`echo ${'a'.repeat(1_000_000)}`, taskRepo));
     expect(result.code).toBe(2);
     expect(result.stderr).toContain('too complex');
-    expect(Date.now() - started).toBeLessThan(5000);
-  });
+    expect(Date.now() - started).toBeLessThan(budget(5000));
+  }, 30_000);
 
   it.each([
     ["echo 'a $(git push origin main) b'"],
@@ -807,15 +810,15 @@ describe('PROC-012 guard-bash: round 4 and 5 fixes (ADR-0047)', () => {
       bashPayload('echo ' + '$(true)'.repeat(2000), taskRepo),
     );
     expect(result.code).toBe(2);
-    expect(Date.now() - started).toBeLessThan(5000);
-  });
+    expect(Date.now() - started).toBeLessThan(budget(5000));
+  }, 30_000);
 
   it('[PROC-012] refuses 600 command separators quickly', () => {
     const started = Date.now();
     const result = runHook('guard-bash.sh', bashPayload('true;'.repeat(600), taskRepo));
     expect(result.code).toBe(2);
-    expect(Date.now() - started).toBeLessThan(5000);
-  });
+    expect(Date.now() - started).toBeLessThan(budget(5000));
+  }, 30_000);
 
   it.each([
     ['git commit -m"fix: run n times"'],

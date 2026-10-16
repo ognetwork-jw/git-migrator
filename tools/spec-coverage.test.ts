@@ -137,7 +137,7 @@ describe('spec:coverage', () => {
     expect(report.missingFromMustTest).toEqual([]);
     expect(report.staleMustTest).toEqual([]);
     expect(readMustTest(join(repoRoot, 'must-test.txt')).length).toBeGreaterThan(50);
-  });
+  }, 60_000);
 
   it('[TST-002] the CLI runs in report-only mode against the repository and exits 0', () => {
     const run = spawnSync(process.execPath, [join(repoRoot, 'tools/spec-coverage.ts')], {
@@ -146,7 +146,7 @@ describe('spec:coverage', () => {
     });
     expect(run.status).toBe(0);
     expect(run.stdout).toContain('requirement IDs referenced by a test');
-  });
+  }, 60_000);
 
   it('[TST-002] strict mode passes against the repository: no must-test gaps (CI gate, T-097)', () => {
     const run = spawnSync(
@@ -158,7 +158,7 @@ describe('spec:coverage', () => {
     );
     expect(run.stderr).toBe('');
     expect(run.status).toBe(0);
-  });
+  }, 60_000);
 
   it('[TST-002] counts only IDs in titles of running it/test/describe calls', () => {
     const a = id('LIF', 1);

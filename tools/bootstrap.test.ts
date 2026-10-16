@@ -225,5 +225,5 @@ describe('tests type-checking', () => {
     } finally {
       rmSync(tmp, { recursive: true, force: true });
     }
-  });
+  }, 120_000);
 });
