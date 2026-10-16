@@ -925,6 +925,47 @@ describe('inventory against the fixture world', () => {
     ).toBe(before);
   }, 120_000);
 
+  it('[JOB-060][UI-020] publishes inventory.progress after every pass and migration.updated when Migrations were created', async () => {
+    const published: Array<{ type: string; ids: Record<string, string> }> = [];
+    const pool = t.db.pool;
+    const appPool = new Proxy(pool, {
+      get(target, key) {
+        if (key === 'query') {
+          return (text: string, values?: unknown[]) => {
+            if (typeof text === 'string' && text.includes('pg_notify') && values) {
+              published.push(JSON.parse(String(values[1])));
+            }
+            return target.query(text, values);
+          };
+        }
+        const value = Reflect.get(target, key, target);
+        return typeof value === 'function' ? value.bind(target) : value;
+      },
+    });
+    const observed: InventoryDeps = { ...deps, appPool };
+    await run(SOURCE);
+    // A quiet pass: nothing created, but the Repository lists and Endpoint counts refetch.
+    await runInventory(observed, SOURCE, { shutdown: shutdown.signal });
+    expect(published).toEqual([
+      expect.objectContaining({ type: 'inventory.progress', ids: { endpoint: SOURCE } }),
+    ]);
+    // A pass that creates repository Migrations also reaches the Migration lists (the dashboard).
+    published.length = 0;
+    await t.db.privileged.migration.deleteMany({
+      where: {
+        routeId: 'r-manual',
+        scope: 'repository',
+        sourceRepository: { slug: 'pipelines-simple' },
+      },
+    });
+    const result = await runInventory(observed, SOURCE, { shutdown: shutdown.signal });
+    expect(result.createdMigrations).toBe(1);
+    expect(published.map((e) => e.type)).toContain('inventory.progress');
+    expect(published).toContainEqual(
+      expect.objectContaining({ type: 'migration.updated', ids: {} }),
+    );
+  }, 120_000);
+
   it('[JOB-030] skips an Endpoint that is retired or unknown, and one that another pass is running', async () => {
     expect(await run('no-such-endpoint')).toMatchObject({ skipped: 'endpoint-retired' });
     const holder = await t.db.pool.connect();

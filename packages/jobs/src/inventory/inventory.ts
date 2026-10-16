@@ -40,6 +40,9 @@ import {
 /** Sources matched between two yields to the event loop. */
 const YIELD_EVERY = 500;
 
+/** What an event id may look like (JOB-060). */
+const EVENT_ID = /^[A-Za-z0-9_-]{1,64}$/;
+
 /** Rows per `createMany` statement. */
 const CHUNK = 500;
 
@@ -272,7 +275,7 @@ export async function runInventory(
       ? 0
       : await markMissing(new Set(repositoryRecords.map((r) => r.providerId)));
     createdMigrations += await ensureRepositoryMigrations(routes);
-    if (!suspicious) await reconcileMissing();
+    const transitioned = suspicious ? 0 : await reconcileMissing();
 
     const identityRecords = await collect(
       (c) => connection.inventory.listIdentities(c),
@@ -292,6 +295,30 @@ export async function runInventory(
     await correlateTargetInvitations(connection, routes);
 
     const staleMigrations = repositories.stale;
+    // JOB-060: the pass is over; lists of Repositories and Endpoint counts refetch, and Migration
+    // lists (the dashboard) do too when Migrations were created or changed status (UI-020). A
+    // stale mark has already published its own `migration.updated`.
+    // The pass has committed everything: a lost notification is logged, never a reason to rerun it.
+    try {
+      await publishEvent(deps.appPool, {
+        type: 'inventory.progress',
+        // An id the event format cannot carry still reaches `list:repositories`.
+        ids: EVENT_ID.test(endpointId) ? { endpoint: endpointId } : {},
+        at: now().toISOString(),
+      });
+      if (createdMigrations > 0 || transitioned > 0) {
+        await publishEvent(deps.appPool, {
+          type: 'migration.updated',
+          ids: {},
+          at: now().toISOString(),
+        });
+      }
+    } catch (error) {
+      log.warn(
+        { endpointId, errorClass: (error as Error | null)?.name },
+        'inventory live-update event not published',
+      );
+    }
     log.info(
       {
         endpointId,
@@ -665,7 +692,7 @@ export async function runInventory(
    * Migration that is `running` when its source disappears keeps running (the event is deferred,
    * ADR-0058), and the next pass sends the event again once the Run has finished (ADR-0280).
    */
-  async function reconcileMissing(): Promise<void> {
+  async function reconcileMissing(): Promise<number> {
     const migrations = await db.migration.findMany({
       where: {
         scope: 'repository',
@@ -685,6 +712,7 @@ export async function runInventory(
         sourceRepository: { select: { presence: true } },
       },
     });
+    let transitioned = 0;
     for (const m of migrations) {
       checkpoint();
       const state: LifecycleState = {
@@ -730,7 +758,9 @@ export async function runInventory(
           'migration changed meanwhile; retry next pass',
         );
       }
+      transitioned += written.count;
     }
+    return transitioned;
   }
 
   async function upsertIdentities(
