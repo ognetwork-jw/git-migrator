@@ -219,7 +219,7 @@ These are unresolved review findings (review loops that hit the 5-round cap) and
 | 2026-10-08 | T-061 | 4 | MINOR | packages/db/README.md stale-scope line omits `routeIds` and the id-ordered locking / one-call rule | packages/db/README.md:52 | open |
 | 2026-10-09 | T-061 | 4 | MINOR | Interrupted first attempt: later BullMQ retries of the same job are never counted (no marker, no backoff), and `undoAttempt` does not restore the earlier failed-at/retry-at; have `markAttempt` return old values and mark the next attempt counted (probe: scratchpad/probe/interrupt.out) | packages/jobs/src/analysis/analysis.ts (analysisHandlers, undoAttempt) | open |
 | 2026-10-09 | T-061 | 4 | MINOR | `restampFailure` re-applies the backoff after a stale mark cleared it during the final attempt, so a config fix waits up to 6 h; guard on unchanged `stale_generation` | packages/jobs/src/analysis/analysis.ts (restampFailure) | open |
-| 2026-10-08 | T-084 | 1 | deferred | Playwright e2e and visual baselines for /people/identities and /people/teams | testing/e2e | open |
+| 2026-10-08 | T-084 | 1 | deferred | ~~Playwright e2e and visual baselines for /people/identities and /people/teams~~ | testing/e2e | resolved (claude/followups-web-ui) |
 | 2026-10-08 | T-084 | 1 | deferred | Older shell pages gate on the client only; call `authorizePage` (ADR-0321) when they get data (T-081 onward) | apps/web | open |
 | 2026-10-09 | orchestrator | — | flake | adapter-sdk `redact.hardening.test.ts` [ADP-061] 100 ms timing assertion fails under full-suite load (seen again in T-084 r2) | packages/adapter-sdk | open |
 | 2026-10-09 | T-062 | 2 | MINOR | Naming-preview 20,000 cap and dashboard `wavesTruncated`/`MAX_WAVES` have no tests | packages/api/src/batch1.ts:556-607, 854-863 | open |

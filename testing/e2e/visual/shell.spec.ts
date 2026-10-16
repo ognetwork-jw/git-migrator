@@ -346,3 +346,112 @@ test.describe('sign-in and denied pages', () => {
     await expect(page.getByText('Sign-in failed. Try again')).toBeVisible();
   });
 });
+
+test.describe('People pages', () => {
+  const person = (id: string, login: string, displayName: string, email: string | null = null) => ({
+    id,
+    providerId: `acct-${login}`,
+    login,
+    displayName,
+    email,
+  });
+  const IDENTITIES = [
+    {
+      id: 'im-1',
+      status: 'confirmed',
+      method: 'email',
+      confidence: 1,
+      decidedAt: '2026-01-14T08:00:00Z',
+      decidedBy: 'Omar Operator',
+      reason: null,
+      source: person('s-1', 'alice', 'Alice Example', 'alice@acme.example'),
+      target: person('t-1', 'alice-gh', 'Alice Example'),
+    },
+    {
+      id: 'im-2',
+      status: 'suggested',
+      method: 'login',
+      confidence: 0.6,
+      decidedAt: null,
+      decidedBy: null,
+      reason: null,
+      source: person('s-2', 'bob', 'Bob Example'),
+      target: person('t-2', 'bob', 'Bob Example'),
+    },
+    {
+      id: 'im-3',
+      status: 'excluded',
+      method: 'manual',
+      confidence: null,
+      decidedAt: '2026-01-14T09:00:00Z',
+      decidedBy: 'Omar Operator',
+      reason: 'Left the company',
+      source: person('s-3', 'carol', 'Carol Example', 'carol@acme.example'),
+      target: null,
+    },
+  ];
+  const GROUPS = [
+    {
+      id: 'gm-1',
+      status: 'unmapped',
+      plannedSlug: 'platform-team',
+      collision: false,
+      sourceGroup: { id: 'g-1', slug: 'platform-team', name: 'Platform Team', memberCount: 2 },
+      targetGroup: null,
+    },
+    {
+      id: 'gm-2',
+      status: 'suggested',
+      plannedSlug: 'web',
+      collision: true,
+      sourceGroup: { id: 'g-2', slug: 'web', name: 'Web', memberCount: 5 },
+      targetGroup: { id: 'g-3', slug: 'web', name: 'web', memberCount: 4 },
+    },
+  ];
+
+  /** Fixed mapping lists, so the screenshots do not depend on the inventory (UI-027, UI-028). */
+  async function mockPeople(page: Page) {
+    const json = (body: unknown) => ({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify(body),
+    });
+    await page.route('**/api/v1/routes', (route) =>
+      route.fulfill(
+        json({ items: [{ id: 'r-auto', sourceEndpointId: 'bb-src', targetEndpointId: 'gh-dst' }] }),
+      ),
+    );
+    await page.route('**/api/v1/routes/r-auto/identity-mappings?*', (route) =>
+      route.fulfill(json({ items: IDENTITIES, nextCursor: null })),
+    );
+    await page.route('**/api/v1/routes/r-auto/group-mappings', (route) =>
+      route.fulfill(json({ items: GROUPS })),
+    );
+  }
+
+  test.beforeEach(async ({ page }) => {
+    await fakeEventSource(page);
+  });
+
+  test('[UI-027] identity mapping, operator', async ({ page }) => {
+    await mockApi(page, 'operator');
+    await mockPeople(page);
+    await open(page, '/people/identities');
+    const table = page.getByRole('table');
+    await expect(table.getByRole('row')).toHaveCount(IDENTITIES.length + 1);
+    await expect(table.getByRole('row').filter({ hasText: 'carol' })).toContainText(
+      'Reason: Left the company',
+    );
+    await expect(page).toHaveScreenshot('people-identities.png');
+  });
+
+  test('[UI-028] team mapping, operator', async ({ page }) => {
+    await mockApi(page, 'operator');
+    await mockPeople(page);
+    await open(page, '/people/teams');
+    const table = page.getByRole('table');
+    await expect(table.getByRole('row')).toHaveCount(GROUPS.length + 1);
+    await expect(table.getByRole('row').filter({ hasText: 'Web' })).toContainText('Slug collision');
+    await expect(page).toHaveScreenshot('people-teams.png');
+  });
+});
