@@ -699,3 +699,42 @@ describe('[API-011] a lock or statement timeout', () => {
     expect(warned).toEqual([[{ errorClass: 'Error', dbErrorCode: '57014' }, 'database busy']]);
   });
 });
+
+describe('[API-020] Actor administration, round 4', () => {
+  it('[AUTH-005] a PATCH authenticated before its caller was disabled is refused once it holds the lock', async () => {
+    const { jar } = await signInAdmin();
+    const mk = async (displayName: string, role: string) =>
+      (
+        (await (
+          await call('/api/v1/actors', { method: 'POST', jar, body: { displayName, role } })
+        ).json()) as { id: string }
+      ).id;
+    const caller = await mk('late caller', 'admin');
+    const target = await mk('late target', 'operator');
+    const { key } = (await (
+      await call(`/api/v1/actors/${caller}/api-keys`, { method: 'POST', jar, body: { name: 'k' } })
+    ).json()) as { key: string };
+    const { ADMIN_CHANGE_LOCK_KEY } = await import('./v1.ts');
+    const holder = await t.db.pool.connect();
+    try {
+      await holder.query('BEGIN');
+      await holder.query('SELECT pg_advisory_xact_lock($1::bigint)', [ADMIN_CHANGE_LOCK_KEY]);
+      // Authenticated now (the caller is an enabled admin), then waits for the lock.
+      const pending = call(`/api/v1/actors/${target}`, {
+        method: 'PATCH',
+        key,
+        body: { role: 'viewer' },
+      });
+      await new Promise((r) => setTimeout(r, 300));
+      await holder.query('UPDATE app.actor SET disabled = true WHERE id = $1', [caller]);
+      await holder.query('COMMIT');
+      await expectProblem(await pending, 403, 'forbidden');
+      expect((await t.db.privileged.actor.findUniqueOrThrow({ where: { id: target } })).role).toBe(
+        'operator',
+      );
+    } finally {
+      await holder.query('ROLLBACK').catch(() => undefined);
+      holder.release();
+    }
+  });
+});
