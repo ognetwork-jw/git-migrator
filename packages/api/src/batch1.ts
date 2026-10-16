@@ -401,9 +401,11 @@ interface Backlog {
 const RETRY_AFTER = '5';
 
 /**
- * Runs a call to the queue or the database and turns a failure that is not already a problem into
- * a 503 `not_ready` with `Retry-After` (ADR-0330). The fault is reported through `onFault`, which
- * logs safe fields only; the response carries no detail of it.
+ * Runs a call to the job queue and turns a failure that is not already a problem into a 503
+ * `not_ready` with `Retry-After` (ADR-0330): the queue client gives no typed outage error, so any
+ * failure of it counts. The fault is reported through `onFault`, which logs safe fields only; the
+ * response carries no detail of it. Database and quota reads are not wrapped: the app's error
+ * handler answers an outage with 503 and anything else (a code fault) with 500.
  */
 async function guarded<T>(
   onFault: ((error: unknown) => void) | undefined,
@@ -430,14 +432,15 @@ async function guarded<T>(
 async function backgroundBacklog(
   jobs: ApiServices['jobs'],
   db: Db,
+  onFault: ((error: unknown) => void) | undefined,
 ): Promise<{ byEndpoint: Map<string, Backlog>; total: number; truncated: boolean }> {
   const queue = jobs.queue('analysis-background');
-  const counts = await queue.getJobCounts('waiting', 'delayed', 'prioritized');
+  const counts = await guarded(onFault, () =>
+    queue.getJobCounts('waiting', 'delayed', 'prioritized'),
+  );
   const total = (counts.waiting ?? 0) + (counts.delayed ?? 0) + (counts.prioritized ?? 0);
-  const queued = await queue.getJobs(
-    ['waiting', 'delayed', 'prioritized'],
-    0,
-    BACKLOG_READ_LIMIT - 1,
+  const queued = await guarded(onFault, () =>
+    queue.getJobs(['waiting', 'delayed', 'prioritized'], 0, BACKLOG_READ_LIMIT - 1),
   );
   const ids = new Set<string>();
   for (const job of queued) {
@@ -630,8 +633,8 @@ export function createBatch1(deps: Batch1Deps) {
       const quota = requireService(deps.services, 'quota');
       const jobs = requireService(deps.services, 'jobs');
       const [snapshot, queued] = await Promise.all([
-        guarded(deps.onFault, () => quota.snapshot()),
-        guarded(deps.onFault, () => backgroundBacklog(jobs, privileged)),
+        quota.snapshot(),
+        backgroundBacklog(jobs, privileged, deps.onFault),
       ]);
       const backlog = queued.byEndpoint;
       const buckets = snapshot.map((b) => {

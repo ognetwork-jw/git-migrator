@@ -24,6 +24,7 @@ let buckets: BucketSnapshot[] = [];
 let extraQueued = 0;
 let failEnqueue = false;
 let failGetJobs = false;
+let failSnapshot: Error | undefined;
 
 const services: ApiServices = {
   jobs: {
@@ -61,7 +62,9 @@ const services: ApiServices = {
             : Promise.resolve({ waiting: backgroundQueue.length + extraQueued }),
       }) as never,
   } as never,
-  quota: { snapshot: () => Promise.resolve(buckets) },
+  quota: {
+    snapshot: () => (failSnapshot ? Promise.reject(failSnapshot) : Promise.resolve(buckets)),
+  },
   registry: createBuiltinRegistry(),
 };
 
@@ -731,6 +734,27 @@ describe('[API-020] [JOB-047] GET /quota', () => {
       await expectProblem(res, 503, 'not_ready');
     } finally {
       failGetJobs = false;
+    }
+  });
+
+  it('[API-011] a quota read that cannot reach the database is a 503 that does not blame the job queue', async () => {
+    failSnapshot = Object.assign(new Error('connect ECONNREFUSED'), { code: 'ECONNREFUSED' });
+    try {
+      const res = await call('/quota', { role: 'viewer' });
+      expect(res.headers.get('retry-after')).toBe('5');
+      const problem = await expectProblem(res, 503, 'not_ready');
+      expect(JSON.stringify(problem)).not.toMatch(/queue/);
+    } finally {
+      failSnapshot = undefined;
+    }
+  });
+
+  it('[API-011] a fault in the quota read that is not an outage is a 500, not a 503', async () => {
+    failSnapshot = new TypeError('cannot read properties of undefined');
+    try {
+      await expectProblem(await call('/quota', { role: 'viewer' }), 500, 'internal_error');
+    } finally {
+      failSnapshot = undefined;
     }
   });
 
