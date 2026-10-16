@@ -189,6 +189,53 @@ describe('MutationRecord checks (ADP-012)', () => {
   });
 });
 
+describe('a declared record defect (knownDefect)', () => {
+  const defect = { knownRecordDefect: /covered by/ };
+
+  it('[TST-015] the record checks must fail with the declared message, and read-back and idempotency still pass', async () => {
+    await checkRoundTrip(
+      connection({ wrongPaths: true }),
+      'repository-settings',
+      prepared(),
+      defect,
+    );
+    await checkIdempotent(
+      connection({ wrongPaths: true }),
+      'repository-settings',
+      prepared(),
+      defect,
+    );
+  });
+
+  it('[TST-015] an unrelated regression is still caught while a record defect is declared', async () => {
+    await expect(
+      checkRoundTrip(
+        connection({ wrongPaths: true, lossy: true }),
+        'repository-settings',
+        prepared(),
+        defect,
+      ),
+    ).rejects.toThrow(/new!/);
+    await expect(
+      checkIdempotent(
+        connection({ wrongPaths: true, chatty: true }),
+        'repository-settings',
+        prepared(),
+        defect,
+      ),
+    ).rejects.toThrow(/second apply/);
+  });
+
+  it('[TST-015] a declared defect that no longer shows, or that fails differently, is caught', async () => {
+    await expect(
+      checkRoundTrip(connection({}), 'repository-settings', prepared(), defect),
+    ).rejects.toThrow(/remove knownDefect/);
+    await expect(
+      checkRoundTrip(connection({ duplicate: true }), 'repository-settings', prepared(), defect),
+    ).rejects.toThrow(/covered by/);
+  });
+});
+
 describe('target-only items (ADR-0231 section 1)', () => {
   const variable = (name: string) => ({
     name,
