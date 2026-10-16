@@ -243,4 +243,9 @@ describe('[ADP-020] patternForPath', () => {
     expect(matchesPattern(p, '/refs[name=release/\\*]/x')).toBe(true);
     expect(matchesPattern('/refs[name=release/*]', '/refs[name=release/1.0]')).toBe(true); // raw string is a glob
   });
+
+  it('[ADP-020] refuses the root path instead of returning an empty pattern', async () => {
+    const { patternForPath, FieldPathError } = await import('./field-path.ts');
+    expect(() => patternForPath('')).toThrow(FieldPathError);
+  });
 });

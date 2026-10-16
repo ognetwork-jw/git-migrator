@@ -217,9 +217,13 @@ export function canonicalFieldPath(path: string): FieldPath {
  * The only way to turn a concrete path into an Expected Difference pattern: it re-renders the path
  * with every `*` escaped, so the pattern matches that path and what lies beneath it, and nothing
  * else. Never store a raw path string as a pattern: `/refs[name=release/*]` is a literal in
- * `parseFieldPath` but a glob in `parsePathPattern`.
+ * `parseFieldPath` but a glob in `parsePathPattern`. The root path is refused: as a pattern it
+ * would be empty, which `parsePathPattern` rejects (masking everything is spelled `/**`).
  */
 export function patternForPath(path: FieldPath): string {
+  if (path === '') {
+    throw new FieldPathError('the root path has no pattern (use "/**" for everything)', path, 0);
+  }
   return canonicalFieldPath(path);
 }
 

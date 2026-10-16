@@ -563,14 +563,14 @@ export function translateFacet(
   const seenDraft = new Set<string>();
   for (const d of resolution.decisions) {
     if (d.fidelity !== 'unreadable' || d.defaulted !== true) continue;
-    const path = patternForPath(d.path);
-    if (path === '') {
+    if (d.path === '') {
       throw new FacetEngineError(
         'invalid_decision',
         facetKey,
         'a defaulted unreadable field needs a path',
       );
     }
+    const path = patternForPath(d.path);
     if (seenDraft.has(path)) continue;
     seenDraft.add(path);
     drafts.push({
