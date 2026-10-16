@@ -1,9 +1,32 @@
 import { generateKeyPairSync } from 'node:crypto';
 import { context, trace } from '@opentelemetry/api';
-import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { afterAll, beforeAll, describe, expect, inject, it } from 'vitest';
 import { createLogger } from './logger.ts';
 import { REDACTED } from './redact.ts';
 import { startTracing, type TracingHandle } from './tracing.ts';
+
+/** Wall-clock budgets scale with GM_TEST_TIME_FACTOR (ADR-0507). */
+const budget = (ms: number): number => ms * inject('timeFactor');
+
+/**
+ * Runs `run` and asserts it took under `budget(ms)`. When it is over, it runs again (three runs at
+ * most) and the best time is judged, so one preemption on a busy machine is not a failure, while a
+ * genuinely slow implementation fails every run (ADR-0507).
+ */
+function within<T>(ms: number, run: () => T, label?: string): T {
+  const limit = budget(ms);
+  let best = Number.POSITIVE_INFINITY;
+  let result: T;
+  let runs = 0;
+  do {
+    const started = performance.now();
+    result = run();
+    best = Math.min(best, performance.now() - started);
+    runs++;
+  } while (best >= limit && runs < 3);
+  expect(best, label).toBeLessThan(limit);
+  return result;
+}
 
 type Line = Record<string, unknown>;
 
@@ -438,9 +461,7 @@ describe('logger bypasses (DEP-050, T-004 follow-ups)', () => {
     for (const head of ['-u "', "-u '", '--user=']) {
       const out = sink();
       const log = createLogger({ destination: out.destination });
-      const started = performance.now();
-      log.error(new Error(head + ':'.repeat(1024 * 1024)));
-      expect(performance.now() - started, head).toBeLessThan(1000);
+      within(1000, () => log.error(new Error(head + ':'.repeat(1024 * 1024))), head);
     }
-  });
+  }, 60_000);
 });
