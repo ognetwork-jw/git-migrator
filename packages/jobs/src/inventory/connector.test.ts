@@ -208,6 +208,54 @@ describe('endpoint connector', () => {
     expect(seen.ctx).toMatchObject({ pool: 'background', signal });
   });
 
+  it('[JOB-042] picks the credential whose buckets have the most free capacity for the pool', async () => {
+    const seen: Seen = {};
+    const asked: Array<[string, string]> = [];
+    const free: Record<string, number> = { 'src:acct-1:core': 5, 'src:acct-2:core': 40 };
+    const adapter: ProviderAdapter = {
+      ...fakeAdapter(seen),
+      credentialBuckets: (runtime) => [
+        { key: `${runtime.id}:${runtime.accountKey}:core`, limit: 100, windowSeconds: 3600 },
+      ],
+    };
+    const capacity = {
+      freeCapacity: async (spec: { key: string }, pool: string) => {
+        asked.push([spec.key, pool]);
+        return { free: free[spec.key] ?? 0, blockedUntil: null } as never;
+      },
+    };
+    const make = (withCapacity: boolean) =>
+      createEndpointConnector({
+        config,
+        registry: { adapter: () => adapter },
+        env: {
+          BITBUCKET_CREDENTIALS: JSON.stringify([
+            { accountId: 'acct-1', token: 'abc-1' },
+            { accountId: 'acct-2', token: 'abc-2' },
+          ]),
+        },
+        environment,
+        git: noGitClient,
+        ...(withCapacity ? { capacity } : {}),
+      });
+    await make(true).connect('src', { pool: 'interactive', signal });
+    expect(seen.runtime).toMatchObject({
+      credential: { accountId: 'acct-2' },
+      accountKey: 'acct-2',
+    });
+    expect(asked).toEqual([
+      ['src:acct-1:core', 'interactive'],
+      ['src:acct-2:core', 'interactive'],
+    ]);
+    // The fuller account frees up: the next job takes the other one.
+    free['src:acct-2:core'] = 1;
+    await make(true).connect('src', { pool: 'background', signal });
+    expect(seen.runtime?.accountKey).toBe('acct-1');
+    // Without a capacity source the first valid credential is used.
+    await make(false).connect('src', { pool: 'background', signal });
+    expect(seen.runtime?.accountKey).toBe('acct-1');
+  });
+
   it('[JOB-042] uses the Endpoint id as the account key for a credential without an account', async () => {
     const seen: Seen = {};
     const connector = connectorWith(

@@ -4,11 +4,14 @@ import { sha256Hex } from '@git-migrator/core';
 import { describe, expect, it } from 'vitest';
 import { bitbucketCloudAdapter, capabilities } from './adapter.ts';
 import {
+  BASE_URL,
   driverCtx,
+  EMAIL,
   endpointTarget,
   facet,
   makeConnection,
   makeWorld,
+  TOKEN,
   target,
 } from './harness.test.ts';
 
@@ -113,6 +116,33 @@ describe('adapter surface', () => {
       credential: { gitUsername: 'custom-user' },
     });
     expect((await custom.conn.git.credential(ref)).username).toBe('custom-user');
+  });
+
+  it('[JOB-042] names the buckets a credential draws from, with the keys its connection charges', async () => {
+    const { conn, rec } = await makeConnection(makeWorld());
+    const buckets = bitbucketCloudAdapter.credentialBuckets?.({
+      id: 'bb-main',
+      baseUrl: BASE_URL,
+      config: { workspace: 'acme', gitBaseUrl: 'http://localhost:4030/source' },
+      credential: { accountId: 'acct-operator', email: EMAIL, apiToken: TOKEN },
+      accountKey: 'acct-operator',
+    });
+    expect(buckets?.map((b) => b.key)).toEqual([
+      'bb-main:acct-operator:repository-data',
+      'bb-main:acct-operator:git',
+    ]);
+    expect(buckets?.[1]).toEqual(conn.git.quota);
+    await conn.inventory.listNamespaces();
+    expect(rec.acquired.flatMap((a) => a.keys)).toContain(buckets?.[0]?.key);
+    // An account id holding `:` is sanitized the same way the classifier does.
+    const odd = bitbucketCloudAdapter.credentialBuckets?.({
+      id: 'bb-main',
+      baseUrl: BASE_URL,
+      config: { workspace: 'acme', gitBaseUrl: 'http://localhost:4030/source' },
+      credential: {},
+      accountKey: '557058:abc',
+    });
+    expect(odd?.[0]?.key).toBe('bb-main:557058_abc:repository-data');
   });
 
   it('[JOB-043] git access names the credential git bucket, so git commands are metered', async () => {

@@ -254,6 +254,8 @@ export async function startWorker(options: StartWorkerOptions): Promise<WorkerHa
       env,
       environment: providerEnvironment,
       git: noGitClient,
+      // JOB-042: among an Endpoint's credentials, the one with the most free capacity.
+      capacity: quota,
     });
     // ls-remote for the `git-refs` read. The Analysis and the Parity Check pre-acquire its unit in
     // the git bucket the adapter declared for the connection (JOB-041).

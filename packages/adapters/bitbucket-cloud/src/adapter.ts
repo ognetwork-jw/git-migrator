@@ -2,6 +2,7 @@
 import {
   type AdapterContext,
   AdapterError,
+  type BucketSpec,
   type EndpointConnection,
   type EndpointRuntime,
   type ProviderAdapter,
@@ -23,6 +24,7 @@ import {
 import { createFacetDrivers } from './facets.ts';
 import { createGitAccess } from './git-access.ts';
 import { createInventory } from './inventory.ts';
+import { bucketSpec } from './quota.ts';
 import { type Ctx, Reader } from './reader.ts';
 import { createSourceLock } from './source-lock.ts';
 
@@ -92,6 +94,20 @@ export const bitbucketCloudAdapter: ProviderAdapter = {
   capabilities,
   configSchema,
   credentialSchema,
+
+  /**
+   * JOB-042: a job charges the account's `repository-data` bucket for most reads and its `git`
+   * bucket for git transport, so a credential is as free as the fuller of the two.
+   */
+  credentialBuckets(endpoint: EndpointRuntime): readonly BucketSpec[] {
+    const config: BitbucketConfig = parseOrThrow(configSchema, endpoint.config, 'endpoint config');
+    const setup = {
+      endpointId: endpoint.id,
+      accountKey: endpoint.accountKey,
+      overrides: config.quota.overrides,
+    };
+    return [bucketSpec(setup, 'repository-data'), bucketSpec(setup, 'git')];
+  },
 
   async connect(endpoint: EndpointRuntime, ctx: AdapterContext): Promise<EndpointConnection> {
     const config: BitbucketConfig = parseOrThrow(configSchema, endpoint.config, 'endpoint config');

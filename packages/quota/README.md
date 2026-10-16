@@ -13,7 +13,7 @@ Internal dependencies (ARC-012): `@git-migrator/db`, `@git-migrator/core`. Metri
   - `recordRateLimited(...)` (429, JOB-044), `recordSecondaryLimit(...)` (JOB-045), `adjust(bucket, pool, delta)` (GraphQL cost reconcile).
   - `freeCapacity`, `snapshot`, `exportMetrics` (JOB-047); `prune` (JOB-046).
 - `QuotaLeases`: cross-pod in-flight cap on `quota_lease` (JOB-045).
-- `selectCredential(quota, candidates, pool)` picks the credential with the most free capacity (JOB-042).
+- `selectCredential(quota, candidates, pool)` picks the credential with the most free capacity (JOB-042); `quota` needs only `freeCapacity`. `createEndpointConnector` in `packages/jobs` calls it with the buckets of `ProviderAdapter.credentialBuckets`.
 - `estimateBackgroundEtaSeconds` for the quota API (JOB-047).
 
 Time comes from the database clock, read after the lock is held. The `now` option is a test seam only.
