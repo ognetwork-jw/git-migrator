@@ -70,6 +70,14 @@ let lookupFault: AdapterError | undefined;
 /** How many times the send job asked the provider to invite. */
 let inviteCalls = 0;
 const scheduled: Array<{ step: InvitationStep; delayMs: number }> = [];
+/** The Parity Checks the invitation code queued (LIF-062). */
+const parityQueued: string[] = [];
+const endpointMigrationId = async () =>
+  (
+    await t.db.privileged.migration.findFirstOrThrow({
+      where: { routeId: ROUTE, scope: 'endpoint' },
+    })
+  ).id;
 
 const github = () => {
   if (!fakes.github) throw new Error('the fake GitHub did not start');
@@ -84,6 +92,9 @@ const deps = (hooks?: InvitationDeps['hooks']): InvitationDeps => ({
   connector,
   schedule: async (step, delayMs) => {
     scheduled.push({ step, delayMs });
+  },
+  enqueueParity: async (migrationId) => {
+    parityQueued.push(migrationId);
   },
   log,
   now,
@@ -103,6 +114,9 @@ const inventory = (endpointId: string) =>
       now,
       scheduleInvitation: async (step, delayMs) => {
         scheduled.push({ step, delayMs });
+      },
+      enqueueParity: async (migrationId) => {
+        parityQueued.push(migrationId);
       },
     },
     endpointId,
@@ -470,8 +484,11 @@ describe('sending', () => {
     await approve(batch.id, 2);
     const generation = await staleGeneration();
 
+    parityQueued.length = 0;
     const result = await send(batch.id);
     expect(result).toMatchObject({ sent: 2, failed: 0, remaining: 0, batchStatus: 'sent' });
+    // LIF-062: the Invitation status changes queue a Parity Check of the endpoint Migration.
+    expect(parityQueued).toContain(await endpointMigrationId());
     expect(pendingEmails()).toEqual(expect.arrayContaining([a.email, b.email] as string[]));
     expect(pendingEmails()).not.toContain(skipped.email);
     const team = org().teams.find((x) => x.slug === 'platform-team');
@@ -638,9 +655,11 @@ describe('acceptance and expiry through inventory', () => {
   it('[AUTH-060] a member with the invited e-mail confirms the mapping at the next inventory', async () => {
     const { p, batch, item } = await sentPerson();
     expect((await mappingOf(p.id)).status).toBe('pending_invite');
-    // Still pending: an inventory changes nothing.
+    // Still pending: an inventory changes nothing and queues no Parity Check.
+    parityQueued.length = 0;
     await inventory(TARGET);
     expect((await itemOf(batch.id, p.id)).status).toBe('sent');
+    expect(parityQueued).toEqual([]);
 
     accept(p.email as string, `${p.login}-gh`);
     const generation = await staleGeneration();
@@ -648,6 +667,8 @@ describe('acceptance and expiry through inventory', () => {
     expect((await db().invitation.findUniqueOrThrow({ where: { id: item.id } })).status).toBe(
       'accepted',
     );
+    // LIF-062: the acceptance queues a Parity Check of the endpoint Migration.
+    expect(parityQueued).toEqual([await endpointMigrationId()]);
     const mapping = await mappingOf(p.id);
     const target = await db().identity.findFirstOrThrow({
       where: { endpointId: TARGET, login: `${p.login}-gh` },
@@ -813,10 +834,12 @@ describe('acceptance and expiry through inventory', () => {
 
   it('[AUTH-060] revoking withdraws the invitation and returns the person to candidates', async () => {
     const { p, batch, item } = await sentPerson();
+    parityQueued.length = 0;
     const result = await runInvitationRevoke(deps(), batch.id, item.id, {
       shutdown: shutdown.signal,
     });
     expect(result).toMatchObject({ cancelled: true });
+    expect(parityQueued).toEqual([await endpointMigrationId()]);
     expect(pendingEmails()).not.toContain(p.email);
     expect(await itemOf(batch.id, p.id)).toMatchObject({ status: 'expired', error: 'revoked' });
     expect((await mappingOf(p.id)).status).toBe('unmapped');

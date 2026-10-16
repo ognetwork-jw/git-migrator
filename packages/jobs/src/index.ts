@@ -86,6 +86,7 @@ export {
   type CorrelateDeps,
   type CorrelateResult,
   correlateInvitations,
+  type EnqueueParity,
   INVITATION_UNRESOLVED_AFTER_MS,
   type InvitationDeps,
   InvitationInterruptedError,

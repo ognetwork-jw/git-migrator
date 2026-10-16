@@ -5,6 +5,8 @@ import { publishEvent } from '@git-migrator/db';
 import type { Logger } from '@git-migrator/observability';
 import type pg from 'pg';
 import {
+  type EnqueueParity,
+  enqueueRouteParity,
   expireItem,
   findOwnInvitation,
   INVITATION_UNRESOLVED_AFTER_MS,
@@ -23,6 +25,8 @@ export interface CorrelateDeps {
   readonly now: () => Date;
   /** Wakes the send job of an approved batch that is waiting (a lost enqueue, a restart). */
   readonly schedule?: ScheduleInvitationStep;
+  /** LIF-062: a Parity Check after Invitation status changes (`enqueueRouteParity`). */
+  readonly enqueueParity?: EnqueueParity;
 }
 
 export interface CorrelateResult {
@@ -108,6 +112,8 @@ export async function correlateInvitations(
     );
     const touched = new Set<string>();
     const staleRoutes = new Set<string>();
+    /** Routes with an invitation that was accepted or expired: their status changed. */
+    const changedRoutes = new Set<string>();
     const now = deps.now();
 
     for (const item of open) {
@@ -169,6 +175,7 @@ export async function correlateInvitations(
         if (expiredNow.ok) {
           expired++;
           touched.add(ref.batchId);
+          changedRoutes.add(ref.routeId);
           if (expiredNow.mapped) staleRoutes.add(ref.routeId);
         }
         continue;
@@ -196,6 +203,7 @@ export async function correlateInvitations(
         if (linked.ok) {
           accepted++;
           touched.add(ref.batchId);
+          changedRoutes.add(ref.routeId);
           if (linked.mapped) staleRoutes.add(ref.routeId);
         }
         continue;
@@ -223,6 +231,7 @@ export async function correlateInvitations(
     if (staleRoutes.size > 0) {
       await publishEvent(deps.appPool, { type: 'migration.updated', ids: {}, at });
     }
+    await enqueueRouteParity(deps, changedRoutes);
   }
 
   if (deps.schedule) {

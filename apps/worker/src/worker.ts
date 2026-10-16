@@ -331,6 +331,8 @@ export async function startWorker(options: StartWorkerOptions): Promise<WorkerHa
         // AUTH-060 step 5: acceptance is detected at inventory; approved batches are resumed.
         scheduleInvitation: (step, delayMs) =>
           jobs.enqueueInvitationStep(step, { delayMs }).then(() => undefined),
+        // LIF-062: accepted or expired invitations queue a Parity Check.
+        enqueueParity: (migrationId) => jobs.enqueueParity(migrationId),
       }),
       ...analysisHandlers(analysisDeps),
       ...runHandlers({
@@ -360,6 +362,7 @@ export async function startWorker(options: StartWorkerOptions): Promise<WorkerHa
         connector,
         schedule: (step, delayMs) =>
           jobs.enqueueInvitationStep(step, { delayMs }).then(() => undefined),
+        enqueueParity: (migrationId) => jobs.enqueueParity(migrationId),
         log,
       }),
       ...(options.handlers ?? {}),

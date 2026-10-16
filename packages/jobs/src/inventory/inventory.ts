@@ -22,7 +22,11 @@ import type { Logger } from '@git-migrator/observability';
 import type { ProviderRegistry } from '@git-migrator/registry';
 import type pg from 'pg';
 import { databaseNow } from '../db-clock.ts';
-import { correlateInvitations, type ScheduleInvitationStep } from '../invitations/index.ts';
+import {
+  correlateInvitations,
+  type EnqueueParity,
+  type ScheduleInvitationStep,
+} from '../invitations/index.ts';
 import type { JobHandlers } from '../runtime.ts';
 import type { EndpointConnector } from './connector.ts';
 import {
@@ -63,6 +67,8 @@ export interface InventoryDeps {
   readonly log: Logger;
   /** Wakes the send step of approved Invitation Batches after a pass over their target (AUTH-060). */
   readonly scheduleInvitation?: ScheduleInvitationStep;
+  /** LIF-062: a Parity Check after the pass accepted or expired invitations of a Route. */
+  readonly enqueueParity?: EnqueueParity;
   /** Test seam. */
   readonly now?: () => Date;
   /** Test seam: pages one listing may take (`MAX_LISTING_PAGES`). */
@@ -365,6 +371,7 @@ export async function runInventory(
           log,
           now,
           ...(deps.scheduleInvitation ? { schedule: deps.scheduleInvitation } : {}),
+          ...(deps.enqueueParity ? { enqueueParity: deps.enqueueParity } : {}),
         },
         connection,
         routeRows,
