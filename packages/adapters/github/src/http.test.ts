@@ -1,9 +1,12 @@
 import { AdapterError, bucketKey } from '@git-migrator/adapter-sdk';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, inject, it } from 'vitest';
 import { cacheKey, InstallationTokenCache, signAppJwt } from './auth.ts';
 import { parseConfig } from './config.ts';
 import { all, keyPair, setup } from './harness.test.ts';
 import { createClassifier, createInterpreter, endpointLabel, TOKEN_SHAPES } from './http.ts';
+
+/** Wall-clock budgets scale with GM_TEST_TIME_FACTOR (ADR-0507). */
+const budget = (ms: number): number => ms * inject('timeFactor');
 
 const opts = {
   endpointId: 'gh',
@@ -350,6 +353,6 @@ describe('through the client', () => {
     const hostile = `ghp_${'a'.repeat(1_000_000)}`;
     const started = performance.now();
     for (const shape of TOKEN_SHAPES) hostile.replace(shape, '[R]');
-    expect(performance.now() - started).toBeLessThan(2000);
+    expect(performance.now() - started).toBeLessThan(budget(2000));
   });
 });

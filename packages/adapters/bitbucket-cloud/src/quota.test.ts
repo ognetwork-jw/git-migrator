@@ -1,5 +1,5 @@
 import { bitbucket } from '@git-migrator/provider-fakes';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, inject, it } from 'vitest';
 import { basicCredentials, TOKEN_SHAPES } from './client.ts';
 import { facet, makeConnection, makeWorld, target } from './harness.test.ts';
 import {
@@ -10,6 +10,9 @@ import {
   resourceGroups,
   safeAccountKey,
 } from './quota.ts';
+
+/** Wall-clock budgets scale with GM_TEST_TIME_FACTOR (ADR-0507). */
+const budget = (ms: number): number => ms * inject('timeFactor');
 
 const setup = { endpointId: 'bb', accountKey: 'acct' };
 const classify = createClassifier(setup);
@@ -204,7 +207,7 @@ describe('credentials and token shapes (ADP-061)', () => {
     const started = performance.now();
     hostile.replace(shape as RegExp, 'X');
     'ATAT'.repeat(250_000).replace(shape as RegExp, 'X');
-    expect(performance.now() - started).toBeLessThan(2000);
+    expect(performance.now() - started).toBeLessThan(budget(2000));
   });
 });
 

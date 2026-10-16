@@ -1,6 +1,6 @@
 // biome-ignore-all lint/suspicious/noTemplateCurlyInString: these are workflow expressions, not templates
 // biome-ignore-all lint/suspicious/noExplicitAny: parsed workflow documents are inspected loosely
-import { describe, expect, it } from 'vitest';
+import { describe, expect, inject, it } from 'vitest';
 import { parse } from 'yaml';
 import {
   ACTIONS,
@@ -19,6 +19,29 @@ import {
 import { NO_NAMES, variableNames } from './names.ts';
 import { isMapping } from './safe.ts';
 import { MAX_SOURCE_LENGTH, translatePipelinesYaml } from './translate.ts';
+
+/** Wall-clock budgets scale with GM_TEST_TIME_FACTOR (ADR-0507). */
+const budget = (ms: number): number => ms * inject('timeFactor');
+
+/**
+ * Runs `run` and asserts it took under `budget(ms)`. When it is over, it runs again (three runs at
+ * most) and the best time is judged, so one preemption on a busy machine is not a failure, while a
+ * genuinely slow implementation fails every run (ADR-0507).
+ */
+function within<T>(ms: number, run: () => T, label?: string): T {
+  const limit = budget(ms);
+  let best = Number.POSITIVE_INFINITY;
+  let result: T;
+  let runs = 0;
+  do {
+    const started = performance.now();
+    result = run();
+    best = Math.min(best, performance.now() - started);
+    runs++;
+  } while (best >= limit && runs < 3);
+  expect(best, label).toBeLessThan(limit);
+  return result;
+}
 
 type Json = Record<string, any>;
 
@@ -945,15 +968,13 @@ describe('FAC-PIP-002 limits and plain YAML', () => {
       { length: 500 },
       (_, i) => `    - step:\n        script: [make ${i}]\n        artifacts: [out${i}/**]`,
     ).join('\n');
-    const started = Date.now();
-    const r = translate(`pipelines:\n  default:\n${steps}\n`);
-    expect(Date.now() - started).toBeLessThan(5000);
+    const r = within(5000, () => translate(`pipelines:\n  default:\n${steps}\n`));
     const w = r.workflows[0] as { content: string };
     expect(Object.keys((parse(w.content) as Json).jobs)).toHaveLength(MAX_JOBS_PER_WORKFLOW);
     expect(w.content.length).toBeLessThan(MAX_WORKFLOW_BYTES);
     expect(r.unsupported).toHaveLength(500 - MAX_JOBS_PER_WORKFLOW);
     expect(r.unsupported[0]?.path).toBe(`pipelines.default[${MAX_JOBS_PER_WORKFLOW}].step`);
-  });
+  }, 60_000);
 
   it('[FAC-PIP-002] many pipelines are capped in total', () => {
     const pipelines = Array.from(
@@ -1069,12 +1090,7 @@ describe('FAC-PIP-002 gates in nested positions', () => {
 describe('FAC-PIP-002 list bounds under aliases', () => {
   const aliased = (step: string, n = 50) =>
     `definitions:\n  steps:\n    - step: &s\n${step}\npipelines:\n  default:\n${Array.from({ length: n }, () => '    - step: *s').join('\n')}\n`;
-  const timed = (source: string) => {
-    const started = Date.now();
-    const r = translate(source);
-    expect(Date.now() - started).toBeLessThan(2000);
-    return r;
-  };
+  const timed = (source: string) => within(2000, () => translate(source));
 
   it('[FAC-PIP-002] 20,000 caches in an aliased step give a small result', () => {
     const caches = Array.from({ length: 20_000 }, () => '          - node').join('\n');
@@ -1082,33 +1098,33 @@ describe('FAC-PIP-002 list bounds under aliases', () => {
     const w = r.workflows[0] as { content: string };
     expect(w.content.length).toBeLessThan(200_000);
     expect(r.unsupported.length).toBeGreaterThan(0);
-  });
+  }, 30_000);
 
   it('[FAC-PIP-002] 20,000 distinct caches are capped per step', () => {
     const caches = Array.from({ length: 20_000 }, (_, i) => `          - c${i}`).join('\n');
     const r = timed(aliased(`        script: [make]\n        caches:\n${caches}`, 5));
     for (const w of r.workflows) expect(w.content.length).toBeLessThan(MAX_WORKFLOW_BYTES);
     expect(r.unsupported.length).toBeLessThanOrEqual(501);
-  });
+  }, 30_000);
 
   it('[FAC-PIP-002] 20,000 services in an aliased step give a small result', () => {
     const list = Array.from({ length: 20_000 }, (_, i) => `          - s${i}`).join('\n');
     const r = timed(aliased(`        script: [make]\n        services:\n${list}`));
     for (const w of r.workflows) expect(w.content.length).toBeLessThan(MAX_WORKFLOW_BYTES);
-  });
+  }, 30_000);
 
   it('[FAC-PIP-002] 20,000 artifact globs in an aliased step give a small result', () => {
     const list = Array.from({ length: 20_000 }, (_, i) => `          - out${i}/**`).join('\n');
     const r = timed(aliased(`        script: [make]\n        artifacts:\n${list}`));
     for (const w of r.workflows) expect(w.content.length).toBeLessThan(MAX_WORKFLOW_BYTES);
     expect(r.unsupported.length).toBeGreaterThan(0);
-  });
+  }, 30_000);
 
   it('[FAC-PIP-002] 20,000 after-script and script entries are capped', () => {
     const list = Array.from({ length: 20_000 }, (_, i) => `          - echo ${i}`).join('\n');
     const r = timed(aliased(`        script: [make]\n        after-script:\n${list}`));
     for (const w of r.workflows) expect(w.content.length).toBeLessThan(MAX_WORKFLOW_BYTES);
-  });
+  }, 30_000);
 
   it('[FAC-PIP-002] a workflow stops growing once its estimated size passes the limit', () => {
     const big = 'x'.repeat(900_000);
@@ -1122,18 +1138,37 @@ describe('FAC-PIP-002 list bounds under aliases', () => {
 
 describe('FAC-PIP-002 patterns at scale and hidden gates', () => {
   it('[FAC-PIP-002] 500 wildcard patterns and 12,000 literal keys finish in seconds (the quadratic version took minutes)', () => {
-    const wild = Array.from(
-      { length: 500 },
-      (_, i) => `    'w${i}/*':\n      - step: {script: [a]}`,
-    );
-    const lits = Array.from({ length: 12_000 }, (_, i) => `    l${i}: [{step: {script: [a]}}]`);
-    const started = Date.now();
-    const r = translate(`pipelines:\n  branches:\n${[...wild, ...lits].join('\n')}\n`);
-    expect(Date.now() - started).toBeLessThan(4000);
+    const source = (wildcards: number, literals: number) => {
+      const wild = Array.from(
+        { length: wildcards },
+        (_, i) => `    'w${i}/*':\n      - step: {script: [a]}`,
+      );
+      const lits = Array.from({ length: literals }, (_, i) => `    l${i}: [{step: {script: [a]}}]`);
+      return `pipelines:\n  branches:\n${[...wild, ...lits].join('\n')}\n`;
+    };
+    // A quarter of the input as well: linear work grows about 4 times, the quadratic version 16
+    // times. Both runs see the same load, so the ratio holds on a busy machine (ADR-0507).
+    const quarter = source(125, 3000);
+    const full = source(500, 12_000);
+    let ratio = Number.POSITIVE_INFINITY;
+    let fullMs = Number.POSITIVE_INFINITY;
+    let r = translate(quarter);
+    for (let i = 0; i < 3 && (ratio >= 10 || fullMs >= budget(4000)); i++) {
+      const quarterStarted = performance.now();
+      translate(quarter);
+      const quarterMs = performance.now() - quarterStarted;
+      const fullStarted = performance.now();
+      r = translate(full);
+      const ms = performance.now() - fullStarted;
+      ratio = Math.min(ratio, ms / Math.max(quarterMs, 1));
+      fullMs = Math.min(fullMs, ms);
+    }
+    expect(ratio).toBeLessThan(10);
+    expect(fullMs).toBeLessThan(budget(4000));
     expect(r.workflows.length).toBeLessThanOrEqual(MAX_PATTERNS);
     for (const w of r.workflows) expect(w.content.length).toBeLessThan(200_000);
     expect(r.unsupported.some((u) => u.path === `pipelines.branches[${MAX_PATTERNS}]`)).toBe(true);
-  });
+  }, 60_000);
 
   it('[FAC-PIP-002] a workflow that would need more exclusions than the bound is not written', () => {
     const many = Array.from(
@@ -1229,11 +1264,9 @@ pipelines:
   default:
 ${Array.from({ length: 50 }, () => '    - step: *s').join('\n')}
 `;
-    const started = Date.now();
-    const r = translate(source);
-    expect(Date.now() - started).toBeLessThan(3000);
+    const r = within(3000, () => translate(source));
     for (const w of r.workflows) expect(w.content.length).toBeLessThan(MAX_WORKFLOW_BYTES);
-  });
+  }, 60_000);
 
   it('[FAC-PIP-002] once the estimate passes the limit no step is added and the rest is reported', () => {
     const big = 'x'.repeat(250_000);
