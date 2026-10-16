@@ -79,12 +79,16 @@ export function LogViewer({
   const total = shown.length;
   const { start, end } = visibleRange(scrollTop, total);
 
-  // Follow the tail: keep the end in view when lines arrive.
+  // Follow the tail: keep the end in view when lines arrive. When not following, a shorter list
+  // (a stricter level filter) must not leave the window past its end: the browser clamps the
+  // scroll position without a scroll event, and the rows would be computed for the old one.
   useEffect(() => {
     const el = box.current;
-    if (!follow || el === null) return;
-    el.scrollTop = Math.max(0, total * ROW_HEIGHT - VIEW_HEIGHT);
-    setScrollTop(el.scrollTop);
+    if (el === null) return;
+    const end = Math.max(0, total * ROW_HEIGHT - VIEW_HEIGHT);
+    if (follow) el.scrollTop = end;
+    else if (el.scrollTop > end) el.scrollTop = end;
+    setScrollTop(Math.min(el.scrollTop, end));
   }, [follow, total]);
 
   return (

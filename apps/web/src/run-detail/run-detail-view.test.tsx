@@ -346,6 +346,28 @@ describe('[UI-023] the live log', () => {
     await screen.findByText(`${LOG_PAGE + 20} of ${LOG_PAGE + 20} lines`);
   });
 
+  it('[UI-023] a stricter level filter brings a scrolled-away window back to the lines', async () => {
+    world.log = Array.from({ length: 5000 }, (_, i) =>
+      line(i + 1, { level: (i + 1) % 50 === 0 ? 'error' : 'info' }),
+    );
+    start();
+    await screen.findByText('5000 of 5000 lines');
+    const log = screen.getByRole('log', { name: 'Log' });
+    // Scroll to the middle: following stops.
+    log.scrollTop = 2500 * ROW_HEIGHT;
+    fireEvent.scroll(log);
+    await waitFor(() =>
+      expect(
+        (screen.getByRole('checkbox', { name: 'Follow the end' }) as HTMLInputElement).checked,
+      ).toBe(false),
+    );
+    fireEvent.mouseDown(screen.getByRole('combobox', { name: 'Show log lines of level' }));
+    fireEvent.click(await screen.findByText('Errors only'));
+    await screen.findByText('100 of 5000 lines');
+    await waitFor(() => expect(log.querySelectorAll('div.absolute').length).toBeGreaterThan(0));
+    expect(log.scrollTop).toBeLessThanOrEqual(100 * ROW_HEIGHT - VIEW_HEIGHT);
+  });
+
   it('[UI-023] turning Follow off keeps the checkbox state', async () => {
     start();
     const follow = (await screen.findByRole('checkbox', {
